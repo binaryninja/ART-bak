@@ -59,6 +59,29 @@ class TaskDeadlineStore:
         if scope is None or (scope.task_id,scope.exploration_id,scope.run_id)!=(r.task_id,r.exploration_id,r.run_id):raise DeadlineConflict('Deadline generation mismatch')
         if self.manager.owns_generation(str(r.task_id),self._token,h) is not True:raise DeadlineConflict('Installed deadline owner unavailable')
         self._token.check()
+    def validate_current(self,timeout_seconds):
+        """Read-only exact clock revalidation; never stamps or adopts a receipt."""
+        timeout_seconds=int64(timeout_seconds,'timeout seconds')
+        if timeout_seconds<0:raise ValueError('Nonnegative timeout required')
+        r=self.receipt
+        with self.guard(r.task_id,r.exploration_id):
+            self._check()
+            if self.authorize(r,timeout_seconds) is not True:raise DeadlineConflict('Deadline read not authorized')
+            self._check()
+            with self._executor.transaction() as tx:
+                rows=tx.fetch_all(Query("""SELECT timeout_seconds,first_run_at,deadline_at FROM tasks WHERE id=$1 AND exploration_id=$2
+AND status='running' AND NOT paused AND NOT queued AND deleted_at IS NULL AND archived_at IS NULL
+AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=$1) FOR SHARE""",(r.task_id,r.exploration_id)))
+                if len(rows)!=1 or len(rows[0])!=3 or rows[0][0]!=timeout_seconds or rows[0][1] is None:raise DeadlineConflict('Current task clock unavailable')
+                clock=rows[0]
+                rows=tx.fetch_all(Query("""SELECT 1 FROM public.artex_task_bootstrap WHERE task_id=$1 AND exploration_id=$2
+AND run_id=$3 AND request_id=$4 AND config_digest=$5 AND owner_token=$6 AND revision=$7 AND phase='prepared' FOR SHARE""",
+                    (r.task_id,r.exploration_id,r.run_id,r.request_id,r.config_digest,r.owner_token,r.revision)))
+                if rows!=[(1,)]:raise DeadlineConflict('Durable deadline owner changed')
+                self._check()
+                result=DeadlineReceipt(r.task_id,r.exploration_id,r.run_id,r.revision,clock[1],clock[2],timeout_seconds)
+            self._check()
+            return result
     def stamp(self,timeout_seconds):
         timeout_seconds=int64(timeout_seconds,'timeout seconds')
         if timeout_seconds<0:raise ValueError('Nonnegative timeout required')

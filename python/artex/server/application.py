@@ -22,11 +22,17 @@ from .stats import StatsService
 from .sidequestions import SideQuestionHTTPService
 from .exploration import ExplorationService
 from .task_coverage import TaskCoverageService
+from .traffic_read import TrafficReadService
 
 
 def _validate_coverage_service(executor, service):
     if service is not None and (type(service) is not TaskCoverageService or service._executor is not executor):
         raise ValueError("Coverage service requires the exact application executor")
+
+
+def _validate_traffic_service(service):
+    if service is not None and type(service) is not TrafficReadService:
+        raise ValueError("Explicit fixed-workspace traffic service required")
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
@@ -41,7 +47,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, coverage_service=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, traffic_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -62,9 +68,14 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     Optional coverage_service installs only the three source read routes. It must
     use this exact executor and retain explicit task/source/connector policy. No
     coverage service is created by default; archived contexts remain unsupported.
+    Optional traffic_service is an already constructed fixed-workspace SQLite
+    service with explicit metadata/raw-data grants. It is independent of the
+    PostgreSQL executor: no task ownership, store construction, capture or
+    default traffic registration is inferred. Blob reads remain unavailable.
     This is not the full server.
     """
     _validate_coverage_service(executor, coverage_service)
+    _validate_traffic_service(traffic_service)
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
     TaskCategoryService(TaskCategoryStore(executor), category_manager).register(router)
@@ -90,6 +101,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                             wait=side_wait).register(router)
     if coverage_service is not None:
         coverage_service.register(router)
+    if traffic_service is not None:
+        traffic_service.register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -105,7 +118,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                coverage_service=None, version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, traffic_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -127,6 +140,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     are forwarded unchanged, never inferred or invoked during construction.
     """
     _validate_coverage_service(executor, coverage_service)
+    _validate_traffic_service(traffic_service)
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
@@ -171,5 +185,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_dispatcher=side_dispatcher, side_prepare_question=side_prepare_question,
                              side_cancel_request=side_cancel_request, side_clear_history=side_clear_history,
                              side_wait=side_wait,
-                             coverage_service=coverage_service,
+                             coverage_service=coverage_service, traffic_service=traffic_service,
                              version=version, max_body_bytes=max_body_bytes)

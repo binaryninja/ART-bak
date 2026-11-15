@@ -646,3 +646,42 @@ Existing category, metadata and template HTTP tests and four snapshot-only Engli
 validation checks covered category/Worker messages. The full server package
 compiled; targeted formatting was clean. This is not a whole-server test-suite
 claim. Execution used the approved disposable credential-free environment.
+
+## Go/Python policy differential
+
+Thirty-four matching deterministic fixtures produced zero mismatches on manifest
+`213afdbdb71cfa191d526bcdbc998f6042302c4b29312d69e87c31177f004bee`:
+eighteen deadline-clamp cases and sixteen wrap-up reason, turn-budget and tool
+exclusion cases. Python stricter validation and code-enforced Bash exclusion are
+explicit differences. This is pure policy comparison, not engine deadline
+integration, real provider behavior or prompt-byte equivalence.
+
+## Fixed-workspace SQLite traffic reads (stage 53)
+
+Sixteen reviewed tests plus four extra real-SQLite checks passed on manifest
+`cd746394e70f3dfedabc201f35a5630a1fe7e75f8a65eba2c0d9a428ab0d2628`.
+UTF-8/NUL byte limits across six body/header/blob-reference columns were enforced
+before readers ran, including legacy TEXT values in BLOB-affinity columns.
+Filtered counts, escaped response-size limits, post-read revocation without
+leakage and unsupported FTS denial were verified. Authorization covers an explicit
+entire fixed workspace; the capture schema does not prove task ownership. No
+capture, proxy, deletion, external traffic or default route enabling was tested.
+
+## Scoped intercept-rule metadata (stage 54)
+
+Four actual PostgreSQL groups passed on manifest
+`31fff012df0465f2b816515027a95037e790bf6fbd936722ffe7c08183cca61c`.
+Task/global scoped CRUD, action normalization and ordering, real timestamp CAS,
+SQL byte sentinels, lifecycle denial, rollback and postcommit uncertainty were
+verified. These are metadata persistence checks, not matcher, enforcement,
+runtime revision, policy-cache or default/API wiring claims.
+
+## Standalone dispatch-clock validation (stage 55)
+
+Three actual PostgreSQL groups and thirty-two focused tests passed on manifest
+`d6331357a658794efb1552442dbdfeca4a38baad11248dea9ae23b6075f1d810`.
+Repeated read-only validation performed no UPDATE; stale ownership/configuration
+was rejected. Zero-timeout dispatch performed no SQL, and fake-clock fixtures
+checked budget charging. The actual supported runtime fixture remains zero-timeout.
+Positive-timeout behavior has mocked evidence only. No runtime guard was bypassed,
+and no provider hook, paused-owner lease or timed-engine execution is claimed.

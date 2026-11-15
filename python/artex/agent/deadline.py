@@ -1,0 +1,147 @@
+"""Explicit prepared-generation planner/worker dispatch clock helper.
+
+Not an installed runtime hook, timer or timeout coordinator. Call before_dispatch
+ONLY at a final authorized planner/worker provider boundary, then enforce its
+returned budget in the caller. Bootstrap goals/chat/side questions are ineligible.
+Construction/preflight do no SQL. Source timeout=0 skips stamping entirely.
+No task status changes, model execution, pause reset or generic generation IDs.
+Existing engine/runner nonzero-timeout rejection remains unchanged.
+
+First positive-budget dispatch stamps once; later calls validate the same durable
+clock read-only. A timestamp is admission to dispatch, not proof of network send.
+Any ambiguous stamp or subsequent failed validation latches this helper for
+reconciliation; never retry it to guess whether a write happened. Provider
+integration must repeat cancellation/profile fences immediately before transport;
+SQL and transport are not atomic. Absolute wall-clock deadline persists through
+pauses. A local monotonic ceiling never expands on a backwards wall-clock jump.
+Existing persisted deadlines are authoritative even if a legacy timeout setting
+changed after stamping: source COALESCE preserves that deadline rather than
+recomputing first_run_at + the new timeout. Corrupt clocks require reconciliation.
+"""
+from dataclasses import dataclass
+from datetime import datetime,timezone
+from threading import Lock
+from time import monotonic
+import json,math
+from .runtime import Action,Grant,RunStopped
+from ..sidequestion import Model
+from ..db.task_deadline import TaskDeadlineStore,DeadlineReceipt
+
+class DispatchClockUnavailable(RuntimeError):pass
+class DispatchClockUncertain(DispatchClockUnavailable):pass
+class TaskBudgetExpired(RunStopped):
+    def __init__(self):super().__init__('task_deadline_expired')
+
+@dataclass(frozen=True)
+class DispatchBudget:
+    deadline_at:datetime|None
+    remaining_seconds:float|None
+    monotonic_deadline:float|None
+    task_limited:bool
+
+class PreparedDispatchClock:
+    def __init__(self,store,*,model,role,timeout_seconds,authorize,binding_current,
+                 wall_clock=lambda:datetime.now(timezone.utc),monotonic_clock=monotonic):
+        if type(store) is not TaskDeadlineStore or not isinstance(model,Model) or not model.identity:raise ValueError('Actual prepared deadline store and identified model required')
+        if role not in ('planner','worker') or type(timeout_seconds) is not int or not 0<=timeout_seconds<=2**31-1:raise ValueError('Explicit planner/worker timeout required')
+        if any(not callable(f) for f in (authorize,binding_current,wall_clock,monotonic_clock)):raise ValueError('Explicit dispatch policy and clocks required')
+        self.store,self.model,self.role,self.timeout_seconds=store,model,role,timeout_seconds
+        self.authorize,self.binding_current=authorize,binding_current
+        self.wall_clock,self.monotonic_clock=wall_clock,monotonic_clock
+        self._store,self._model,self._role,self._timeout=store,model,role,timeout_seconds
+        self._manager,self._handle,self._receipt,self._executor,self._guard=store.manager,store.handle,store.receipt,store.executor,store.guard
+        scope=store.handle.scope
+        if scope is None:raise ValueError('Prepared generation required')
+        self._identity=dict(task_id=scope.task_id,exploration_id=scope.exploration_id,run_id=scope.run_id,revision=scope.revision,role=role)
+        self._lock=Lock();self._clock=None;self._failed=False;self._mono_deadline=None;self._last_mono=None
+    @property
+    def unresolved(self):return self._failed
+    def _check(self,context):
+        if not isinstance(context,dict) or not callable(getattr(context,'check',None)):raise DispatchClockUnavailable('Exact runtime context required')
+        context.check()
+        if (self.store is not self._store or self.model!=self._model or self.role!=self._role or self.timeout_seconds!=self._timeout
+            or self.store.manager is not self._manager or self.store.handle is not self._handle or self.store.receipt is not self._receipt
+            or self.store.executor is not self._executor or self.store.guard is not self._guard):raise DispatchClockUnavailable('Dispatch clock binding changed')
+        for key,value in self._identity.items():
+            if type(context.get(key)) is not type(value) or context[key]!=value:raise DispatchClockUnavailable('Dispatch generation mismatch')
+        if self._handle.validate_prepared_receipt(self._receipt) is not True or self._manager.owns_generation(str(self._receipt.task_id),self._handle.token,self._handle) is not True:raise DispatchClockUnavailable('Prepared dispatch owner unavailable')
+        if self._handle.coordinator.guard is not self._guard:raise DispatchClockUnavailable('Dispatch lifetime changed')
+        scope=self._handle.scope
+        if (scope.task_id,scope.exploration_id,scope.run_id,scope.revision)!=(self._identity['task_id'],self._identity['exploration_id'],self._identity['run_id'],self._identity['revision']):raise DispatchClockUnavailable('Dispatch configuration changed')
+        context.check();self._handle.token.check()
+    def _validate_receipt(self,value):
+        r=self._receipt
+        if type(value) is not DeadlineReceipt or (value.task_id,value.exploration_id,value.run_id,value.journal_revision,value.timeout_seconds)!=(r.task_id,r.exploration_id,r.run_id,r.revision,self._timeout):raise DispatchClockUncertain('Clock receipt identity mismatch')
+        for date in (value.first_run_at,value.deadline_at):
+            if not isinstance(date,datetime) or date.tzinfo is None or date.utcoffset() is None:raise DispatchClockUncertain('Aware persisted clock required')
+        if value.deadline_at<value.first_run_at:raise DispatchClockUncertain('Invalid persisted clock order')
+        if self._clock is not None and value!=self._clock:raise DispatchClockUncertain('Persisted task clock changed')
+    def before_dispatch(self,context,request,*,own_budget_seconds=None):
+        if own_budget_seconds is not None and (isinstance(own_budget_seconds,bool) or not isinstance(own_budget_seconds,(int,float)) or not math.isfinite(own_budget_seconds) or own_budget_seconds<=0):raise ValueError('Own budget must be positive or None, never zero-as-unlimited')
+        if not isinstance(request,dict):raise ValueError('Explicit provider request required')
+        encoded=json.dumps(request,ensure_ascii=False,allow_nan=False,separators=(',',':'))
+        if len(encoded.encode('utf-8'))>1048576:raise ValueError('Dispatch request exceeds bound')
+        if not self._lock.acquire(False):raise DispatchClockUnavailable('Clock dispatch already active')
+        attempted=False
+        try:
+            if self._failed:raise DispatchClockUncertain('Clock requires reconciliation')
+            with self._guard(self._receipt.task_id,self._receipt.exploration_id):
+                self._check(context)
+                grant=self.authorize(context,Action('model','complete',encoded))
+                self._check(context)
+                if not isinstance(grant,Grant) or not all(v is True for v in (grant.permission,grant.in_scope,grant.approved)):raise RunStopped('permission_denied')
+                if self.binding_current(self._model) is not True:raise DispatchClockUnavailable('Provider binding unavailable')
+                self._check(context)
+            # Store operations own this same guard themselves; do not nest a
+            # potentially non-reentrant lifetime guard around their transaction.
+            if self._timeout:
+                attempted=True
+                value=self._store.stamp(self._timeout) if self._clock is None else self._store.validate_current(self._timeout)
+                self._validate_receipt(value);self._clock=value
+            with self._guard(self._receipt.task_id,self._receipt.exploration_id):
+                # SQL/policy callbacks may block or invalidate the generation.
+                self._check(context)
+                grant=self.authorize(context,Action('model','complete',encoded))
+                self._check(context)
+                if not isinstance(grant,Grant) or not all(v is True for v in (grant.permission,grant.in_scope,grant.approved)):raise RunStopped('permission_denied')
+                if self.binding_current(self._model) is not True:raise DispatchClockUnavailable('Provider binding changed')
+                self._check(context)
+                mono=self.monotonic_clock()
+                if isinstance(mono,bool) or not isinstance(mono,(int,float)) or not math.isfinite(mono) or mono<0 or (self._last_mono is not None and mono<self._last_mono):raise DispatchClockUnavailable('Invalid monotonic clock')
+                self._last_mono=mono
+                deadline=None;remaining=own_budget_seconds;limited=False
+                if self._timeout:
+                    wall=self.wall_clock()
+                    if not isinstance(wall,datetime) or wall.tzinfo is None or wall.utcoffset() is None:raise DispatchClockUnavailable('Aware wall clock required')
+                    deadline=self._clock.deadline_at
+                    seconds=(deadline-wall).total_seconds()
+                    candidate=mono+seconds
+                    self._mono_deadline=candidate if self._mono_deadline is None else min(self._mono_deadline,candidate)
+                    seconds=min(seconds,self._mono_deadline-mono)
+                    if seconds<=0:raise TaskBudgetExpired()
+                    limited=remaining is None or seconds<=remaining
+                    remaining=seconds if remaining is None else min(seconds,remaining)
+                self._check(context)
+                if self.binding_current(self._model) is not True:raise DispatchClockUnavailable('Provider binding changed before dispatch')
+                self._check(context)
+                # The final profile/current fences may block. Preserve the
+                # earlier own/task ceiling, then charge their elapsed time.
+                ceiling=None if remaining is None else mono+remaining
+                final_wall=self.wall_clock() if self._timeout else None
+                final_mono=self.monotonic_clock()
+                if isinstance(final_mono,bool) or not isinstance(final_mono,(int,float)) or not math.isfinite(final_mono) or final_mono<mono:raise DispatchClockUnavailable('Invalid final monotonic clock')
+                self._last_mono=final_mono
+                if self._timeout:
+                    if not isinstance(final_wall,datetime) or final_wall.tzinfo is None or final_wall.utcoffset() is None:raise DispatchClockUnavailable('Aware final wall clock required')
+                    self._mono_deadline=min(self._mono_deadline,final_mono+(deadline-final_wall).total_seconds())
+                    ceiling=self._mono_deadline if ceiling is None else min(ceiling,self._mono_deadline)
+                    if self._mono_deadline<=final_mono:raise TaskBudgetExpired()
+                    limited=own_budget_seconds is None or self._mono_deadline<=mono+own_budget_seconds
+                remaining=None if ceiling is None else ceiling-final_mono
+                if remaining is not None and remaining<=0:raise RunStopped('timeout')
+                return DispatchBudget(deadline,remaining,ceiling,limited)
+        except TaskBudgetExpired:raise
+        except BaseException:
+            if attempted:self._failed=True
+            raise
+        finally:self._lock.release()

@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 140,
-    "python_optional_service_routes": 135,
-    "matched_offline_contract_routes": 140,
-    "go_routes_without_python_registration": 121
+    "python_offline_contract_routes": 144,
+    "python_optional_service_routes": 139,
+    "matched_offline_contract_routes": 144,
+    "go_routes_without_python_registration": 117
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -16,7 +16,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agents.py": "4bf7c4176bdb1e33c146a36f0b987a3d4b73833f383effcf69afea2e9bbbf8c7",
-    "python/artex/server/application.py": "064917464d245e8a653e581cc85f971f4d554e18c44017c66c906db7074638f7",
+    "python/artex/server/application.py": "14611be72dbad2867180f085c9cb73483e18e06bd460c60f38a78710c8831b61",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/chat.py": "75978f25b2a9f3d8a9ee1e781b025643dffdebecdc00b90dc80ed3adb56fa63f",
@@ -48,6 +48,7 @@
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
     "python/artex/server/tool_catalog.py": "7cd1af0502dbb15e1043765d673ee2550df8a148cba7402ef81307262670af6a",
+    "python/artex/server/traffic_read.py": "5d94c95cb2f80e564a893aa6f6d0461127f7363c78ac82e967a288b6055ab28f",
     "python/artex/server/workspace.py": "662b502ac862175085cacc5072486af5a686c0270f4adeb6c545a256fb2f3b4e",
     "python/artex/server/workspace_write.py": "a0b9a8898ef97e91ce5726f52a52792919be46703f3b9897c421654d4ce75341",
     "python/artex/server/wsgi.py": "3d90db4ab424349fe4922c75b4915b006caf749384d45104f91451efd5167e6d"
@@ -2362,8 +2363,19 @@
       "expression": "\"GET /api/traffic\"",
       "method": "GET",
       "path": "/api/traffic",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/traffic",
+        "source": "python/artex/server/traffic_read.py",
+        "line": 36,
+        "function": "TrafficReadService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/traffic/hosts",
@@ -2374,8 +2386,19 @@
       "expression": "\"GET /api/traffic/hosts\"",
       "method": "GET",
       "path": "/api/traffic/hosts",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/traffic/hosts",
+        "source": "python/artex/server/traffic_read.py",
+        "line": 36,
+        "function": "TrafficReadService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/traffic",
@@ -2422,8 +2445,19 @@
       "expression": "\"GET /api/traffic/exchange\"",
       "method": "GET",
       "path": "/api/traffic/exchange",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/traffic/exchange",
+        "source": "python/artex/server/traffic_read.py",
+        "line": 36,
+        "function": "TrafficReadService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/traffic/blob",
@@ -2434,8 +2468,19 @@
       "expression": "\"GET /api/traffic/blob\"",
       "method": "GET",
       "path": "/api/traffic/blob",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/traffic/blob",
+        "source": "python/artex/server/traffic_read.py",
+        "line": 36,
+        "function": "TrafficReadService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/commands",
@@ -6371,6 +6416,54 @@
       "source": "python/artex/server/tool_catalog.py",
       "line": 22,
       "function": "ToolCatalogService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/traffic",
+      "source": "python/artex/server/traffic_read.py",
+      "line": 36,
+      "function": "TrafficReadService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/traffic/hosts",
+      "source": "python/artex/server/traffic_read.py",
+      "line": 36,
+      "function": "TrafficReadService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/traffic/exchange",
+      "source": "python/artex/server/traffic_read.py",
+      "line": 36,
+      "function": "TrafficReadService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/traffic/blob",
+      "source": "python/artex/server/traffic_read.py",
+      "line": 36,
+      "function": "TrafficReadService.register",
       "handler": "lambda req, params, a=action: self.handle(a, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",

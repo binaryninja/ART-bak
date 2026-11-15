@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **140**.
-- python optional service routes: **135**.
-- matched offline contract routes: **140**.
-- go routes without python registration: **121**.
+- python offline contract routes: **144**.
+- python optional service routes: **139**.
+- matched offline contract routes: **144**.
+- go routes without python registration: **117**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -276,12 +276,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PUT | `/api/tools/{key}` | `server/server.go:858` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/{key}/reset` | `server/server.go:864` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | DELETE | `/api/traffic` | `server/server.go:788` | Not registered |
-| GET | `/api/traffic` | `server/server.go:786` | Not registered |
+| GET | `/api/traffic` | `server/server.go:786` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
 | DELETE | `/api/traffic/all` | `server/server.go:790` | Not registered |
-| GET | `/api/traffic/blob` | `server/server.go:792` | Not registered |
-| GET | `/api/traffic/exchange` | `server/server.go:791` | Not registered |
+| GET | `/api/traffic/blob` | `server/server.go:792` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
+| GET | `/api/traffic/exchange` | `server/server.go:791` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
 | DELETE | `/api/traffic/hosts` | `server/server.go:789` | Not registered |
-| GET | `/api/traffic/hosts` | `server/server.go:787` | Not registered |
+| GET | `/api/traffic/hosts` | `server/server.go:787` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
 | DELETE | `/api/triggers/{id}` | `server/server.go:850` | Not registered |
 | PATCH | `/api/triggers/{id}` | `server/server.go:849` | Not registered |
 | POST | `/api/update/apply` | `server/server.go:669` | Not registered |
@@ -438,6 +438,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `DELETE /api/tools/custom/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tools/custom/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tools/{key}/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/hosts`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/exchange`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/blob`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/workspace/list`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/workspace/read`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/workspace/download`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
