@@ -155,11 +155,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/llm/profiles` | `server/server.go:899` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm/profiles/active` | `server/server.go:901` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
-| DELETE | `/api/llm/records` | `server/server.go:796` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
-| GET | `/api/llm/records` | `server/server.go:795` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
-| GET | `/api/llm/records/by-model` | `server/server.go:798` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
-| GET | `/api/llm/records/tasks` | `server/server.go:797` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
-| GET | `/api/llm/records/{id}` | `server/server.go:799` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| DELETE | `/api/llm/records` | `server/server.go:796` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
+| GET | `/api/llm/records` | `server/server.go:795` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
+| GET | `/api/llm/records/by-model` | `server/server.go:798` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
+| GET | `/api/llm/records/tasks` | `server/server.go:797` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
+| GET | `/api/llm/records/{id}` | `server/server.go:799` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
 | GET | `/api/llm/retry-policy` | `server/server.go:902` | Not registered |
 | POST | `/api/llm/retry-policy` | `server/server.go:903` | Not registered |
 | POST | `/api/llm/test` | `server/server.go:739` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -267,7 +267,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/scope/{sid}` | `server/server.go:719` | Not registered |
 | GET | `/api/tokens/conversations` | `server/server.go:781` | Not registered |
 | GET | `/api/tokens/daily` | `server/server.go:780` | Not registered |
-| GET | `/api/tokens/usage` | `server/server.go:782` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| GET | `/api/tokens/usage` | `server/server.go:782` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
 | GET | `/api/tools` | `server/server.go:857` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/custom` | `server/server.go:859` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/custom/test` | `server/server.go:860` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |

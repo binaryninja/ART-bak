@@ -8,7 +8,9 @@ filter deliberately preserves source ILIKE wildcard semantics, not exact scope.
 Count and page use separate snapshots as upstream. Size capped at 1000 and text
 at 16MiB: explicit errors rather than truncated records. No implicit retries;
 callers must not retry provider work after uncertain recording commits.
-No delete, archive merging or global profile/daily totals pretending hot-only
+Deletion is exact nonempty task only, transactional, and removes debug records
+only (never llm_usage or archive data). Host authorization is mandatory outside
+this persistence layer. No archive merging or global profile/daily totals pretending hot-only
 rows are complete. SQL errors propagate; callers decide whether metering failure
 should interrupt their runtime, never this persistence layer silently ignoring it.
 """
@@ -123,6 +125,23 @@ class LLMRecordStore:
         try:row=self.executor.fetch_one(Query(sql,params))
         except NoRowsError:return None
         return None if row is None else _row(row)
+    def delete_task(self,task):
+        """Delete debug rows for one exact task, never an unfiltered purge.
+
+        Trusted host must authorize irreversible deletion for this task before
+        calling. No retry after commit uncertainty; no usage/archive mutation.
+        Unlike read filters, %, _ and session-like text are exact literal data.
+        """
+        task=_text(task)
+        if not task.strip() or len(task.encode('utf-8'))>4096:
+            raise RecordInvalid('Bounded nonempty task required')
+        task=self._scope(task)
+        with self.executor.transaction() as tx:
+            count=tx.execute(Query("DELETE FROM llm_records WHERE COALESCE(task_id,'') = $1",(task,)))
+            if type(count) is not int or not 0<=count<2**63:
+                raise RecordUnavailable('Record deletion count not confirmed')
+            return count
+
     def tasks(self):
         sql="SELECT task_id,COUNT(*) FROM llm_records WHERE COALESCE(task_id,'')<>''";params=()
         if self.task_id is not None:sql+=' AND task_id=$1';params=(self.task_id,)

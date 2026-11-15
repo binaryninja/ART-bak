@@ -345,3 +345,48 @@ matched. Duplicate admission did not repeat providers. Denial/main failure kept
 known summary usage and persisted an error. A real profile-window mismatch
 returned 400 before activity or provider work. Dispatcher and pool drains were
 clean. This is optional conversation compaction, not autonomous task orchestration.
+
+## Explicit engine progression (stage 26)
+
+Five real-PG groups passed on manifest
+`7f52148da43bd8a85098f126934525d89d985de0fb7d1f04a6323f3bfe0b13e9`.
+Actual planner created an intent, worker recorded a fact, next planner invoked
+registered prove_goal, and the engine observed authoritative readiness. New open
+work blocked completion requery. Orphan running work and uncertain SQL settlement
+quarantined the handle without replay; active cancellation drained and reopened
+its intent, and foreign scope was rejected. All provider results were inert.
+The task remained running: this stage did not test successful TaskManager.complete
+or application-factory wiring and did not substitute a fake completion callback.
+
+## Opt-in synthetic record deletion (stage 27)
+
+Six independently reviewed real-PG groups passed on manifest
+`2e3d497b31eb136448000dccbff7080c0cd9b3a1910bca8d3a27d9ea61866756`.
+Default 503/authentication, strict filters/scope and second authorization denials,
+exact-task deletion, literal wildcard/quote equality, SQL rollback and redacted
+trigger failure were checked. Only disposable synthetic llm_records were deleted;
+usage rows remained intact. No production deletion or approval-flow integration
+occurred; an explicit action-specific deletion policy is still required by host.
+
+## Exact manager completion (stage 28)
+
+Five actual PostgreSQL manager/host/EngineRunner groups passed on manifest
+`4386d868ca20e9a787165e790662cf3077000e93ee8cbcb0c3c7732cd9872db3`.
+Planner, versioned worker and registered proof tools led to authoritative goals;
+host.poll invoked actual TaskManager.complete, persisted done/timestamp and
+retired ownership. An injected terminal-update trigger failure retained manager
+and unresolved runner ownership without replay. Idle and active pause/drain were
+checked. Unsupported seed/type failed before admission SQL or construction.
+This stage did not enable the hosted HTTP factory or use external providers.
+
+## Explicit hosted HTTP-to-completion path (stage 30)
+
+Four actual PG/bcrypt/JWT HTTP groups passed on manifest
+`e8352f1656e8c13daa61030311bd26f4e862277c0655a1c98c8c3f80e44644cc`.
+Authenticated resume/pause/drain/resume led through explicit engine advances,
+planner/worker/proof and actual persisted manager completion. Construction ran
+no provider work. Capacity denial performed no admission, second host/factory
+adoption failed, and unsupported creation returned 503 without task writes.
+The initial resume fixture was unpaused and correctly rejected; its persisted
+state was corrected, not the product. No automatic ticking, default enabling,
+external providers or production data were involved.

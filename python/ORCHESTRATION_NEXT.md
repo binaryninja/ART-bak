@@ -1,4 +1,8 @@
-# Next orchestration bridge: one task-generation engine
+# Historical design: task-generation engine
+
+The initialized-task bridge described here is now implemented and independently
+reviewed. See ENGINE_HOST_STATUS.md and ISOLATED_QA.md for current scope/evidence.
+The source analysis and remaining bootstrap/recovery constraints below are retained.
 
 Read-only source audit, 2026-11-15. This is an implementation plan, not a claim
 that autonomous task execution is already connected. No model, target, database
@@ -207,6 +211,6 @@ under the same guard immediately before exact-token manager settlement; cached
 PlannerResult/EngineProgress is not authority. Completion never cancels the
 manager token. Future goal-driven child cancellation must use separate child
 cause/state mappings, not cancel the token required by manager.complete.
-Eight initial authored offline tests exercise actual planner→worker→planner,
+Nine initial authored offline tests exercise actual planner→worker→planner,
 priority ordering, seed suppression, cancellation/drain, uncertainty and guarded
 completion. Independent review is pending; this is not full engine parity.

@@ -296,6 +296,8 @@ class TaskManager:
         return self._start(task_id, expected_queue=deepcopy(dict(expected_lifecycle)))
 
     def _start(self, task_id, *, seed_first_intent=False, expected_queue=None):
+        if type(seed_first_intent) is not bool:
+            raise ValueError('seed_first_intent must be boolean')
         self._runtime_required()
         with self._lock:
             key, row = self._require(task_id)
@@ -314,9 +316,14 @@ class TaskManager:
             run = _Run()
             self._runs[key] = run
             snapshot = deepcopy(row)
+        # Preflight sees the same requested run features as start, before any
+        # durable admission. Do not let a callback mutate the captured CAS row.
+        snapshot['seed_first_intent'] = seed_first_intent
+        if expected_queue is not None:
+            snapshot['admission_mode'] = expected_queue['queue_mode']
         admitted = False
         try:
-            if not self.runner.ready(snapshot):
+            if not self.runner.ready(deepcopy(snapshot)):
                 raise RuntimeUnavailable('Task runner is not ready')
             with self._lock:
                 run.token.check()

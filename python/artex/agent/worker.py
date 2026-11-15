@@ -16,6 +16,9 @@ All intent writers must honor WorkerStore versions and the same barrier. Generic
 ExplorationStore.claim_intent is NOT compatible. SQL and JSONL are not atomic:
 any uncertainty leaves running ownership for explicit reconciliation, not replay.
 After restart an already claimed/terminal intent is rejected, never executed twice.
+Runtime/durable scope includes explicit run_id and revision alongside the full
+generation_digest for native context tools. Older scoped receipts missing those
+keys deliberately conflict; no automatic rewrite or replay migration is provided.
 """
 from copy import deepcopy
 from dataclasses import dataclass,asdict
@@ -46,7 +49,7 @@ class WorkerScope:
     def session_id(self):return f'exp{self.exploration_id}-worker-i{self.intent_id}'
     def identity(self,limits):
         value=asdict(self);value['limits']=asdict(limits)
-        return {'role':'worker','task_id':self.task_id,'exploration_id':self.exploration_id,'intent_id':self.intent_id,'generation_digest':hashlib.sha256(json.dumps(value,sort_keys=True,allow_nan=False,separators=(',',':')).encode()).hexdigest()}
+        return {'role':'worker','task_id':self.task_id,'exploration_id':self.exploration_id,'run_id':self.run_id,'revision':self.revision,'intent_id':self.intent_id,'generation_digest':hashlib.sha256(json.dumps(value,sort_keys=True,allow_nan=False,separators=(',',':')).encode()).hexdigest()}
 
 @dataclass(frozen=True)
 class WorkerOutcome:

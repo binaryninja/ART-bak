@@ -1,7 +1,9 @@
 """Protected recording inspector reads, grounded in server/commands.go.
 
-Only exact source routes: records list/detail/tasks/by-model; tokens/usage and
-DELETE remain503 (archive-aware totals/deletion lifecycle not ported). No invented
+Only exact source routes: records list/detail/tasks/by-model; tokens/usage remains
+503 (archive-aware totals are not implemented). DELETE remains503 unless an
+explicit delete_authorize policy is supplied. It
+deletes only exact-task debug records, not metering/archive data. No invented
 capture/export endpoint or provider execution. Detail includes normalized/raw
 capture fields ONLY through explicit per-record authorization AND redaction.
 
@@ -15,7 +17,11 @@ Selection includes resolved store task scope for a second policy check. Stored
 errors/body text may contain secrets: redact(request,record_dict,include_bodies)
 is mandatory for row outputs. It may remove optional fields but cannot change
 identity or add fields. No generic sanitizer can promise to remove every secret.
-Metadata/usage failures are500, not fabricated zero results. No write operations.
+Metadata/usage failures are500, not fabricated zero results. Deletion additionally
+requires delete_authorize(request, "delete", selection)
+returning literal True, both before resolution and with the resolved scope. This
+policy must verify action-specific authorization for permanent deletion, not infer
+it from JWT/read rights. No default deletion policy is installed.
 """
 from copy import deepcopy
 from dataclasses import dataclass,replace,asdict
@@ -56,12 +62,15 @@ def _number(value,minimum,maximum):
 
 
 class LLMRecordService:
-    def __init__(self,store_resolver=None,*,authorize=None,redact=None):
+    def __init__(self,store_resolver=None,*,authorize=None,redact=None,delete_authorize=None):
+        if delete_authorize is not None and not callable(delete_authorize):
+            raise ValueError('Explicit delete authorization callback required')
         self.resolve,self.authorize,self.redact=store_resolver,authorize,redact
+        self.delete_authorize=delete_authorize
     def register(self,router):
         for method,path,action in [('GET','/api/llm/records','list'),('GET','/api/llm/records/tasks','tasks'),
             ('GET','/api/llm/records/by-model','models'),('GET','/api/llm/records/{id}','detail'),
-            ('DELETE','/api/llm/records','unavailable'),('GET','/api/tokens/usage','unavailable')]:
+            ('DELETE','/api/llm/records','delete'),('GET','/api/tokens/usage','unavailable')]:
             router.add(method,path,lambda req,params,a=action:self.handle(a,req,params))
     def _allow(self,request,action,selection):
         if not callable(self.authorize):raise RecordUnavailable()
@@ -81,9 +90,35 @@ class LLMRecordService:
         for name in ('id','task_id','session_id'):
             if sanitized.get(name)!=original.get(name):raise RecordUnavailable()
         return deepcopy(sanitized)
+    def _delete(self,request):
+        if not callable(self.delete_authorize):raise RecordUnavailable()
+        if request.body:raise RecordInvalid('Deletion body unsupported')
+        query=parse_qs(urlsplit(request.target).query,keep_blank_values=True)
+        if not query:return error_response(400,'missing task')
+        if set(query)!={'task'} or len(query['task'])!=1:raise RecordInvalid('Exact task required')
+        task=query['task'][0].strip()
+        if not task: return error_response(400,'missing task')
+        task=_text(task)
+        if len(task.encode('utf-8'))>4096:raise RecordInvalid('Task exceeds byte bound')
+        selection=RecordSelection(task=task)
+        def allowed(selected):
+            self._allow(request,'delete',selected)
+            try:approved=self.delete_authorize(request,'delete',selected)
+            except Exception:raise RecordUnavailable() from None
+            if approved is not True:raise RecordDenied()
+        allowed(selection)
+        if not callable(self.resolve):raise RecordUnavailable()
+        store=self.resolve(request,'delete',selection)
+        if not isinstance(store,LLMRecordStore):raise RecordUnavailable()
+        if store.task_id is not None and store.task_id!=task:raise RecordDenied()
+        allowed(replace(selection,store_task=store.task_id))
+        count=store.delete_task(task)
+        return json_response(200,{'deleted':count})
+
     def handle(self,action,request,params):
         try:
             if action=='unavailable':raise RecordUnavailable()
+            if action=='delete':return self._delete(request)
             query=parse_qs(urlsplit(request.target).query,keep_blank_values=True)
             allowed={'model','session','task','page','size'} if action=='list' else {'task'} if action=='models' else set()
             if set(query)-allowed or any(len(v)!=1 for v in query.values()):raise RecordInvalid('Invalid query')

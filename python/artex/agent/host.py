@@ -18,8 +18,9 @@ paused, or guarantee future inactivity once it returns. A timed-out drain leaves
 work owned by the runner. Calls blocked in repositories/bootstrap/complete are
 not forcibly interruptible; callback-level timeouts remain the host's duty.
 
-Full graph bootstrap/main/planner/workers orchestration remains absent. Nothing
-here is automatically wired into HTTP routes, the CLI or application factory.
+This host does not bootstrap graphs or select an execution engine. An explicit
+EngineRunner and hosted factory can connect initialized-task planner/worker cycles;
+there is still no automatic HTTP/CLI wiring or background polling here.
 """
 from __future__ import annotations
 
@@ -29,7 +30,19 @@ from threading import Condition, RLock
 from time import monotonic
 
 from ..manager import RuntimeUnavailable, TaskConflict, TaskManager
-from .runner import AgentRunner
+from typing import Protocol
+from ..manager import Runner, RunHandle
+
+
+class LifecycleRunner(Runner, Protocol):
+    """Explicit runner lifecycle, with no implied engine completion semantics.
+
+    handles() returns all retained exact-generation handles; settle_completed
+    calls the supplied completion callback only for verified, drained outcomes.
+    Neither method may forget unresolved work or infer success from model text.
+    """
+    def handles(self) -> tuple[RunHandle, ...]: ...
+    def settle_completed(self, complete) -> tuple[str, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -55,16 +68,50 @@ class DrainResult:
 
 
 class AgentHost:
-    def __init__(self, manager: TaskManager, runner: AgentRunner):
-        if not isinstance(manager, TaskManager) or not isinstance(runner, AgentRunner) or manager.runner is not runner:
-            raise RuntimeUnavailable('Host requires a TaskManager and its exact AgentRunner instance')
+    def __init__(self, manager: TaskManager, runner: LifecycleRunner):
+        if not isinstance(manager, TaskManager) or manager.runner is not runner:
+            raise RuntimeUnavailable('Host requires a TaskManager and its exact lifecycle runner')
+        if any(not callable(getattr(runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
+            raise RuntimeUnavailable('Runner lacks required lifecycle methods')
         self.manager, self.runner = manager, runner
         self._condition = Condition(RLock())
         self._mutations = 0
         self._draining = False
         self._settling = False
+        claim=getattr(runner,'claim_host',None)
+        if claim is not None:
+            if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
+            claim(self)
+
+    def _identity(self):
+        if self.manager.runner is not self.runner:
+            raise RuntimeUnavailable('Hosted lifecycle runner identity changed')
+        if any(not callable(getattr(self.runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
+            raise RuntimeUnavailable('Runner lifecycle protocol changed')
+        claim=getattr(self.runner,'claim_host',None)
+        if claim is not None:
+            if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
+            claim(self)
+
+    def _handles(self):
+        # Validate each inventory before using wait; never silently treat a bad
+        # handle as drained. Inventory is an explicit finite runner contract.
+        handles=self.runner.handles()
+        self._identity()
+        if not isinstance(handles,(list,tuple)) or len(handles)>100000:
+            raise RuntimeUnavailable('Invalid runner handle inventory')
+        if len({id(h) for h in handles})!=len(handles) or any(not callable(getattr(h,n,None)) for h in handles for n in ('cancel','wait')):
+            raise RuntimeUnavailable('Invalid or duplicate runner handle')
+        return tuple(handles)
+
+    def _wait(self,handle,timeout):
+        result=handle.wait(timeout)
+        self._identity()
+        if type(result) is not bool:raise RuntimeUnavailable('Runner handle wait must confirm a boolean drain result')
+        return result
 
     def _invoke(self, callback, *, admission):
+        self._identity()
         with self._condition:
             if self._settling:
                 raise TaskConflict('Lifecycle mutation cannot reenter completion settlement')
@@ -105,6 +152,7 @@ class AgentHost:
 
     def poll(self):
         """Non-background settlement pass. Busy is not evidence of no live work."""
+        self._identity()
         with self._condition:
             if self._mutations:
                 return PollResult(busy=True)
@@ -114,9 +162,13 @@ class AgentHost:
                 raise TaskConflict('Completion settlement cannot reenter itself')
             self._settling = True
             try:
-                settled = tuple(self.runner.settle_completed(self.manager.complete))
-                handles = self.runner.handles()
-                running = sum(not handle.wait(0) for handle in handles)
+                settled = self.runner.settle_completed(self.manager.complete)
+                self._identity()
+                if not isinstance(settled, (list, tuple)) or len(settled)>100000 or any(not isinstance(item,str) or not item or len(item)>1024 for item in settled) or len(set(settled))!=len(settled):
+                    raise RuntimeUnavailable('Invalid runner settlement receipts')
+                settled = tuple(settled)
+                handles = self._handles()
+                running = sum(not self._wait(handle,0) for handle in handles)
                 return PollResult(False, settled, running, len(handles) - running)
             finally:
                 self._settling = False
@@ -128,6 +180,7 @@ class AgentHost:
         Existing lifecycle mutations can finish, and pause remains available.
         A False result is not permission to discard handles or exit the process.
         """
+        self._identity()
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout < 0:
             raise ValueError('timeout must be finite and nonnegative')
         deadline = monotonic() + timeout
@@ -142,8 +195,8 @@ class AgentHost:
                     if remaining <= 0:
                         return DrainResult(False, PollResult(True))
                     self._condition.wait(remaining)
-            for handle in self.runner.handles():
-                if not handle.wait(max(0, deadline - monotonic())):
+            for handle in self._handles():
+                if not self._wait(handle,max(0, deadline - monotonic())):
                     state = self.poll()
                     return DrainResult(False, state)
             state = self.poll()
