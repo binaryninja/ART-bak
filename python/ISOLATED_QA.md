@@ -888,3 +888,18 @@ includes the final command/token/intercept original-callback pins. The unchanged
 stage-68 seven actual PostgreSQL cases and stage-66 four groups all pass, along
 with 47 focused test executions. Each harness used its own fresh disposable
 database. No additional workload or broader safety guarantee is implied.
+
+## Intent-to-asset provenance (stage 72)
+
+Manifest `79422e4e28450f36a7fd625ed697f8d3847b40879361d5b8ea77fc5ee1e270bf`
+passed three actual PostgreSQL groups and 17 focused test executions. Source-shaped
+provenance, local-open/direct-terminal/nonrecursive contexts, source/request
+revocation, callback replacement, archive refusal and SQL UTF-8/row bounds were
+checked. Initial transaction-exit and serialization disclosure failures were
+preserved and their unchanged regressions now pass. This acceptance covers the
+service/store, not subsequent optional application composition or target execution.
+
+Intent-assets optional factory composition was independently checked on manifest
+`b9aa305c892b1ffe8d8d4494731cda1cbdc2185bb9c8d3150bfddd8bf72a6422`:
+17 collected tests pass, including two additional private-binding/JWT-order
+regressions. No listener or external provider was started for this composition.

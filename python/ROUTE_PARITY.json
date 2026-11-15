@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 174,
-    "python_optional_service_routes": 169,
-    "matched_offline_contract_routes": 174,
-    "go_routes_without_python_registration": 87
+    "python_offline_contract_routes": 175,
+    "python_optional_service_routes": 170,
+    "matched_offline_contract_routes": 175,
+    "go_routes_without_python_registration": 86
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -16,7 +16,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agents.py": "4bf7c4176bdb1e33c146a36f0b987a3d4b73833f383effcf69afea2e9bbbf8c7",
-    "python/artex/server/application.py": "721f6c789f5867614abff32a44a2e4d275c0f11330281b00bfb801813ce2f830",
+    "python/artex/server/application.py": "c08c733bb7af2ccd6edf532ea9dd97579849d5a5b0905eb9f2e4cf9812129dd9",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/audit.py": "93f5402b00ec4952336c75d77bebff2d711ecb098093c238269c5c7e8bdb732f",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
@@ -48,6 +48,7 @@
     "python/artex/server/task_coverage.py": "5db138257becafbb3c4fbff7576b8a14db0d15b6fdc0edde08cd0b508b3db38b",
     "python/artex/server/task_goals.py": "6dee8e591e90e2c3e7f1cd929ad711bf75fe94a4a9a2dd5fb79e6ec797a33b6c",
     "python/artex/server/task_host.py": "f8e58c51050ee01805e87c7563ce2e0f8e214069fb1d4948b52e8bca1244076f",
+    "python/artex/server/task_intent_assets.py": "65056a4d9453da6f28b5095e4e0d26af0b8b31870898555c8c951fa3556f7e35",
     "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
     "python/artex/server/task_scope.py": "f84169cb61132b26b4b25f0eb17780b59b4bf1ac823bc744f8984eb6d7b0618d",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
@@ -1060,8 +1061,19 @@
       "expression": "\"GET /api/tasks/{id}/intent-assets\"",
       "method": "GET",
       "path": "/api/tasks/{id}/intent-assets",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/intent-assets",
+        "source": "python/artex/server/task_intent_assets.py",
+        "line": 15,
+        "function": "TaskIntentAssetsService.register",
+        "handler": "self.handle",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/workspace/list",
@@ -6732,6 +6744,18 @@
       "line": 108,
       "function": "TaskGoalService.register",
       "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/intent-assets",
+      "source": "python/artex/server/task_intent_assets.py",
+      "line": 15,
+      "function": "TaskIntentAssetsService.register",
+      "handler": "self.handle",
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",

@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **174**.
-- python optional service routes: **169**.
-- matched offline contract routes: **174**.
-- go routes without python registration: **87**.
+- python offline contract routes: **175**.
+- python optional service routes: **170**.
+- matched offline contract routes: **175**.
+- go routes without python registration: **86**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -247,7 +247,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/{id}/goals` | `server/server.go:721` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | DELETE | `/api/tasks/{id}/goals/{gid}` | `server/server.go:723` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | PATCH | `/api/tasks/{id}/goals/{gid}` | `server/server.go:722` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
-| GET | `/api/tasks/{id}/intent-assets` | `server/server.go:707` | Not registered |
+| GET | `/api/tasks/{id}/intent-assets` | `server/server.go:707` | Optional registration; adapters required: `python/artex/server/task_intent_assets.py:15` |
 | POST | `/api/tasks/{id}/intents/rerun-blocked` | `server/server.go:734` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/control` | `server/server.go:731` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/messages` | `server/server.go:732` | Not registered |
@@ -436,6 +436,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PATCH /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/intent-assets`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tasks/{id}/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/llm/resolution`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
