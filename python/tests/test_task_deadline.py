@@ -32,7 +32,7 @@ class DeadlineTests(unittest.TestCase):
         self.assertEqual(self.sql[2].params,(5,9,0))
     def test_wrong_configuration_before_write(self):
         with self.assertRaises(DeadlineConflict):self.store.stamp(1)
-        self.assertEqual(len(self.sql),1)
+        self.assertEqual(len(self.sql),0)
     def test_wrong_generation_before_sql(self):
         from dataclasses import replace
         self.store.receipt=replace(self.receipt,run_id=72)

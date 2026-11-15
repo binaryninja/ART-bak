@@ -18,6 +18,8 @@ background tick, recovery, scheduler or default app
 wiring. Explicit advance may execute one bounded child synchronously. An idle or
 drained handle is NOT completed. Only the engine's fresh persisted-goal settlement
 may call manager.complete. Unresolved handles remain owned even after cancel.
+Hosted cancelled-handle retirement requires the manager's exact acknowledgement;
+forgetting an execution attachment never releases a retained clock owner.
 All admission/settlement must go through AgentHost; graph writers share its
 engine lifecycle authority. This adapter itself grants no model/tool permission.
 """
@@ -129,20 +131,37 @@ class EngineRunner:
                 raise RuntimeUnavailable('Engine capacity exhausted')
         return True
 
+    def _retire_cancelled(self, key, handle):
+        """Detach execution only after manager acknowledgement; never release a lease."""
+        if handle.unresolved or not handle.token.cancelled or handle.wait(0) is not True:
+            return False
+        manager=self._host_manager
+        if manager is not None:
+            self.claim_host(self._host)
+            if manager.acknowledge_deadline_retirement(key,handle.token,handle) is not True:
+                return False
+        with self._lock:
+            if self._handles.get(key) is not handle:
+                return False
+            del self._handles[key]
+        return True
+
     def start(self, task, token):
         if self._host is not None:self.claim_host(self._host)
         if not isinstance(token,CancellationToken):raise RuntimeUnavailable('Exact manager token required')
         token.check()
         task,scope=self._prepare(task); key=str(int(task['id']))
+        with self._lock:old=self._handles.get(key)
+        if old is not None and old.token is not token:
+            if not self._retire_cancelled(key,old):
+                raise TaskConflict('Prior engine generation still owns work')
         with self._lock:
             old=self._handles.get(key)
             if old is not None:
                 if old.token is token:
                     if (isinstance(old,BootstrapHandle) and scope is not None) or (not isinstance(old,BootstrapHandle) and old.scope!=scope):raise TaskConflict('Engine scope changed within generation')
                     token.check();return old
-                if old.unresolved or not old.token.cancelled or not old.wait(0):
-                    raise TaskConflict('Prior engine generation still owns work')
-                del self._handles[key]
+                raise TaskConflict('Prior engine generation still owns work')
             if len(self._handles)>=self.max_pending:raise RuntimeUnavailable('Engine capacity exhausted')
             token.check()
             if scope is None:
@@ -182,13 +201,16 @@ class EngineRunner:
     def settle_completed(self, complete):
         if not callable(complete):raise ValueError('Completion callback required')
         settled=[]
-        # Serialize retirement with start. Engine itself fences active child work.
-        with self._lock:
-            for key,handle in tuple(self._handles.items()):
-                if handle.unresolved:continue
-                if handle.token.cancelled:
-                    if handle.wait(0):del self._handles[key]
-                    continue
-                if handle.settle_completed(complete) is True:
-                    del self._handles[key];settled.append(key)
+        # Snapshot under the runner lock; manager and handle callbacks run outside
+        # it to avoid reversing manager/engine lifetime lock ordering.
+        with self._lock: inventory=tuple(self._handles.items())
+        for key,handle in inventory:
+            if handle.unresolved:continue
+            if handle.token.cancelled:
+                self._retire_cancelled(key,handle)
+                continue
+            if handle.settle_completed(complete) is True:
+                with self._lock:
+                    if self._handles.get(key) is handle:
+                        del self._handles[key];settled.append(key)
         return tuple(settled)

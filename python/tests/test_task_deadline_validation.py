@@ -6,6 +6,8 @@ import test_dispatch_deadline as fixture
 class DeadlineValidationTests(unittest.TestCase):
     def setUp(self):
         self.f=fixture.DispatchDeadlineTests();self.f.setUp();self.addCleanup(self.f.doCleanups)
+        self.f.f.store.stamp(10)
+        self.f.f.sql.clear()
     def test_readonly_lock_order_full_identity_and_no_update(self):
         value=self.f.f.store.validate_current(10)
         queries=self.f.f.sql

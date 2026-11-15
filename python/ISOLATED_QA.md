@@ -903,3 +903,18 @@ Intent-assets optional factory composition was independently checked on manifest
 `b9aa305c892b1ffe8d8d4494731cda1cbdc2185bb9c8d3150bfddd8bf72a6422`:
 17 collected tests pass, including two additional private-binding/JWT-order
 regressions. No listener or external provider was started for this composition.
+
+## Internal owned-clock protocol (stage 73)
+
+Manifest `d0b8d09a9368b8b908cf676e4b4f2caaefc4251e6079b78a1de1fd134404e772`
+passed three actual PostgreSQL groups and 19 focused tests. Actual authored
+bootstrap uses fixed inert in-process responses, not a live provider. Natural
+prepared-zero clocks cannot become positive by changing only manager/SQL rows.
+
+Positive protocol tests explicitly modify private synthetic prepared-timeout
+fixtures as well as manager/SQL state. Within that test-only setup, registration
+retains an exact durable lease; pause revokes old execution while preserving a
+read-only suspended clock. Validation performs two SELECT FOR SHARE statements
+and no UPDATE. Copied leases/stale journals reject; actual trigger rollback leaves
+quarantine and refuses retry. This is not supported positive-timeout runtime,
+automatic expiry/resume/final assessment or production recovery acceptance.

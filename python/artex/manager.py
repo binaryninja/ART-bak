@@ -99,6 +99,42 @@ class Runner(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class DeadlineOwnerSnapshot:
+    task_id: str
+    state: str
+
+
+@dataclass(frozen=True, eq=False)
+class DeadlineReservation:
+    task_id: str
+
+
+@dataclass(frozen=True, eq=False)
+class DeadlineLease:
+    task_id: str
+    receipt: object = field(repr=False)
+    clock: object = field(repr=False)
+
+
+@dataclass
+class _DeadlineSlot:
+    reservation: DeadlineReservation
+    token: CancellationToken
+    handle: object
+    store: object
+    repository: object
+    executor: object
+    guard: object
+    receipt: object
+    timeout: int
+    coordinator: object
+    configuration: tuple
+    state: str = 'reserved'
+    attempted: bool = False
+    lease: DeadlineLease | None = None
+
+
 @dataclass
 class _Run:
     token: CancellationToken = field(default_factory=CancellationToken)
@@ -161,6 +197,7 @@ class TaskManager:
         self._tasks: dict[str, dict] = {}
         self._runs: dict[str, _Run] = {}
         self._active = ''
+        self._deadline_slots: dict[str, _DeadlineSlot] = {}
 
     def load_existing(self):
         """Register persisted tasks without launching/resuming any execution."""
@@ -225,6 +262,169 @@ class TaskManager:
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
+
+    def deadline_owners(self):
+        """Bounded process-local ownership inventory, not execution permission."""
+        with self._lock:
+            return tuple(DeadlineOwnerSnapshot(key,slot.state)
+                         for key,slot in sorted(self._deadline_slots.items()))
+
+    def _deadline_slot(self,reservation):
+        if type(reservation) is not DeadlineReservation:
+            raise TaskConflict('Exact deadline reservation required')
+        slot=self._deadline_slots.get(reservation.task_id)
+        if slot is None or slot.reservation is not reservation:
+            raise TaskConflict('Deadline reservation is not owned')
+        return slot
+
+    def _deadline_binding(self,slot):
+        # Only identity/data checks under manager lock. No handle, host, guard,
+        # repository or provider callbacks here (those may acquire other locks).
+        store=slot.store;handle=slot.handle
+        if (self.repository is not slot.repository or self.repository.executor is not slot.executor
+            or store.executor is not slot.executor or store.manager is not self
+            or store.handle is not handle or store.receipt is not slot.receipt
+            or store.guard is not slot.guard or store._guard is not slot.guard
+            or store._executor is not slot.executor or store._manager is not self
+            or store._handle is not handle or store._receipt is not slot.receipt
+            or handle.token is not slot.token or handle.coordinator is not slot.coordinator
+            or store._coordinator is not slot.coordinator or slot.coordinator.guard is not slot.guard
+            or slot.coordinator.journal.executor is not slot.executor
+            or (handle.model,handle.system,handle.policy_revision,handle.request_id,handle.task_id,handle.exploration_id,handle._configuration[-1])!=slot.configuration
+            or handle._task.get('timeout_seconds',0)!=slot.timeout):
+            raise TaskConflict('Deadline ownership binding changed')
+
+    def reserve_deadline_owner(self,task_id,token,handle,*,store,timeout_seconds):
+        """Reserve retirement before stamp. No clock write or execution grant.
+
+        Positive runtime support remains disabled elsewhere. Only the actual
+        prepared-owner store can validate this reservation; SQL authority remains
+        its responsibility. No caller-created receipt is accepted as evidence.
+        """
+        from .db.task_deadline import TaskDeadlineStore
+        from .agent.bootstrap_handle import BootstrapHandle
+        if type(store) is not TaskDeadlineStore or not callable(getattr(store,'validate_reservation_owner',None)):
+            raise RuntimeUnavailable('Owned deadline persistence unavailable')
+        if type(timeout_seconds) is not int or not 0<timeout_seconds<=2**31-1:
+            raise TaskConflict('Positive bounded deadline required')
+        if type(handle) is not BootstrapHandle:raise TaskConflict('Actual bootstrap deadline owner required')
+        prepared_timeout=handle.prepared_timeout_seconds  # Outside the registry lock.
+        if type(prepared_timeout) is not int or prepared_timeout!=timeout_seconds:
+            raise TaskConflict('Deadline differs from original prepared configuration')
+        key=_id(task_id)
+        with self._lock:
+            if key in self._deadline_slots:raise TaskConflict('Deadline ownership already retained')
+            if not self.owns_generation(key,token,handle):raise TaskConflict('Installed deadline generation required')
+            row=self._tasks[key]
+            if row.get('timeout_seconds')!=timeout_seconds:raise TaskConflict('Task deadline configuration changed')
+            if (store.manager is not self or store.handle is not handle or store.receipt.task_id!=int(key)
+                or store.receipt.exploration_id!=row.get('exploration_id')):
+                raise TaskConflict('Deadline store belongs to another generation')
+            reservation=DeadlineReservation(key)
+            slot=_DeadlineSlot(reservation,token,handle,store,self.repository,
+                self.repository.executor,store.guard,store.receipt,timeout_seconds,store._coordinator,
+                (handle.model,handle.system,handle.policy_revision,handle.request_id,handle.task_id,handle.exploration_id,prepared_timeout))
+            self._deadline_binding(slot)
+            if len(self._deadline_slots)>=10000:raise RuntimeUnavailable('Deadline ownership inventory full')
+            self._deadline_slots[key]=slot
+        try:
+            # Handle checks can call back into owns_generation; do not hold _lock.
+            if store.validate_reservation_owner() is not True:
+                raise TaskConflict('Prepared deadline owner unavailable')
+            with self._lock:
+                if self._deadline_slot(reservation) is not slot:raise TaskConflict('Deadline reservation changed')
+                self._deadline_binding(slot)
+                if not self.owns_generation(key,token,handle):raise TaskConflict('Deadline owner cancelled')
+                return reservation
+        except BaseException:
+            self.abort_deadline_reservation(reservation)
+            raise
+
+    def mark_deadline_attempted(self,reservation):
+        """Call immediately before the first possible SQL stamp effect."""
+        with self._lock:
+            slot=self._deadline_slot(reservation);self._deadline_binding(slot)
+            if slot.state!='reserved' or slot.attempted:raise TaskConflict('Deadline stamp already attempted')
+            if not self.owns_generation(reservation.task_id,slot.token,slot.handle):raise TaskConflict('Deadline owner unavailable')
+            slot.attempted=True
+
+    def abort_deadline_reservation(self,reservation):
+        """Release only proven pre-attempt work. Attempted stamps are retained."""
+        with self._lock:
+            slot=self._deadline_slot(reservation)
+            if slot.state!='reserved' or slot.attempted:raise TaskConflict('Attempted deadline requires reconciliation')
+            del self._deadline_slots[reservation.task_id]
+
+    def quarantine_deadline_owner(self,reservation):
+        with self._lock:
+            slot=self._deadline_slot(reservation)
+            slot.state='quarantined'
+
+    def install_deadline_owner(self,reservation,evidence):
+        """Consume exact store-owned committed evidence outside manager lock."""
+        from .db.task_deadline import DeadlineReceipt
+        with self._lock:
+            slot=self._deadline_slot(reservation);self._deadline_binding(slot)
+            if slot.state!='reserved' or not slot.attempted:raise TaskConflict('No attempted deadline stamp')
+            store=slot.store
+        try:
+            clock=store.consume_stamp_evidence(reservation,evidence)
+            r=slot.receipt
+            if (type(clock) is not DeadlineReceipt
+                or (clock.task_id,clock.exploration_id,clock.run_id,clock.journal_revision,clock.timeout_seconds)
+                   !=(r.task_id,r.exploration_id,r.run_id,r.revision,slot.timeout)
+                or any(type(v) is not datetime or v.tzinfo is None or v.utcoffset() is None
+                       for v in (clock.first_run_at,clock.deadline_at))
+                or clock.deadline_at<clock.first_run_at):
+                raise TaskConflict('Committed deadline evidence mismatch')
+            with self._lock:
+                if self._deadline_slot(reservation) is not slot:raise TaskConflict('Deadline reservation changed')
+                self._deadline_binding(slot)
+                if slot.state!='reserved' or not self.owns_generation(reservation.task_id,slot.token,slot.handle):
+                    raise TaskConflict('Deadline installation lost generation')
+                lease=DeadlineLease(reservation.task_id,r,clock)
+                slot.lease=lease;slot.state='attached'
+                return lease
+        except BaseException:
+            self.quarantine_deadline_owner(reservation)
+            raise
+
+    def validate_deadline_owner(self,lease,operation='read'):
+        """Lease-only read capability; never permits providers/tools/completion.
+
+        Durable task/journal/clock checks under the original guard remain mandatory.
+        No final-assessment or generic initialized-task operation exists yet.
+        """
+        if type(lease) is not DeadlineLease or operation!='read':return False
+        with self._lock:
+            slot=self._deadline_slots.get(lease.task_id)
+            if slot is None or slot.lease is not lease or slot.state not in ('attached','suspended'):return False
+            try:self._deadline_binding(slot)
+            except (TaskConflict,AttributeError):return False
+            row=self._tasks.get(lease.task_id)
+            if row is None or row.get('deleted_at') is not None or row.get('archived_at') is not None or row.get('status') in _TERMINAL:return False
+            if slot.state=='attached':return self.owns_generation(lease.task_id,slot.token,slot.handle)
+            return (row.get('paused') is True and lease.task_id not in self._runs
+                    and slot.token._event.is_set())
+
+    def deadline_owner_phase(self,lease):
+        """Read-only state for the exact lease; no execution or DB authority."""
+        with self._lock:
+            if not self.validate_deadline_owner(lease):
+                raise TaskConflict('Deadline lease is not currently readable')
+            return self._deadline_slots[lease.task_id].state
+
+    def acknowledge_deadline_retirement(self,task_id,token,handle):
+        """Pure retirement fence; cancelled owners cannot create new reservations."""
+        try:key=_id(task_id)
+        except TaskNotFound:return False
+        with self._lock:
+            slot=self._deadline_slots.get(key)
+            if slot is None:return True
+            if slot.token is not token or slot.handle is not handle:return False
+            try:self._deadline_binding(slot)
+            except (TaskConflict,AttributeError):return False
+            return slot.state=='suspended' and key not in self._runs
 
     def lifecycle_snapshot(self, task_id):
         with self._lock:
@@ -334,6 +534,8 @@ class TaskManager:
         self._runtime_required()
         with self._lock:
             key, row = self._require(task_id)
+            if key in self._deadline_slots:
+                raise TaskConflict('Retained deadline requires explicit resume reconciliation')
             if key in self._runs:
                 if self._runs[key].token.cancelled:
                     raise TaskConflict('Task cancellation is still in progress')
@@ -419,6 +621,9 @@ class TaskManager:
             key, row = self._require(task_id)
             if row.get('status') in _TERMINAL or row.get('paused'):
                 raise TaskConflict('Task is terminal or already paused')
+            deadline_slot=self._deadline_slots.get(key)
+            if deadline_slot is not None and deadline_slot.state!='attached':
+                raise TaskConflict('Deadline reservation or uncertainty prevents pause retirement')
             run = self._runs.get(key)
             if run is None:
                 run = _Run()
@@ -426,6 +631,10 @@ class TaskManager:
                 self._runs[key] = run
             if run.uncertain:
                 raise RuntimeUnavailable('Runner state is unknown; manual reconciliation required')
+            if deadline_slot is not None:
+                self._deadline_binding(deadline_slot)
+                if deadline_slot.token is not run.token or deadline_slot.handle is not run.handle:
+                    raise TaskConflict('Deadline attachment differs from paused generation')
             run.token.cancel('paused_by_user')
         deadline = monotonic() + timeout
         if run:
@@ -435,14 +644,36 @@ class TaskManager:
                 run.handle.cancel(run.token.reason)
                 if not run.handle.wait(max(0, deadline-monotonic())):
                     raise TaskConflict('Runner has not stopped; task remains cancellation-gated')
+        # The cancelled run remains installed as a retirement/admission gate.
+        # Do not hold the registry lock while SQL waits for a task row: a lease
+        # reader may hold that row and need the registry lock to revalidate.
         with self._lock:
+            if self._runs.get(key) is not run:
+                raise TaskConflict('Paused generation changed before persistence')
+            if deadline_slot is not None:
+                if self._deadline_slots.get(key) is not deadline_slot or deadline_slot.state!='attached':
+                    raise TaskConflict('Deadline owner changed before pause persistence')
+                self._deadline_binding(deadline_slot)
+        try:
             updated = self.repository.apply_pause(int(key))
             if updated is None:
                 raise TaskConflict('Task lifecycle changed before pause')
-            self._merge_lifecycle(key, updated)
-            if self._runs.get(key) is run:
+            with self._lock:
+                if self._runs.get(key) is not run:
+                    raise TaskConflict('Paused generation changed after persistence')
+                self._merge_lifecycle(key, updated)
+                if deadline_slot is not None:
+                    if self._deadline_slots.get(key) is not deadline_slot:
+                        raise TaskConflict('Deadline owner changed during pause')
+                    self._deadline_binding(deadline_slot)
+                    if deadline_slot.state!='attached':raise TaskConflict('Deadline owner no longer attachable')
+                    deadline_slot.state='suspended'
                 self._runs.pop(key, None)
-            return {'id': key, 'paused': True, 'queued': False, 'status': 'paused'}
+                return {'id': key, 'paused': True, 'queued': False, 'status': 'paused'}
+        except BaseException:
+            with self._lock:
+                if deadline_slot is not None:deadline_slot.state='quarantined'
+            raise
 
     def control_task(self, task_id, action):
         if action == 'pause':
@@ -463,6 +694,8 @@ class TaskManager:
         with self._lock:
             key, row = self._require(task_id)
             run = self._runs.get(key)
+            if key in self._deadline_slots:
+                return False  # No deadline terminal-CAS authority is implemented yet.
             if run is None or run.token is not token or token.cancelled:
                 return False
             if not self.repository.set_terminal_status_guarded(int(key), status):

@@ -17,6 +17,10 @@ sinks cooperatively and attempts settlement. It does not cancel, force-kill, mar
 paused, or guarantee future inactivity once it returns. A timed-out drain leaves
 work owned by the runner. Calls blocked in repositories/bootstrap/complete are
 not forcibly interruptible; callback-level timeouts remain the host's duty.
+Retained deadline ownership is separately inventoried: suspended leases use no
+execution capacity, but prevent all_settled/shutdown claims. Reserved, attached
+and quarantined leases also prevent a successful workers_drained result. No
+watcher, expiry coordinator or positive-timeout execution is enabled here.
 
 This host does not bootstrap graphs or select an execution engine. An explicit
 EngineRunner and hosted factory can connect initialized-task planner/worker cycles;
@@ -51,10 +55,12 @@ class PollResult:
     settled: tuple[str, ...] = ()
     running: int = 0
     pending: int = 0
+    deadline_owners: int = 0
+    deadline_pending: int = 0
 
     @property
     def all_settled(self):
-        return not self.busy and self.running == 0 and self.pending == 0
+        return not self.busy and self.running == 0 and self.pending == 0 and self.deadline_owners == 0
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,21 @@ class AgentHost:
         if len({id(h) for h in handles})!=len(handles) or any(not callable(getattr(h,n,None)) for h in handles for n in ('cancel','wait')):
             raise RuntimeUnavailable('Invalid or duplicate runner handle')
         return tuple(handles)
+
+    def _deadline_inventory(self):
+        # Retained clocks are lifecycle ownership, not provider execution slots.
+        from ..manager import DeadlineOwnerSnapshot
+        owners=self.manager.deadline_owners()
+        self._identity()
+        if (type(owners) is not tuple or len(owners)>100000
+                or any(type(o) is not DeadlineOwnerSnapshot or o.state not in
+                       ('reserved','attached','suspended','quarantined')
+                       or type(o.task_id) is not str or not o.task_id.isascii()
+                       or not o.task_id.isdecimal() or not 0<int(o.task_id)<2**63
+                       for o in owners)
+                or len({o.task_id for o in owners})!=len(owners)):
+            raise RuntimeUnavailable('Invalid deadline owner inventory')
+        return owners
 
     def _wait(self,handle,timeout):
         result=handle.wait(timeout)
@@ -202,7 +223,9 @@ class AgentHost:
                 settled = tuple(settled)
                 handles = self._handles()
                 running = sum(not self._wait(handle,0) for handle in handles)
-                return PollResult(False, settled, running, len(handles) - running)
+                owners=self._deadline_inventory()
+                return PollResult(False, settled, running, len(handles) - running,
+                                  len(owners),sum(o.state != 'suspended' for o in owners))
             finally:
                 self._settling = False
 
@@ -233,7 +256,7 @@ class AgentHost:
                     state = self.poll()
                     return DrainResult(False, state)
             state = self.poll()
-            return DrainResult(not state.busy and state.running == 0, state)
+            return DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0, state)
         finally:
             with self._condition:
                 self._draining = False

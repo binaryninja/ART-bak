@@ -40,9 +40,13 @@ class BootstrapHandle:
         self._task=deepcopy(task);self._factory=engine_factory
         self._manager,self._coordinator,self._token=manager,coordinator,token
         self._repository=manager.repository;self._executor=manager.repository.executor
-        self._configuration=(model,system,policy_revision,request_id,str(raw),exp)
+        self._configuration=(model,system,policy_revision,request_id,str(raw),exp,task.get('timeout_seconds',0))
         self._condition=Condition(RLock());self._active=False;self._thread=None
         self._phase='installed';self._child=None;self._receipt=None;self._unresolved=False;self._completed=False
+    @property
+    def prepared_timeout_seconds(self):
+        """Constructor-owned timeout pin; current constructors accept only zero."""
+        return self._configuration[-1]
     @property
     def executor(self):return self._executor
     @property
@@ -58,7 +62,7 @@ class BootstrapHandle:
     def _binding(self):
         if self.manager is not self._manager or self.coordinator is not self._coordinator or self.token is not self._token or self.manager.repository is not self._repository or self._repository.executor is not self._executor or self.coordinator.journal.executor is not self._executor:
             raise BootstrapConflict('Bootstrap owning resource changed')
-        if (self.model,self.system,self.policy_revision,self.request_id,self.task_id,self.exploration_id)!=self._configuration:raise BootstrapConflict('Bootstrap configuration changed')
+        if (self.model,self.system,self.policy_revision,self.request_id,self.task_id,self.exploration_id,self._task.get('timeout_seconds',0))!=self._configuration:raise BootstrapConflict('Bootstrap configuration changed')
     def validate_construction(self):
         """Validate pinned inert bindings before installation, without SQL/work.
 

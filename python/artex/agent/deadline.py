@@ -7,7 +7,8 @@ Construction/preflight do no SQL. Source timeout=0 skips stamping entirely.
 No task status changes, model execution, pause reset or generic generation IDs.
 Existing engine/runner nonzero-timeout rejection remains unchanged.
 
-First positive-budget dispatch stamps once; later calls validate the same durable
+First positive-budget dispatch stamps and registers exact manager ownership once;
+later calls validate the same durable
 clock read-only. A timestamp is admission to dispatch, not proof of network send.
 Any ambiguous stamp or subsequent failed validation latches this helper for
 reconciliation; never retry it to guess whether a write happened. Provider
@@ -62,6 +63,7 @@ class PreparedDispatchClock:
         if (self.store is not self._store or self.model!=self._model or self.role!=self._role or self.timeout_seconds!=self._timeout
             or self.store.manager is not self._manager or self.store.handle is not self._handle or self.store.receipt is not self._receipt
             or self.store.executor is not self._executor or self.store.guard is not self._guard):raise DispatchClockUnavailable('Dispatch clock binding changed')
+        if self._handle.prepared_timeout_seconds!=self._timeout:raise DispatchClockUnavailable('Prepared timeout configuration mismatch')
         for key,value in self._identity.items():
             if type(context.get(key)) is not type(value) or context[key]!=value:raise DispatchClockUnavailable('Dispatch generation mismatch')
         if self._handle.validate_prepared_receipt(self._receipt) is not True or self._manager.owns_generation(str(self._receipt.task_id),self._handle.token,self._handle) is not True:raise DispatchClockUnavailable('Prepared dispatch owner unavailable')
@@ -96,7 +98,7 @@ class PreparedDispatchClock:
             # potentially non-reentrant lifetime guard around their transaction.
             if self._timeout:
                 attempted=True
-                value=self._store.stamp(self._timeout) if self._clock is None else self._store.validate_current(self._timeout)
+                value=self._store.stamp_owned(self._timeout) if self._clock is None else self._store.validate_current(self._timeout)
                 self._validate_receipt(value);self._clock=value
             with self._guard(self._receipt.task_id,self._receipt.exploration_id):
                 # SQL/policy callbacks may block or invalidate the generation.
