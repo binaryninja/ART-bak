@@ -195,3 +195,60 @@ explicit deleted assets ->200, and redacted resolver exceptions ->500. All three
 pass after the fix; existing exploration HTTP suite (21 tests) also passes.
 Application factories forward both board adapters without silently enabling a
 global asset resolver. No worker source was changed by this reviewer.
+
+## Follow-up: opt-in provider HTTP transport and skill prose
+
+Reviewed `providers/http.py` and ran its 15 fake-connection tests: all pass.
+No concrete new origin, credential-forwarding, cancellation-boundary or cleanup
+flaw was established. Origin allowlists are explicit; HTTPS certificate/hostname
+verification is mandatory and rechecked before requests. Plain HTTP requires both
+literal loopback IP and explicit opt-in. Redirects are not followed, environment
+proxy variables are ignored, and caller Host/framing/proxy-auth headers are
+rejected. Errors omit request/response secrets. Body limits detect both declared
+and incremental excess; ambiguous framing and compression are rejected. Success,
+error and explicit abandoned-stream close paths own and close connections.
+
+Timeout/cancellation guarantees remain cooperative: DNS, slow headers, and blocking
+platform calls may exceed the nominal total deadline. This is documented rather
+than claimed as forced cancellation. Consumers must explicitly close abandoned
+streaming Responses. TLS trust is hostname-based, without DNS/IP pinning. No
+network, DNS, live TLS handshake, real credentials or providers were used by this
+review; passing fakes do not certify those external integrations.
+
+Source-only skill review covered `api-recon/SKILL.md`, `api-recon/reference.md`
+and `scopesentry/SKILL.md`: zero raw Han, LF line endings, unchanged code-fence
+counts (10, 20, 9). Changed examples are translated display labels/placeholders
+and comments; scopesentry example task names remain consistent across creation
+and search references. One grep example preserves exact Chinese detection terms
+via Bash ANSI-C Unicode escapes rather than dropping the patterns. Authorization,
+recon-only boundaries, no real credential-login testing, and destructive-action
+prohibitions remain present. Requested wording correction: translate frontend
+'enter shell' as 'Application shell', not OS-suggestive 'Shell access'. No skill
+commands or target operations were executed. These are documentation translations,
+not additional authorization or evidence that the tools were run.
+
+## Follow-up: FIFO coordinator and company store
+
+Two scheduler integration issues were reproduced in independent inert
+`tests/test_scheduler_review.py`: LocalHostAdapter.ready propagated expected
+RuntimeUnavailable (aborting the whole tick rather than deferring an unavailable
+head task), and a deferred admission that retained live owned work did not refresh
+capacity before admitting the next task. At limit one the fake host then owned two
+workers. The owner fixed expected readiness errors to defer and refreshes host
+occupancy after every admission receipt. Independent rerun: both review regressions
+pass, as do the owner's 16 scheduler tests. Also flagged statically that drain
+acquired the tick's non-reentrant lock, permitting callback reentrance to self-block;
+the owner now rejects busy drain with nonblocking acquisition and added a passing
+reentrance regression. No hung thread was created by this reviewer. Both reproduced
+findings and the static drain concern are resolved at this snapshot. Local fingerprints/exact-row checks remain single-process only,
+not database generation leases. Deadline settlement is explicitly unimplemented;
+expired tasks are deferred, not falsely declared complete or timed out.
+
+CompanyStore lower-priority review and its 11 inert tests passed. Constructor
+company IDs are copied into a fixed tuple; empty scope permits none. Bound read
+and resolver predicates retain scope, mutations use the shared company advisory
+lock, and scoped upsert cannot create outside an existing permitted name-key.
+Resolver priority and ties remain root-domain, longest CIDR, then normalized ICP,
+with lowest company ID ties. Scope-rule changes and deletion fail explicitly
+rather than silently skipping global attribution recomputation. No concrete new
+issue was established; no live SQL or company/network lookup was performed.

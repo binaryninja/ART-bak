@@ -5,7 +5,8 @@ Persistence/category repositories and a cooperative runner are injected. No tool
 providers, threads, listeners or agents are constructed here. HTTP-compatible DTOs
 require an explicit metrics/archive enricher; absent metrics are never fabricated.
 
-Not ported: FIFO concurrency scheduler, bootstrap/goal decomposition, task timeout
+An explicit optional FIFO coordinator lives in scheduler.py; no scheduler is
+started or wired by this registry. Not ported: bootstrap/goal decomposition, task timeout
 monitor, automatic recovery/restart, delete barriers/filesystem cleanup, main-chat
 cancellation, inherited graph stores and provider selection. A runner must enforce
 scope/approvals and cancellation before EVERY side effect and must drain all owned
@@ -197,6 +198,13 @@ class TaskManager:
             _, row = self._require(task_id)
             return deepcopy(row)
 
+    def scheduler_snapshot_rows(self, limit=10000):
+        """Bounded local registry snapshot, not a cross-process DB lease."""
+        if type(limit) is not int or limit <= 0:
+            raise ValueError('positive snapshot limit required')
+        with self._lock:
+            return deepcopy(list(self._tasks.values())[:limit]), len(self._tasks) <= limit
+
     def _dto(self, key, row):
         if self.dto_enricher is None:
             raise RuntimeUnavailable('Task metrics/archive DTO adapter is not configured')
@@ -274,6 +282,20 @@ class TaskManager:
         return self.task(row['id'])
 
     def start(self, task_id, *, seed_first_intent=False):
+        return self._start(task_id, seed_first_intent=seed_first_intent)
+
+    def start_queued(self, task_id, expected_lifecycle):
+        """Local generation-safe queued admission; invoke via AgentHost fence.
+
+        expected_lifecycle is an exact lifecycle_snapshot, not a partial patch.
+        DB admission remains status-only CAS: other processes must not mutate this
+        registry's tasks concurrently. This does not supply a distributed lease.
+        """
+        if not isinstance(expected_lifecycle, Mapping):
+            raise ValueError('expected lifecycle snapshot required')
+        return self._start(task_id, expected_queue=deepcopy(dict(expected_lifecycle)))
+
+    def _start(self, task_id, *, seed_first_intent=False, expected_queue=None):
         self._runtime_required()
         with self._lock:
             key, row = self._require(task_id)
@@ -281,8 +303,14 @@ class TaskManager:
                 if self._runs[key].token.cancelled:
                     raise TaskConflict('Task cancellation is still in progress')
                 return False
-            if row.get('status') in _TERMINAL or row.get('queued'):
-                raise TaskConflict('Terminal/queued task requires unsupported scheduler admission')
+            if row.get('status') in _TERMINAL or row.get('deleted_at'):
+                raise TaskConflict('Terminal/deleted task cannot be admitted')
+            if expected_queue is not None:
+                if (row != expected_queue or not row.get('queued') or row.get('paused')
+                        or row.get('queue_mode') not in ('bootstrap','resume')):
+                    raise TaskConflict('Queued lifecycle changed before admission')
+            elif row.get('queued'):
+                raise TaskConflict('Queued task requires scheduler admission')
             run = _Run()
             self._runs[key] = run
             snapshot = deepcopy(row)
@@ -298,6 +326,8 @@ class TaskManager:
                 self._merge_lifecycle(key, updated)
                 admitted = True
                 snapshot = deepcopy(self._tasks[key])
+            if expected_queue is not None:
+                snapshot['admission_mode'] = expected_queue['queue_mode']
             snapshot['seed_first_intent'] = seed_first_intent
             handle = self.runner.start(snapshot, run.token)
             if not callable(getattr(handle, 'cancel', None)) or not callable(getattr(handle, 'wait', None)):

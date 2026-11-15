@@ -62,8 +62,8 @@ restriction. Screenshot/image translations are a separate deliverable.
 
 ## Architecture and parity gates
 
-The following is the integrated checkpoint, verified by 473 offline authored
-Python tests. Every package remains a partial port; see its README/PORT_STATUS/
+The table below records the earlier 473-test checkpoint. Later additions and
+validation are recorded in the current checkpoint section below. Every package remains a partial port; see its README/PORT_STATUS/
 PORT_NOTES file. Passing mocks does not establish Go or production parity.
 
 | Area | Implemented slice | Remaining integration |
@@ -187,3 +187,23 @@ as part of the port. No PR CI validation pipeline is supplied by that workflow.
    as JSON endpoints.
 5. Only after the above, test a strictly authorized sandbox target. Preserve the Go
    rollback path and keep this port non-default until real acceptance criteria pass.
+
+## Current reviewed checkpoint
+
+The profile/node-board HTTP checkpoint has 624 authored offline tests and 164
+parsed generated SQL statements. Source inventory has 46 route registrations
+against 261 upstream registrations; 215 remain unregistered. Some registered
+paths deliberately return 503, so this is not functional coverage.
+
+Later slices include scoped graph/finding/assets persistence, all six asset
+upsert types, profile persistence, bounded runner/explicit host settlement,
+exploration/node-board reads and protected profile coordinator contracts.
+See PROFILE_NODEBOARD_HTTP_STATUS.md and the preceding checkpoint status files.
+
+Isolated real PostgreSQL checks now cover selected driver, task/category/constraint,
+asset/finding and profile/node-board paths. ISOLATED_QA.md records exact immutable
+snapshots and limits, plus two original-Go baseline test failures. This supersedes
+older statements that no live driver checks had occurred, not their broader
+remaining-parity warnings. No production deployment or real provider/target calls
+have occurred. Migrations, cross-process concurrency, archive recovery and broad
+service/frontend compatibility remain unproven.

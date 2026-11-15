@@ -84,6 +84,10 @@ class AgentHost:
     def start(self, task_id, *, seed_first_intent=False):
         return self._invoke(lambda: self.manager.start(task_id, seed_first_intent=seed_first_intent), admission=True)
 
+    def start_queued(self, task_id, expected_lifecycle):
+        """Queue admission shares the ordinary start/drain/settlement fence."""
+        return self._invoke(lambda: self.manager.start_queued(task_id, expected_lifecycle), admission=True)
+
     def create_task(self, description, goal, options=None, *, start=True, seed_first_intent=False):
         return self._invoke(lambda: self.manager.create_task(description, goal, options, start=start,
                             seed_first_intent=seed_first_intent), admission=True)

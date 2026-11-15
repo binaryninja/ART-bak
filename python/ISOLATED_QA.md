@@ -64,3 +64,14 @@ active selection and missing-ID rollback, explicit unsupported deletion guard,
 node paging/search/scope, inherited intent filtering, edges and anchors.
 Dummy credentials only; no provider calls. Profile deletion, concurrent activation,
 failover repair, pagination snapshot consistency and broader parity remain unproven.
+
+## Composed WSGI and real bcrypt checks
+
+The exact tree `60696dfbfe34269986ba4d5a46538c4a43e22f2c` (published as
+`1effa5b36f8307626adda57d2017f6bd198b59bc`) passed six grouped integration
+checks using PostgreSQL17.11, psycopg3.3.9 and PyCA bcrypt5.0.0: auth initialization,
+duplicate-init rejection and hashing; login/JWT/protected routes; real profile
+list masking and unavailable runtime response; scoped graph/not-found responses;
+node-board neighbor and anchor composition. Tests invoked WSGI directly without a
+listener. Dummy credentials and explicit fixture resolvers only. This does not
+establish production hosting, provider integration or comprehensive interoperability.
