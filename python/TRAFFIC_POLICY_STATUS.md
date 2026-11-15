@@ -20,9 +20,11 @@ workspace stores use explicit scope, independent mutation permission and idle
 ownership, source ordering and timestamp compare-and-swap. Text projections are
 bounded before transfer. A timestamp CAS is not a runtime policy revision or cache
 invalidation mechanism. The store does not implement matching, grant tool access,
-install policies, or synchronize running agents. Source-compatible HTTP pattern
-validation and integration are separate work; opaque database fields alone are
-not matcher-ready rules.
+install policies, or synchronize running agents. Optional source-shaped HTTP CRUD validates and normalizes patterns before
+approval. It deliberately requires an ISO X-Rule-Updated-At timestamp for stale
+edit protection, so existing frontend mutation calls require adaptation. A service
+retains one fixed task OR global scope; multi-task resolver integration is not
+implied. No default registration or matcher/cache activation follows from CRUD.
 
 See ISOLATED_QA.md for immutable fixture evidence. No real captured traffic,
 production rules, targets or external providers were used.

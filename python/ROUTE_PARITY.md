@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **144**.
-- python optional service routes: **139**.
-- matched offline contract routes: **144**.
-- go routes without python registration: **117**.
+- python offline contract routes: **156**.
+- python optional service routes: **151**.
+- matched offline contract routes: **156**.
+- go routes without python registration: **105**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -58,11 +58,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/agents/{key}/wrapup/reset` | `server/server.go:844` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
 | PUT | `/api/agents/{key}/wrapup/task-timeout` | `server/server.go:845` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
 | POST | `/api/agents/{key}/wrapup/task-timeout/reset` | `server/server.go:846` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| GET | `/api/asset-intercept/rules` | `server/server.go:916` | Not registered |
-| POST | `/api/asset-intercept/rules` | `server/server.go:917` | Not registered |
-| DELETE | `/api/asset-intercept/rules/{id}` | `server/server.go:919` | Not registered |
-| PUT | `/api/asset-intercept/rules/{id}` | `server/server.go:918` | Not registered |
-| POST | `/api/asset-intercept/rules/{id}/toggle` | `server/server.go:920` | Not registered |
+| GET | `/api/asset-intercept/rules` | `server/server.go:916` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| POST | `/api/asset-intercept/rules` | `server/server.go:917` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| DELETE | `/api/asset-intercept/rules/{id}` | `server/server.go:919` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| PUT | `/api/asset-intercept/rules/{id}` | `server/server.go:918` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| POST | `/api/asset-intercept/rules/{id}/toggle` | `server/server.go:920` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
 | DELETE | `/api/assets` | `server/server.go:745` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
 | GET | `/api/assets` | `server/server.go:742` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
 | POST | `/api/assets` | `server/server.go:744` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
@@ -255,11 +255,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
-| GET | `/api/tasks/{id}/intercept-rules` | `server/server.go:688` | Not registered |
-| POST | `/api/tasks/{id}/intercept-rules` | `server/server.go:689` | Not registered |
-| DELETE | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:691` | Not registered |
-| PUT | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:690` | Not registered |
-| POST | `/api/tasks/{id}/intercept-rules/{rid}/toggle` | `server/server.go:692` | Not registered |
+| GET | `/api/tasks/{id}/intercept-rules` | `server/server.go:688` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| POST | `/api/tasks/{id}/intercept-rules` | `server/server.go:689` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| DELETE | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:691` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| PUT | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:690` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
+| POST | `/api/tasks/{id}/intercept-rules/{rid}/toggle` | `server/server.go:692` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
 | PUT | `/api/tasks/{id}/llm` | `server/server.go:729` | Optional registration; adapters required: `python/artex/server/task_profiles.py:89` |
 | GET | `/api/tasks/{id}/llm/resolution` | `server/server.go:730` | Optional registration; adapters required: `python/artex/server/task_profiles.py:90` |
 | GET | `/api/tasks/{id}/scope` | `server/server.go:717` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
@@ -292,10 +292,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/visibility/skill/{name}` | `server/server.go:895` | Not registered |
 | POST | `/api/visibility/toggle` | `server/server.go:893` | Not registered |
 | GET | `/api/visibility/{kind}/{id}` | `server/server.go:892` | Not registered |
-| DELETE | `/api/workspace/delete` | `server/server.go:714` | Not registered |
+| DELETE | `/api/workspace/delete` | `server/server.go:714` | Optional registration; adapters required: `python/artex/server/workspace_mutations.py:34` |
 | GET | `/api/workspace/download` | `server/server.go:715` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
 | GET | `/api/workspace/list` | `server/server.go:710` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
-| POST | `/api/workspace/mkdir` | `server/server.go:713` | Not registered |
+| POST | `/api/workspace/mkdir` | `server/server.go:713` | Optional registration; adapters required: `python/artex/server/workspace_mutations.py:33` |
 | GET | `/api/workspace/read` | `server/server.go:711` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
 | POST | `/api/workspace/upload` | `server/server.go:716` | Not registered |
 | POST | `/api/workspace/write` | `server/server.go:712` | Optional registration; adapters required: `python/artex/server/workspace_write.py:51` |
@@ -363,6 +363,16 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `POST /api/exploration/findings/{id}/deepen`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/tasks/{id}/intercept-rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intercept-rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tasks/{id}/intercept-rules/{rid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/intercept-rules/{rid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intercept-rules/{rid}/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/asset-intercept/rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/asset-intercept/rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/asset-intercept/rules/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/asset-intercept/rules/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/asset-intercept/rules/{id}/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/records`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/records/tasks`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/records/by-model`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -445,6 +455,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/workspace/list`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/workspace/read`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/workspace/download`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/mkdir`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/workspace/delete`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/workspace/write`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 
 ## Non-method mounts

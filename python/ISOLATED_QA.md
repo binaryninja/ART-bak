@@ -685,3 +685,35 @@ was rejected. Zero-timeout dispatch performed no SQL, and fake-clock fixtures
 checked budget charging. The actual supported runtime fixture remains zero-timeout.
 Positive-timeout behavior has mocked evidence only. No runtime guard was bypassed,
 and no provider hook, paused-owner lease or timed-engine execution is claimed.
+
+## Optional intercept-rule HTTP metadata (stage 56)
+
+Three real PostgreSQL HTTP groups passed on manifest
+`4a75e518eeb485816bb33406ab46b93ef11d08cb2f40d132a7df96009145dd19`.
+Task/global CRUD, normalized proposals, mandatory ISO timestamp CAS, stale-edit
+conflicts, independent idle/scope denial and postcommit uncertainty were verified.
+The required X-Rule-Updated-At header is an intentional frontend contract addition.
+These are metadata endpoints, not matcher/enforcement, runtime policy revisions,
+or default application enabling.
+
+## Explicit workspace mutation subset (stage 57, corrected)
+
+The initial snapshot `d0e524fc41b7763bb05a64f381aea85f20bb07b3e16b2fb1e66cad99c2138275`
+passed thirteen existing tests and four of five extra groups. Symlink-ancestor
+refusal preserved contents but returned generic 500 rather than invalid-path 400.
+After the narrow mapping fix, fourteen existing tests and all five unchanged
+extra groups passed on manifest
+`b6ee9c3270e9c6c5c74c0366e8f1dc8fb398131cc551df6768a1db65212f01b2`.
+Fresh immutable approvals, parent replacement, post-effect interruption/fsync
+uncertainty and retained closed operations were exercised using disposable trees.
+The primitive supports existing-parent mkdir, regular single-link file deletion
+and empty-directory deletion only. No recursive deletion, real mounting, user
+files or protection against uncooperative external filesystem writers is claimed.
+
+## Go/Python failover differential
+
+Nine hundred nineteen synthetic fixtures produced zero classification mismatches
+on manifest `c2b3c4180bc22bb9eccca1eb4e6c7918507f210c6a28f64ab4662514292fba24`.
+One text-trimming difference is retained explicitly: Go can keep a truncated
+invalid UTF-8 byte, while Python drops it to preserve valid text. These fixtures
+do not exercise provider calls, actual retries, streaming or network behavior.

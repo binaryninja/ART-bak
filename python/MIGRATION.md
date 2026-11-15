@@ -218,7 +218,13 @@ supersedes earlier statements that live-driver checks had not occurred.
 Current integrated slices include explicit authenticated conversation and task
 chat, scoped durable transcripts/activities, catalogs, provider transport and
 streaming, bounded storage/process/registry primitives, recording setup/inspection,
-and archive bundle/snapshot components. Explicit dependencies remain explicit:
+and archive bundle/snapshot components. Later checkpoints add actual optional
+HTTP-create/bootstrap/engine/manager completion, shared admission, scoped policy
+configuration and coverage reads, fixed-workspace traffic inspection, and
+intercept-rule metadata persistence. These are scoped opt-in paths; rule storage
+is not enforcement and static registrations are not complete behaviors. Timed
+tasks remain disabled pending pause-safe ownership and expiry settlement.
+Explicit dependencies remain explicit:
 this is not a full autonomous planner/worker system, default executable catalog,
 production deployment, or distributed/cross-store crash recovery implementation.
 No merge, tag, release workflow, real provider or external target execution is

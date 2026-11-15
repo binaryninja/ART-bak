@@ -23,6 +23,9 @@ from .sidequestions import SideQuestionHTTPService
 from .exploration import ExplorationService
 from .task_coverage import TaskCoverageService
 from .traffic_read import TrafficReadService
+from .workspace_mutations import WorkspaceMutationService
+from .intercept_rules import InterceptRuleService
+from ..db.intercept_rules import InterceptRuleStore
 
 
 def _validate_coverage_service(executor, service):
@@ -33,6 +36,21 @@ def _validate_coverage_service(executor, service):
 def _validate_traffic_service(service):
     if service is not None and type(service) is not TrafficReadService:
         raise ValueError("Explicit fixed-workspace traffic service required")
+
+
+def _validate_intercept_service(executor, service):
+    if service is None:return
+    if (type(service) is not InterceptRuleService or type(service.store) is not InterceptRuleStore
+        or service.store is not service._store or service._executor is not executor
+        or service.store.executor is not executor or service.store._executor is not executor
+        or service.store.scope is not service._scope or service.store._scope is not service._scope
+        or service.store.guard is not service._guard):
+        raise ValueError('Intercept service requires exact application executor and fixed scope')
+
+
+def _validate_workspace_mutation_service(service):
+    if service is not None and type(service) is not WorkspaceMutationService:
+        raise ValueError("Explicit scoped workspace mutation service required")
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
@@ -47,7 +65,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, coverage_service=None, traffic_service=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, workspace_mutation_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -72,10 +90,21 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     service with explicit metadata/raw-data grants. It is independent of the
     PostgreSQL executor: no task ownership, store construction, capture or
     default traffic registration is inferred. Blob reads remain unavailable.
+    Optional intercept_service is a pre-authorized fixed task OR global metadata
+    store using this exact executor; no grants, idle state or enforcement/cache
+    updates are inferred. Frontends must send X-Rule-Updated-At with the exact
+    ISO timestamp from the last read for update/toggle/delete. No routes are
+    registered by default; this is not a live policy engine integration.
+    Optional workspace_mutation_service is independent of PostgreSQL and retains
+    its explicit root/writer guard/action policies, including separate permanent
+    deletion authority. Only mkdir with existing parents and file/empty-directory
+    deletion are supported; no recursive semantics, root inference or defaults.
     This is not the full server.
     """
     _validate_coverage_service(executor, coverage_service)
     _validate_traffic_service(traffic_service)
+    _validate_workspace_mutation_service(workspace_mutation_service)
+    _validate_intercept_service(executor, intercept_service)
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
     TaskCategoryService(TaskCategoryStore(executor), category_manager).register(router)
@@ -103,6 +132,10 @@ def build_application(executor, signing_key: bytes, password_codec, *,
         coverage_service.register(router)
     if traffic_service is not None:
         traffic_service.register(router)
+    if intercept_service is not None:
+        intercept_service.register(router)
+    if workspace_mutation_service is not None:
+        workspace_mutation_service.register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -118,7 +151,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                coverage_service=None, traffic_service=None, version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, traffic_service=None, intercept_service=None, workspace_mutation_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -141,6 +174,8 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     """
     _validate_coverage_service(executor, coverage_service)
     _validate_traffic_service(traffic_service)
+    _validate_workspace_mutation_service(workspace_mutation_service)
+    _validate_intercept_service(executor, intercept_service)
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
@@ -186,4 +221,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_cancel_request=side_cancel_request, side_clear_history=side_clear_history,
                              side_wait=side_wait,
                              coverage_service=coverage_service, traffic_service=traffic_service,
+                             workspace_mutation_service=workspace_mutation_service, intercept_service=intercept_service,
                              version=version, max_body_bytes=max_body_bytes)
