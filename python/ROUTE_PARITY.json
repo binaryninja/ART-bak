@@ -51,6 +51,7 @@
     "python/artex/server/task_host.py": "f8e58c51050ee01805e87c7563ce2e0f8e214069fb1d4948b52e8bca1244076f",
     "python/artex/server/task_intent_assets.py": "65056a4d9453da6f28b5095e4e0d26af0b8b31870898555c8c951fa3556f7e35",
     "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
+    "python/artex/server/task_runtime_setup.py": "aa71900a59d1badba7f8015884ecc5fcb5670c32b058352481a1c207765d6a60",
     "python/artex/server/task_scope.py": "f84169cb61132b26b4b25f0eb17780b59b4bf1ac823bc744f8984eb6d7b0618d",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",

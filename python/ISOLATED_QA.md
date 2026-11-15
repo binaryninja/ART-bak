@@ -930,3 +930,26 @@ No session creation/reset, provider calls or execution.
 Optional factory composition independently passed 18 collected tests on manifest
 `5b35dd6bd56f63fd60d38f38b3ffe4c95c3ad9392fec6ce9fed487021d6e9081`, including
 two added private-binding/actual WSGI JWT-order checks. No listener was started.
+
+## Persisted-role runtime factory (stage 76)
+
+Manifest `5bc709262572e26df22110b8576f489215d6eb7dd7eb61ebdee3842034c56682`
+passed two actual PostgreSQL integration groups and 28 focused tests. The actual
+TaskRuntimeAssembly/application, ProfileFactory/OpenAI parser, canonical scoped
+transcripts, bcrypt/JWT and explicit EnginePump were used without consumer-written
+lifecycle factories. Injected in-process HTTP responses are fixed synthetic data;
+no provider socket, paid model or external target was contacted.
+
+JWT creation remains transport-inert until owned ticks. Two goals, four planner
+and two worker completions produce persisted intent, harmless local fact and
+structural proof, then manager completion and handle retirement. HTTP DTOs exclude
+the synthetic credential. Fixture policies approve these local graph facts; this
+is not empirical truth verification. Negative profile grants, model drift,
+pre-tick cancellation, post-preparation drift/unresolved retention and exhausted
+chain refusal all pass.
+
+Full-stack acceptance is completion-only (streaming=false). Focused provider
+stream tests are not full-stack streaming evidence. No positive timed execution,
+background pump thread, listener/browser, initialized-task adoption, multi-process
+or production-readiness claim. Initial harness import typo was corrected without
+product changes.

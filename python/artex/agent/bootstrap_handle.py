@@ -131,7 +131,13 @@ class BootstrapHandle:
                     if candidate!=scope or token is not self._token:return False
                     with self._condition:
                         if self._phase!='engine' or self._unresolved or self._completed or not self._active or self._thread!=get_ident():return False
-                    self._owned();return True
+                    self._owned()
+                    # Configuration authority remains live after initialization,
+                    # including graph-only completion without a provider call.
+                    # No registry lock is held across this host callback.
+                    self.coordinator._check(int(self.task_id),self.exploration_id,self.policy_revision)
+                    self._owned()
+                    return True
                 def guard(candidate):
                     if candidate!=scope:raise BootstrapConflict('Foreign engine scope')
                     return self.coordinator.guard(int(self.task_id),self.exploration_id)

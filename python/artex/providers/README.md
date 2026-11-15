@@ -25,11 +25,13 @@ claim of complete SDK parity or validation against live provider services.
   or strings; streaming bodies may be iterables of byte chunks. The transport
   owns HTTP policy, timeouts, proxy routing and cancellation while blocked.
 
-There is **no built-in network client**, environment credential discovery,
-rate limiter, retry/sleep loop, provider registration, or tools execution. The
-injected transport receives explicit credentials and must protect them, enforce
-its allowed destination policy and reject unsafe redirects. Tests use fake
-transports and placeholder credentials only.
+The core adapter has no implicit networking or credential discovery. An optional
+stdlib `HTTPTransport` now exists in `http.py`: explicit origin allowlists, TLS
+verification, no redirects or environment proxies, bounded responses and cooperative
+cancellation. Explicit retry layers exist in `retry.py` and are composed by
+`ProfileFactory`; no tool execution or rate limiter is supplied. Hosts must choose
+transport policy and protect credentials. Tests use injected transports and
+placeholder credentials, not live provider validation.
 
 ## Supported behavior
 
@@ -64,9 +66,10 @@ transports and placeholder credentials only.
   preserve that inconsistent behavior.
 - No Responses API, multimodal content, redacted-thinking blocks, or provider
   extensions beyond documented fields. Unsupported blocks fail explicitly.
-- No same-provider establishment retries, empty-response retries, rate limiting,
-  ARTEX quota-aware routing, or session-header configuration yet. Apply explicit
-  policy in a future transport layer, never automatic replay after emitted data.
+- Explicit bounded establishment/empty-response/same-provider retry layers now
+  exist in `retry.py`; they do not replay after delivered events. Rate limiting,
+  ARTEX quota-aware routing and session-header configuration remain unavailable.
+  Cooperative transport deadlines are not hard real-time cancellation guarantees.
 - Raw request/response `llmrec.Capture` is not wired at this layer yet. Recorder's
   normalized messages and usage work; an injected transport can use its context
   capture to record raw bytes and each attempt without including auth headers.

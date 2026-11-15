@@ -1,0 +1,82 @@
+"""Opt-in authenticated task runtime plus explicit pump ownership.
+
+Composes the component assembly through the existing bootstrap application exactly
+once. No listener, schema installation, default credentials/workspace, automatic
+resume, provider call, tick or background thread is started. Construction performs
+only the existing explicit task inventory load. The caller owns executor lifetime.
+
+Use tick() for a synchronous owned step, or explicitly start_pump()/stop_pump().
+Stopping the pump is not task cancellation or successful drain: inspect host.drain
+and retain unresolved handles/deadline owners before closing storage. Existing
+positive timeout, recovery, live progress and frontend limitations remain intact.
+"""
+from dataclasses import dataclass
+import math
+from time import monotonic
+from ..agent.bootstrap_setup import build_bootstrap_application, BootstrapApplication
+from ..agent.pump import EnginePump
+from ..manager import RuntimeUnavailable
+
+@dataclass(frozen=True)
+class TaskRuntimeApplication:
+    runtime: object
+    bootstrap: BootstrapApplication
+    pump: EnginePump
+
+    @property
+    def app(self):return self.bootstrap.app
+    @property
+    def host(self):return self.bootstrap.host
+    @property
+    def manager(self):return self.bootstrap.manager
+    @property
+    def runner(self):return self.bootstrap.runner
+    @property
+    def facade(self):return self.bootstrap.facade
+    @property
+    def admission(self):return self.bootstrap.admission
+
+    def _check(self):
+        self.runtime.validate_bindings()
+        if (self.pump.host is not self.host or self.pump.runner is not self.runner
+                or self.pump.manager is not self.manager
+                or self.admission.host is not self.host
+                or self.manager.repository.executor is not self.runtime.executor):
+            raise RuntimeUnavailable('Task runtime application ownership changed')
+    def tick(self):
+        self._check();return self.pump.tick()
+    def start_pump(self):
+        self._check();return self.pump.start()
+    def stop_pump(self,timeout):
+        self._check();return self.pump.stop(timeout)
+
+
+def build_task_runtime_application(runtime, signing_key, password_codec, *,
+        live_last_activity, profile_available=None, capacity=1, max_pending=64,
+        single_process=False, application_options=None, pump_interval=1.0,
+        pump_max_per_tick=8, pump_clock=monotonic):
+    # Component type import stays local to avoid a setup/component import cycle.
+    from ..agent.task_runtime import TaskRuntimeAssembly
+    if type(runtime) is not TaskRuntimeAssembly:
+        raise ValueError('Actual task runtime component assembly required')
+    if (isinstance(pump_interval,bool) or not isinstance(pump_interval,(int,float))
+            or not math.isfinite(pump_interval) or not .01<=pump_interval<=60
+            or type(pump_max_per_tick) is not int or not 1<=pump_max_per_tick<=1000
+            or not callable(pump_clock)):
+        raise ValueError('Explicit bounded pump configuration required')
+    if runtime.validate_bindings() is not True:
+        raise ValueError('Task runtime bindings unavailable')
+    bootstrap=build_bootstrap_application(runtime.executor,signing_key,password_codec,
+        coordinator=runtime.coordinator,
+        bootstrap_configuration=runtime.bootstrap_configuration,
+        engine_factory=runtime.engine_factory,
+        initialized_readiness=runtime.initialized_readiness,
+        initialized_factory=runtime.initialized_factory,
+        live_last_activity=live_last_activity,profile_available=profile_available,
+        capacity=capacity,max_pending=max_pending,single_process=single_process,
+        application_options=application_options)
+    if runtime.validate_bindings() is not True:
+        raise RuntimeUnavailable('Task runtime bindings changed during assembly')
+    pump=EnginePump(bootstrap.host,interval=pump_interval,
+        max_per_tick=pump_max_per_tick,clock=pump_clock)
+    return TaskRuntimeApplication(runtime,bootstrap,pump)

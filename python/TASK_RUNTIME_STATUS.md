@@ -1,5 +1,9 @@
 # Task/runtime checkpoint
 
+Historical checkpoint. For current persisted-role task assembly, see
+[PERSISTED_TASK_RUNTIME_STATUS.md](PERSISTED_TASK_RUNTIME_STATUS.md); for current
+test counts and remaining limitations see README.md and ISOLATED_QA.md.
+
 **373 offline authored tests pass.** This is not Go differential testing or a
 production-ready backend. The route inventory declares 17 contracts against 261
 Go method/path routes; 244 remain unregistered.

@@ -1,8 +1,10 @@
 # ARTEX Python migration (work in progress)
 
 This directory is an incremental Python port of the Go backend. **It is not a
-feature-complete replacement server**. A loopback development API, selected
-persisted routes and bounded runner/host adapters are assembled. Production
+feature-complete replacement server**. An opt-in persisted-role task runtime now
+composes actual goals/planner/worker execution, scoped transcripts and graph tools
+under one authenticated host; completion-path acceptance uses fake HTTP and real
+disposable PostgreSQL. See [PERSISTED_TASK_RUNTIME_STATUS.md](PERSISTED_TASK_RUNTIME_STATUS.md). Production
 planner/worker orchestration, scheduling, full API coverage and SDK/tool
 integration remain incomplete. See [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) for the
 connected WSGI/auth/category slice and optional psycopg/bcrypt adapters. The original Go backend and
@@ -25,7 +27,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **2372 tests**; these are authored unit/adapter
+combined suite currently passes **2422 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
