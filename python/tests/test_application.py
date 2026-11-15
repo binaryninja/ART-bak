@@ -147,6 +147,49 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(response[1][0]['finding_id'],'7')
         resolver.assert_not_called()  # no anchored assets, no guessed/global lookup
 
+    def test_exploration_requires_explicit_resolver_and_auth(self):
+        from artex.server import sign_jwt
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.db.calls,[])
+        for path in ('graph','frontier','intents','nodes'):
+            self.assertEqual(self.request('/api/exploration/'+path)[0],401)
+            self.assertEqual(self.request('/api/exploration/'+path,token=token)[0],503)
+        self.assertEqual(self.db.calls,[])
+
+    def test_exploration_injected_graph_no_startup_reads(self):
+        from artex.server import sign_jwt
+        store=Mock(read_only=False)
+        store.task_id.return_value=1
+        store.nodes.return_value=[];store.edges.return_value=[];store.direct_sources.return_value=[]
+        resolver=Mock(return_value=store);active=Mock(return_value='1')
+        self.app=build_application(self.db,b'x'*32,TestCodec(),
+                                  exploration_store_resolver=resolver,active_task_id=active)
+        resolver.assert_not_called();active.assert_not_called()
+        self.assertEqual(self.db.calls,[])
+        self.assertEqual(self.request('/api/exploration/graph')[0],401)
+        resolver.assert_not_called();active.assert_not_called()
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.request('/api/exploration/graph',token=token),(200,{'nodes':[],'edges':[]}))
+        resolver.assert_called_once_with('1');active.assert_called_once_with()
+        self.app=build_application(self.db,b'x'*32,TestCodec(),exploration_store_resolver=resolver)
+        self.assertEqual(self.request('/api/exploration/graph',token=token)[0],503)
+        self.assertEqual(resolver.call_count,1)  # never infer active selection
+
+    def test_persisted_exploration_callbacks_forwarded_without_call(self):
+        class EmptyTasks(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        db=EmptyTasks();resolver=Mock();active=Mock()
+        with patch('artex.server.application.ExplorationService') as service:
+            build_persisted_application(db,b'x'*32,TestCodec(),
+                                        exploration_store_resolver=resolver,active_task_id=active)
+            service.assert_called_once_with(resolver,active_task_id=active)
+            service.return_value.register.assert_called_once()
+        resolver.assert_not_called();active.assert_not_called()
+        self.assertEqual(len(db.calls),1)  # existing task registry load only
+
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):
             build_application(self.db, b'short', TestCodec())

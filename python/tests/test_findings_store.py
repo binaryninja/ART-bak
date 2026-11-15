@@ -90,6 +90,30 @@ class FindingTests(unittest.TestCase):
         with self.assertRaises(FindingInvalid):FindingStore(db).create(task_id=10,node_id=99,severity='high')
         self.assertEqual(db.calls[-1][0],'rollback')
 
+    def test_failed_archive_allows_create_and_report(self):
+        db=Fake([(None,),[(None,)],[('archive_failed',)],(1,)])
+        self.assertEqual(FindingStore(db).create(task_id=10,severity='high'),1)
+        self.assertEqual(db.calls[-1][0],'commit')
+        self.assertIn('FOR UPDATE',db.calls[2][1].sql)
+        db=Fake([(None,),[(1,10)],[(None,)],[('archive_failed',)],(3,),1])
+        self.assertEqual(FindingStore(db).set_report_by_node_id(20,'Report',version=3),1)
+        self.assertEqual(db.calls[-1][0],'commit')
+
+    def test_other_archive_states_reject_before_mutation(self):
+        for state in ('archive_queued','archiving','ready','restore_queued','restoring',
+                      'restore_failed','delete_queued','deleting','delete_failed',
+                      'failed','unknown','',None):
+            for report in (False,True):
+                with self.subTest(state=state,report=report):
+                    results=[(None,)]+([[(1,10)]] if report else [])+ [[(None,)],[(state,)]]
+                    db=Fake(results)
+                    with self.assertRaises(FindingArchiveState):
+                        if report:FindingStore(db).set_report_by_node_id(20,'Report',version=3)
+                        else:FindingStore(db).create(task_id=10,severity='high')
+                    self.assertEqual(db.calls[-1][0],'rollback')
+                    self.assertFalse(any(op=='execute' for op,q in db.calls))
+                    self.assertFalse(any(q and 'INSERT INTO findings' in q.sql for op,q in db.calls))
+
     def test_status_validated_and_scoped_no_notifications(self):
         db=Fake([1]);store=FindingStore(db,task_id=10)
         self.assertEqual(store.set_status(1,'confirmed'),1)

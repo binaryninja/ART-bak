@@ -84,3 +84,68 @@ archive races, lock ordering against all other processes, filesystem evidence
 retention and live provider cancellation were NOT independently validated here.
 The separate integration QA stage must report its own evidence, not inherit a
 production-readiness claim from these fake-contract tests.
+
+## Follow-up: explicit host and exploration HTTP
+
+Reviewed `agent/host.py` and `server/exploration.py` after delivery. Existing host
+11 and exploration HTTP 13 inert tests passed. No new concrete defect was
+established in this pass. Host mutations reserve a counter before manager calls;
+settlement holds a condition fence and refuses same-thread reentrance. Drain
+blocks admission while allowing pause and includes the result sink in actual
+thread drain. This depends on every lifecycle caller using this exact host;
+direct manager/runner calls and callbacks waiting for another host operation are
+explicitly outside the contract. Callback/store timeouts remain necessary.
+
+Exploration resolver ownership is checked against the requested live task before
+reading. Source stores must be read-only, match task/exploration IDs and be direct
+sources; inherited open/running/paused intents are filtered from history/graph.
+Malformed/duplicate/unknown task selectors fail rather than selecting active/global
+state. Inherited cursor nonprogress and the 10000-page budget fail explicitly.
+Node-board hydration remains an explicit 503. Trusted resolver/store adapters are
+not a sandbox: checks do not independently prove authorization of arbitrary host
+callbacks, and no live cross-process snapshot/traversal test was performed.
+
+## Follow-up: credential-bearing profile persistence
+
+Reviewed `db/profiles.py` and its test contracts. A concrete public/private
+round-trip hazard was found: redacted URLs produced by `public_dict()` were
+accepted by save and could replace private URL credentials/query tokens with the
+literal `[redacted]` placeholder. Likewise a displayed `…1234` API-key hint could
+be persisted as the actual credential. No profile HTTP API is present, so this is
+a persistence integration hazard, not a demonstrated remote endpoint exploit.
+Two independent tests added to `test_finding_runner_review.py` require rejecting
+those placeholders before any executor access. They initially failed. The owner
+then rejected redaction markers in raw/decoded URL fields and masked-key values,
+with explicit real replacement values required. Independent rerun: all five tests
+in the review module pass, including both profile regressions. This finding is
+fixed and verified at the reviewed snapshot. Public fragments now retain a
+redaction marker rather than silently disappearing on a DTO round-trip.
+
+Otherwise list selects hints rather than API keys, private profile repr omits all
+fields except identity, URL userinfo/query/fragment are redacted in public DTO,
+empty key update preserves the stored key, writes use bound values, and storage
+exceptions are replaced by a credential-free message. Active selection clears
+then sets within one transaction; schema `uq_llm_one_default` enforces uniqueness,
+and a missing target or commit failure rolls back. Concurrent conflicts can fail
+rather than silently elect two defaults. No delete/reference-repair parity is
+claimed. The owner also suppressed hints for keys of length <=4, addressing the
+review recommendation that short keys must not be fully exposed by a last-four
+hint. No original credential was copied to an external service during review.
+
+## Follow-up: scoped node-board persistence
+
+Reviewed `db/nodeboard.py` and reran its 13 inert contract tests: all pass. No
+concrete new scope or pagination defect was established. Queries bind captured
+exploration identity before optional filters, and search OR predicates remain
+parenthesized. Both edge endpoints must match the edge exploration, preventing
+cross-exploration neighbour expansion. Inherited visibility filters apply to
+page, ID, both edge endpoints and anchor lookup. Positive IDs are deduplicated
+and bounded; pagination validates signed-int64 offset and caps page size at 200.
+Scope is copied from the original store rather than reread after mutation.
+
+Count/page are explicitly separate statements and may observe concurrent changes;
+no snapshot guarantee is claimed. Anchors supply IDs only, not independently
+authorized asset DTO hydration. The docstring's 'size 20..200' means a default of
+20 and cap of 200; actual positive sizes below 20 remain accepted like upstream.
+No mutation, transport, live PostgreSQL query or traversal execution occurred in
+this review. No additional failing regression was necessary for this pass.

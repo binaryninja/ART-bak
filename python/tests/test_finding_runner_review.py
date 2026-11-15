@@ -59,3 +59,25 @@ class FindingRunnerReviewTests(unittest.TestCase):
         self.assertLess(next(i for i,s in enumerate(sqls) if 'tasks WHERE' in s),
                         next(i for i,s in enumerate(sqls) if 'evidence_version FROM' in s))
         self.assertFalse(any(s.startswith('UPDATE findings') for s in sqls))
+
+
+class ProfileBoundaryReviewTests(unittest.TestCase):
+    def test_redacted_public_url_cannot_overwrite_private_configuration(self):
+        from artex.db.profiles import LLMProfile, ProfileStore, ProfileInvalid
+        private = LLMProfile(id=7,name='fixture',model='fixture',
+                             base_url='https://example.test/v1?token=fixture-secret',
+                             proxy='http://user:fixture-pass@example.test:8080')
+        public = private.public_dict()
+        for field in ('base_url','proxy'):
+            executor = Executor()
+            profile = LLMProfile(id=7,name='fixture',model='fixture',**{field:public[field]})
+            with self.subTest(field=field), self.assertRaises(ProfileInvalid):
+                ProfileStore(executor).save(profile)
+            self.assertEqual(executor.queries,[])
+
+    def test_masked_key_cannot_be_saved_as_real_key(self):
+        from artex.db.profiles import LLMProfile, ProfileStore, ProfileInvalid
+        executor = Executor()
+        with self.assertRaises(ProfileInvalid):
+            ProfileStore(executor).save(LLMProfile(id=7,name='fixture',model='fixture',api_key='…1234'))
+        self.assertEqual(executor.queries,[])

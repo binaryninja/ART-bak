@@ -174,7 +174,8 @@ class FindingStore:
         if not rows:raise FindingNotFound('finding task does not exist')
         if rows[0][0] is not None:raise FindingArchiveState('task is deleted or archived')
         archive=tx.fetch_all(Query('SELECT state FROM task_archives WHERE task_id=$1',(task_id,)))
-        if archive and archive[0][0]!='failed':raise FindingArchiveState('task has an active archive operation')
+        # Only the persisted ArchiveFailed state permits writes; unknown states fail closed.
+        if archive and archive[0][0]!='archive_failed':raise FindingArchiveState('task has an active archive operation')
 
     def create(self,*,task_id=0,node_id=0,vulnclass='',name='',severity,summary='',evidence='',worker='',asset_ids=()):
         if severity not in SEVERITIES:raise FindingInvalid('invalid severity')

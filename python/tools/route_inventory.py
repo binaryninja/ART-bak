@@ -148,6 +148,8 @@ def go_inventory(root: Path) -> tuple[list[dict], list[dict], dict[str, str], in
 
 
 def literal(node: ast.AST, environment: dict):
+    if node is None:
+        raise AuditError("Missing literal value")
     if isinstance(node, ast.Constant):
         return node.value
     if isinstance(node, ast.Name) and node.id in environment:
@@ -195,11 +197,40 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                        and n.func.attr == 'add' and ast.unparse(n.func.value) in router_names
                        for n in ast.walk(node))
 
+        consumed_sequences = []
+
+        def invalidate(target, environment):
+            # Invalidate aliases as well: a = routes; a.append(...) mutates routes.
+            names = {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+            values = [environment[name] for name in names if name in environment]
+            if any(isinstance(value, (list, tuple)) and any(value is consumed for consumed in consumed_sequences)
+                   for value in values):
+                raise AuditError(f'Route sequence modified after registration: {relative}:{target.lineno}')
+            aliases = {name for name, value in environment.items()
+                       if isinstance(value, (list, tuple)) and any(value is old for old in values)}
+            for name in names | aliases:
+                environment.pop(name, None)
+
+        def invalidate_calls(node, environment):
+            if node is None:
+                return
+            for call in ast.walk(node):
+                if not isinstance(call, ast.Call):
+                    continue
+                candidates = [*call.args, *(kw.value for kw in call.keywords)]
+                if isinstance(call.func, ast.Attribute):
+                    candidates.append(call.func.value)
+                for candidate in candidates:
+                    if any(isinstance(name, ast.Name) and isinstance(environment.get(name.id), (list, tuple))
+                           for name in ast.walk(candidate)):
+                        invalidate(candidate, environment)
+
         def walk(node, environment, owner=''):
             if isinstance(node, ast.For) and has_route(node):
                 values = literal(node.iter, environment)
                 if not isinstance(values, (list, tuple)):
                     raise AuditError('Route loop is not a literal sequence')
+                consumed_sequences.append(values)
                 for value in values:
                     child_environment = environment.copy()
                     bind_target(node.target, value, child_environment)
@@ -211,13 +242,51 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 owner = (owner + '.' if owner else '') + node.name
                 environment = environment.copy()
-            if isinstance(node, ast.Assign):
-                try:
-                    value = literal(node.value, environment)
-                    for target in node.targets:
-                        bind_target(target, value, environment)
-                except AuditError:
-                    pass
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                if has_route(node):
+                    raise AuditError('Route registration embedded in assignment needs explicit support')
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if any(not isinstance(target, (ast.Name, ast.Tuple, ast.List)) for target in targets):
+                    for target in targets:
+                        invalidate(target, environment)
+                else:
+                    try:
+                        value = literal(node.value, environment)
+                    except AuditError:
+                        invalidate_calls(node.value, environment)
+                        # Unsupported derived aliases (e.g. routes[0] or routes[:])
+                        # may later mutate an existing table; do not trust it.
+                        if node.value is not None:
+                            for name in ast.walk(node.value):
+                                if isinstance(name, ast.Name) and isinstance(environment.get(name.id), (list, tuple)):
+                                    invalidate(name, environment)
+                        # Never retain an earlier literal after an unsupported write.
+                        for target in targets:
+                            invalidate(target, environment)
+                    else:
+                        for target in targets:
+                            bind_target(target, value, environment)
+                return
+            if isinstance(node, (ast.AugAssign, ast.Delete, ast.NamedExpr)):
+                targets = node.targets if isinstance(node, ast.Delete) else [node.target]
+                for target in targets:
+                    invalidate(target, environment)
+                return
+            if isinstance(node, (ast.If, ast.While, ast.Try, ast.With, ast.Match, ast.For)) and not has_route(node):
+                # No control-flow interpreter: a conditional/loop assignment may
+                # not be assumed to have run. Mark all affected literals unknown.
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
+                        invalidate(child, environment)
+                    elif isinstance(child, ast.Call):
+                        if isinstance(child.func, ast.Attribute):
+                            invalidate(child.func.value, environment)
+                        for arg in child.args:
+                            if isinstance(arg, ast.Name) and isinstance(environment.get(arg.id), (list, tuple)):
+                                invalidate(arg, environment)
+                return
+            if isinstance(node, (ast.While, ast.Try, ast.With, ast.Match)) and has_route(node):
+                raise AuditError(f'Unsupported route control flow: {relative}:{node.lineno}')
             if isinstance(node, ast.If) and has_route(node):
                 raise AuditError(f'Conditional route registration needs explicit support: {relative}:{node.lineno}')
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'add' and ast.unparse(node.func.value) in router_names:
@@ -242,8 +311,11 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     dependencies = ('build_application explicitly registers LogService; authenticated history requires LogStore/executor; '
                                     'snapshot requires explicitly supplied log ring; no SSE/capture wiring')
                 elif owner == 'AssetService.register':
-                    dependencies = ('Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, '
-                                    'company resolver and mutation guard; DELETE is an explicit unsupported 503 handler')
+                    dependencies = ('Explicit asset store configuration/global-read opt-in; supported upserts require transaction, '
+                                    'company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503')
+                elif owner == 'FindingService.register':
+                    dependencies = ('Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, '
+                                    'exports, retention/deletion and retests are unavailable 503 contracts')
                 routes.append({'method': method.upper(), 'path': path,
                                'source': relative, 'line': node.lineno, 'function': owner,
                                'handler': ast.unparse(node.args[2]), 'public': public,
@@ -252,6 +324,8 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                                'status': ('optional offline contract; injected repository/live manager required'
                                           if optional else 'offline contract only; production integration unverified')})
                 return
+            if isinstance(node, ast.Call):
+                invalidate_calls(node, environment)
             for child in ast.iter_child_nodes(node):
                 walk(child, environment, owner)
 

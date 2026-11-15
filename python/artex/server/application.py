@@ -14,11 +14,13 @@ from .logs import LogService
 from .tasks import TaskService
 from .assets import AssetService
 from .findings import FindingService
+from .exploration import ExplorationService
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
                       finding_store=None, finding_asset_resolver=None,
+                      exploration_store_resolver=None, active_task_id=None,
                       log_ring=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
@@ -28,7 +30,9 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     Finding status notifications, evidence exports and runtime-dependent routes
     remain unavailable; anchored findings require an explicit asset resolver.
     Supplied finding stores retain their own task/exploration scope unchanged.
-    This is not the full ARTEX server.
+    Exploration reads require an explicit authorized task-to-store resolver;
+    optional active selection is never inferred from the task manager. Neither
+    callback is invoked during construction. This is not the full ARTEX server.
     """
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
@@ -37,6 +41,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     TaskService(task_manager, profile_available=profile_available).register(router)
     AssetService(asset_store).register(router)
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
+    ExplorationService(exploration_store_resolver, active_task_id=active_task_id).register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -44,6 +49,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 runner=None, profile_available=None,
                                 live_last_activity=None, log_ring=None, allow_global_assets=False,
                                 finding_asset_resolver=None, root_domain_resolver=None,
+                                exploration_store_resolver=None, active_task_id=None,
                                 version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
@@ -57,7 +63,8 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     scoped unless allow_global_assets is explicitly enabled. The optional offline
     root-domain resolver is forwarded, but does not bypass missing mutation guards
     or company adapters. Database/listener lifecycle, signing-key storage and
-    transport are caller-owned.
+    transport are caller-owned. Exploration resolver/active selection callbacks
+    are forwarded unchanged, never inferred or invoked during construction.
     """
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
@@ -78,4 +85,6 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
                              finding_asset_resolver=finding_asset_resolver,
+                             exploration_store_resolver=exploration_store_resolver,
+                             active_task_id=active_task_id,
                              version=version, max_body_bytes=max_body_bytes)

@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **34**.
-- python optional service routes: **29**.
-- matched offline contract routes: **34**.
-- go routes without python registration: **227**.
+- python offline contract routes: **38**.
+- python optional service routes: **33**.
+- matched offline contract routes: **38**.
+- go routes without python registration: **223**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -120,12 +120,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}` | `server/finding_traffic.go:89` | Not registered |
 | PATCH | `/api/exploration/findings/{id}/traffic/{binding_id}` | `server/finding_traffic.go:86` | Not registered |
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}/body` | `server/finding_traffic.go:90` | Not registered |
-| GET | `/api/exploration/frontier` | `server/server.go:755` | Not registered |
-| GET | `/api/exploration/graph` | `server/server.go:771` | Not registered |
-| GET | `/api/exploration/intents` | `server/server.go:770` | Not registered |
+| GET | `/api/exploration/frontier` | `server/server.go:755` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
+| GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
+| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
 | GET | `/api/exploration/main-sessions` | `server/server.go:775` | Not registered |
-| GET | `/api/exploration/nodes` | `server/server.go:772` | Not registered |
+| GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
 | GET | `/api/exploration/tokens` | `server/server.go:779` | Not registered |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
 | GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:105` |
@@ -302,28 +302,32 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python registration prerequisites
 
-- `GET /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
-- `GET /api/assets/counts`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
-- `POST /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
-- `DELETE /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
+- `GET /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `GET /api/assets/counts`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `POST /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `DELETE /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `GET /api/health`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/auth/status`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/stats`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/groups`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/asset-tree`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/export`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/{id}/lineage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/{id}/retests`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings/retests/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/exploration/findings/{id}/retests`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/exploration/findings/{id}/deepen`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/frontier`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/intents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/nodes`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `PATCH /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/stats`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/groups`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/asset-tree`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/export`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/{id}/lineage`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/retests/active`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `POST /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `POST /api/exploration/findings/{id}/deepen`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.

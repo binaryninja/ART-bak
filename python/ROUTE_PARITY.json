@@ -5,20 +5,21 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 34,
-    "python_optional_service_routes": 29,
-    "matched_offline_contract_routes": 34,
-    "go_routes_without_python_registration": 227
+    "python_offline_contract_routes": 38,
+    "python_optional_service_routes": 33,
+    "matched_offline_contract_routes": 38,
+    "go_routes_without_python_registration": 223
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "b69e7db9ea916676d90755c41ff0535b68ac4dcb850e8f7402be9f1295df7f20",
+    "python/artex/server/application.py": "15d45e4b6e7292deb09860d1c412ba1bc79dcdebe36f713b032b17a6cbd98ba1",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
+    "python/artex/server/exploration.py": "f905831037f7351d2cfd17bdbe45822bc84780aa54eb0450cf83a1aaa0003560",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
     "python/artex/server/logs.py": "29fb2ffbe5548540b660a01500da0dfd957b4e559176e3a5f9be5900218cb8c2",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
@@ -1228,7 +1229,7 @@
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+        "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1251,7 +1252,7 @@
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+        "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1274,7 +1275,7 @@
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+        "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1297,7 +1298,7 @@
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+        "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1383,8 +1384,19 @@
       "expression": "\"GET /api/exploration/frontier\"",
       "method": "GET",
       "path": "/api/exploration/frontier",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/frontier",
+        "source": "python/artex/server/exploration.py",
+        "line": 68,
+        "function": "ExplorationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings",
@@ -1404,7 +1416,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1427,7 +1439,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1450,7 +1462,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1473,7 +1485,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1496,7 +1508,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1519,7 +1531,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1542,7 +1554,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1565,7 +1577,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1588,7 +1600,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1611,7 +1623,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1634,7 +1646,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1657,7 +1669,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1680,7 +1692,7 @@
         "handler": "lambda req, params, action=action: self._handle(action, req, params)",
         "public": false,
         "registration_mode": "optional explicit service registration",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
         "status": "optional offline contract; injected repository/live manager required"
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -1694,8 +1706,19 @@
       "expression": "\"GET /api/exploration/intents\"",
       "method": "GET",
       "path": "/api/exploration/intents",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/intents",
+        "source": "python/artex/server/exploration.py",
+        "line": 68,
+        "function": "ExplorationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/graph",
@@ -1706,8 +1729,19 @@
       "expression": "\"GET /api/exploration/graph\"",
       "method": "GET",
       "path": "/api/exploration/graph",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/graph",
+        "source": "python/artex/server/exploration.py",
+        "line": 68,
+        "function": "ExplorationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/nodes",
@@ -1718,8 +1752,19 @@
       "expression": "\"GET /api/exploration/nodes\"",
       "method": "GET",
       "path": "/api/exploration/nodes",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/nodes",
+        "source": "python/artex/server/exploration.py",
+        "line": 68,
+        "function": "ExplorationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/activity",
@@ -3562,7 +3607,7 @@
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+      "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3574,7 +3619,7 @@
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+      "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3586,7 +3631,7 @@
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+      "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3598,7 +3643,7 @@
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler",
+      "dependencies": "Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3663,6 +3708,54 @@
     },
     {
       "method": "GET",
+      "path": "/api/exploration/frontier",
+      "source": "python/artex/server/exploration.py",
+      "line": 68,
+      "function": "ExplorationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/intents",
+      "source": "python/artex/server/exploration.py",
+      "line": 68,
+      "function": "ExplorationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/graph",
+      "source": "python/artex/server/exploration.py",
+      "line": 68,
+      "function": "ExplorationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/nodes",
+      "source": "python/artex/server/exploration.py",
+      "line": 68,
+      "function": "ExplorationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/exploration/findings",
       "source": "python/artex/server/findings.py",
       "line": 126,
@@ -3670,7 +3763,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3682,7 +3775,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3694,7 +3787,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3706,7 +3799,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3718,7 +3811,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3730,7 +3823,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3742,7 +3835,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3754,7 +3847,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3766,7 +3859,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3778,7 +3871,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3790,7 +3883,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3802,7 +3895,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
@@ -3814,7 +3907,7 @@
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
