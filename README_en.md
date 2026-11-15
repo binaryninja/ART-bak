@@ -1,6 +1,6 @@
 <div align="center">
 
-> **English** | [简体中文](./README.md)
+> **English** | [Project overview](./README.md)
 
 <img src="assets/logo.svg" alt="ART-bak" width="128">
 
@@ -18,6 +18,10 @@
 
 ---
 
+## Fork migration status
+
+This fork is being translated into English and ported to Python. The Python port is work in progress, not a feature-complete replacement. The original Go backend remains in place; the upstream snapshot description and installation instructions below describe that original backend. Do not assume Python parity or run unreviewed upstream scripts.
+
 ## Why it exists
 
 **ARTEX** is an **LLM multi-agent autonomous penetration-testing system**: give it a target and a scope, and four agent roles — goals / planner / worker / mainagent — collaborate to explore it. The event-driven planner dispatches intents, workers execute with real tools and write results back into two graphs (an asset graph + an exploration graph), and the mainagent handles human-in-the-loop conversation and intervention. Supporting capabilities include a MITM traffic recorder, tool-call interception with human approval, an independent finding-evidence store, multi-channel IM push notifications, and report generation.
@@ -31,6 +35,8 @@
 ---
 
 ## Screenshots
+
+These are historical screenshots of the original upstream interface, not validation of the English UI or Python port.
 
 | Dashboard | Exploration graph |
 | :---: | :---: |

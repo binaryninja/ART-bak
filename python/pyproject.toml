@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "artex-python"
+version = "0.1.0a1"
+description = "Incremental, non-production Python port of ARTEX"
+requires-python = ">=3.11"
+license = {text = "AGPL-3.0-only"}
+
+[tool.setuptools.packages.find]
+include = ["artex*"]
