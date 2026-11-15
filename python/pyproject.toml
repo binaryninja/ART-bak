@@ -16,3 +16,6 @@ qa = ["pglast==8.8"]
 
 [tool.setuptools.packages.find]
 include = ["artex*"]
+
+[tool.setuptools.package-data]
+"artex.db" = ["schema.sql"]

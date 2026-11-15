@@ -71,8 +71,10 @@ class _Run:
     exchange: Exchange
     deadline: float
     external_cancelled: Callable
+    agent_question: str
     cancel: Event = field(default_factory=Event)
     executing: bool = False
+    dispatch_owner: object | None = None
     stale: bool = False
     expired: bool = False
 
@@ -134,7 +136,7 @@ class SideQuestionCoordinator:
             except (ValueError,TypeError,AttributeError):raise SideInvalid('invalid main capture') from None
         return store.save_snapshot(capture)
 
-    def admit(self,store,client_id,question,*,cancelled=lambda:False):
+    def admit(self,store,client_id,question,*,agent_question=None,cancelled=lambda:False):
         if not isinstance(client_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',client_id):
             raise SideInvalid('invalid client request id')
         if not isinstance(question,str):raise SideInvalid('question must be text')
@@ -142,6 +144,11 @@ class SideQuestionCoordinator:
         if not question or len(question)>4000 or '\x00' in question:raise SideInvalid('question must be 1–4000 characters')
         try:question.encode('utf-8')
         except UnicodeError:raise SideInvalid('invalid question text') from None
+        if agent_question is None:agent_question=question
+        if not isinstance(agent_question,str) or not agent_question.strip() or '\x00' in agent_question:
+            raise SideInvalid('invalid prepared question')
+        try:agent_question.encode('utf-8')
+        except UnicodeError:raise SideInvalid('invalid prepared question text') from None
         if not callable(cancelled):raise SideInvalid('cancellation callback must be callable')
         with self._lock:
             if cancelled():raise CancelledError('Side question cancelled')
@@ -160,7 +167,7 @@ class SideQuestionCoordinator:
             exchange,created=store.start(snapshot,client_id,question)
             if not created:return Admission(deepcopy(exchange),False)
             handle=object()
-            self._runs[handle]=_Run(store,deepcopy(snapshot),deepcopy(exchange),self._clock()+self._timeout,cancelled)
+            self._runs[handle]=_Run(store,deepcopy(snapshot),deepcopy(exchange),self._clock()+self._timeout,cancelled,agent_question)
             return Admission(deepcopy(exchange),True,handle)
 
     def cancel(self,handle):
@@ -169,6 +176,55 @@ class SideQuestionCoordinator:
             run=self._runs.get(handle)
             if run is None:return False
             run.cancel.set();return True
+
+    def claim_dispatch(self,admission,owner):
+        """Atomically bind a registered, unstarted handle to exactly one dispatcher."""
+        if not isinstance(admission,Admission) or admission.created is not True or owner is None:
+            raise SideInvalid('invalid dispatch admission')
+        with self._lock:
+            run=self._runs.get(admission.handle)
+            if (run is None or run.executing or admission.exchange.id!=run.exchange.id
+                or admission.exchange.session_key!=run.exchange.session_key
+                or admission.exchange.generation!=run.exchange.generation
+                or run.dispatch_owner is not None and run.dispatch_owner is not owner):
+                raise SideInvalid('admission is foreign, invalid, or already owned')
+            run.dispatch_owner=owner
+
+    def abort_unstarted(self,handle,*,dispatch_owner=None):
+        """Durably fail a rejected dispatch; retain ownership if persistence fails.
+
+        Never abort an executing handle. CAS failure is only settled when a read
+        confirms the row is gone, terminal, or from a different generation.
+        """
+        with self._lock:
+            run=self._runs.get(handle)
+            if run is None or run.executing or run.dispatch_owner is not dispatch_owner:
+                raise SideInvalid('admission is absent, executing, or owned by a dispatcher')
+            run.executing=True
+        e=deepcopy(run.exchange);settled=False
+        e.status='failed';e.error='Side request was not dispatched'
+        try:
+            for attempt in range(3):
+                try:
+                    e.sequence+=1
+                    if run.store.update(e):
+                        settled=True
+                        return Outcome(deepcopy(e),True)
+                    current=run.store.request(e.id)
+                    if current is None or current.generation!=e.generation or current.status!='running':
+                        settled=True
+                        return Outcome(deepcopy(e),False,True)
+                    e.sequence=max(e.sequence,current.sequence)
+                except Exception:
+                    pass
+            raise SidePersistenceError(e) from None
+        finally:
+            with self._lock:
+                if settled:self._runs.pop(handle,None)
+                else:
+                    run.executing=False
+                    # Retries must advance beyond an ambiguous committed write.
+                    run.exchange.sequence=e.sequence
 
     def _cancelled(self,run):
         if run.cancel.is_set() or run.external_cancelled():return True
@@ -179,10 +235,11 @@ class SideQuestionCoordinator:
             run.stale=True;return True
         return False
 
-    def execute(self,handle):
+    def execute(self,handle,*,dispatch_owner=None):
         with self._lock:
             run=self._runs.get(handle)
-            if run is None or run.executing:raise SideInvalid('unknown or already executing admission')
+            if run is None or run.executing or run.dispatch_owner is not dispatch_owner:
+                raise SideInvalid('unknown, executing, or differently owned admission')
             run.executing=True
         e=run.exchange;answer=Answer();info=ContextInfo();error=None;persisted=False
         def check():
@@ -212,7 +269,7 @@ class SideQuestionCoordinator:
                     check();run.store.save_memory(e,Memory(**asdict(memory)))
                 replay=Replay(ReplayMemory(**asdict(memory)),load,save)
                 service=SideQuestionService(_CheckedProvider(lambda:self._binding(run.snapshot.model),check))
-                answer,info=service.respond(_service_snapshot(run.snapshot),e.question,replay,
+                answer,info=service.respond(_service_snapshot(run.snapshot),run.agent_question,replay,
                     output_tokens=self._output_tokens,update=update,cancelled=lambda:self._cancelled(run))
                 check()
             except Exception as exc:

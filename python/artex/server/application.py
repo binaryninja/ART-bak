@@ -17,15 +17,21 @@ from .findings import FindingService
 from .task_templates import TaskTemplateService
 from .profiles import ProfileService
 from .companies import CompanyService
+from .stats import StatsService
+from .sidequestions import SideQuestionHTTPService
 from .exploration import ExplorationService
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
-                      finding_store=None, finding_asset_resolver=None, company_store=None, template_store=None,
+                      finding_store=None, finding_asset_resolver=None, company_store=None,
+                      stats_store=None, stats_runtime_snapshot=None, template_store=None,
                       profile_store=None, profile_coordinator=None, runtime_snapshot=None,
                       exploration_store_resolver=None, active_task_id=None,
                       exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
+                      side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
+                      side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
+                      side_cancel_request=None, side_clear_history=None, side_wait=None,
                       log_ring=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
@@ -39,7 +45,9 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     optional active selection is never inferred from the task manager. Neither
     callback is invoked during construction. Nodeboard factories and asset-label
     resolvers are also explicit and receive the authorized exploration store; no
-    global fallback or inherited scope is inferred. This is not the full server.
+    global fallback or inherited scope is inferred. Side-question resolvers,
+    coordinator, dispatcher, preparation and lifecycle adapters are explicit;
+    construction never starts dispatch workers or performs provider calls. This is not the full server.
     """
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
@@ -50,11 +58,17 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
     TaskTemplateService(template_store).register(router)
     CompanyService(company_store).register(router)
+    StatsService(stats_store, runtime_snapshot=stats_runtime_snapshot).register(router)
     ExplorationService(exploration_store_resolver, active_task_id=active_task_id,
                        nodeboard_factory=exploration_nodeboard_factory,
                        nodeboard_asset_resolver=exploration_nodeboard_asset_resolver).register(router)
     ProfileService(profile_store, coordinator=profile_coordinator,
                    runtime_snapshot=runtime_snapshot).register(router)
+    SideQuestionHTTPService(side_parent_resolver, request_resolver=side_request_resolver,
+                            model_available=side_model_available, coordinator=side_coordinator,
+                            dispatcher=side_dispatcher, prepare_question=side_prepare_question,
+                            cancel_request=side_cancel_request, clear_history=side_clear_history,
+                            wait=side_wait).register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -62,9 +76,12 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 runner=None, profile_available=None,
                                 live_last_activity=None, log_ring=None, allow_global_assets=False,
                                 finding_asset_resolver=None, root_domain_resolver=None,
-                                profile_coordinator=None, runtime_snapshot=None,
+                                profile_coordinator=None, runtime_snapshot=None, stats_runtime_snapshot=None,
                                 exploration_store_resolver=None, active_task_id=None,
                                 exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
+                                side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
+                                side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
+                                side_cancel_request=None, side_clear_history=None, side_wait=None,
                                 version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
@@ -73,7 +90,10 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     registry for a failed database. No task is resumed during loading. Without
     an explicitly supplied cooperative runner, create/resume remain unavailable.
     Companies and standalone findings use authenticated administrator/global repositories;
-    company construction performs no reads or external registry lookup. Company
+    Dashboard counts likewise use deliberate administrator global access, but
+    still require an explicit live stats snapshot (never inferred from storage).
+    No startup aggregate reads occur. Company construction performs no reads or
+    external registry lookup. Company
     scope mutations/deletion remain unavailable pending full attribution cleanup;
     no inherited task scope is inferred. Finding asset labels require an explicit
     resolver; no global asset lookup is silently enabled. Asset reads remain
@@ -90,6 +110,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     from ..db.task_templates import TaskTemplateStore
     from ..db.profiles import ProfileStore
     from ..db.companies import CompanyStore
+    from ..db.stats import StatsStore
     from ..db.asset_store import AssetStore
     from ..db.task_metrics import TaskMetricsStore, TaskMetricsEnricher
     from ..manager import TaskManager
@@ -106,6 +127,8 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              finding_store=FindingStore(executor),
                              template_store=TaskTemplateStore(executor),
                              company_store=CompanyStore(executor),
+                             stats_store=StatsStore(executor, allow_global=True),
+                             stats_runtime_snapshot=stats_runtime_snapshot,
                              profile_store=ProfileStore(executor),
                              profile_coordinator=profile_coordinator, runtime_snapshot=runtime_snapshot,
                              finding_asset_resolver=finding_asset_resolver,
@@ -113,4 +136,10 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              active_task_id=active_task_id,
                              exploration_nodeboard_factory=exploration_nodeboard_factory,
                              exploration_nodeboard_asset_resolver=exploration_nodeboard_asset_resolver,
+                             side_parent_resolver=side_parent_resolver,
+                             side_request_resolver=side_request_resolver,
+                             side_model_available=side_model_available, side_coordinator=side_coordinator,
+                             side_dispatcher=side_dispatcher, side_prepare_question=side_prepare_question,
+                             side_cancel_request=side_cancel_request, side_clear_history=side_clear_history,
+                             side_wait=side_wait,
                              version=version, max_body_bytes=max_body_bytes)

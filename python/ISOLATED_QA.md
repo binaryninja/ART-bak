@@ -120,3 +120,25 @@ against loopback HTTP (429 then success used two calls; refusal used one); and
 composed authenticated WSGI log SSE replay/live delivery/close. No product mismatch
 was found. Provider behavior was a fixture and retry waits bypassed; external
 provider compatibility, timing behavior and production streaming remain unverified.
+
+## Two-connection ordering checks
+
+On immutable `376dc0a91124aa6e28c53ccda02674f244c4d5f9`, six controlled PostgreSQL
+race checks passed using independent connections: competing different-client
+starts, same-client idempotency, maximum snapshot ordering, clear-before-late-update,
+update-before-clear, and worker version claims. Clear/update tests observed actual
+PostgreSQL lock waits before release, not a shared Python lock. No hangs occurred
+under bounded SQL/future timeouts. One controlled run per ordering is not exhaustive
+stress or all-interleaving proof; only disposable fixture records were affected.
+
+## Actual fresh-bootstrap and dispatch checks
+
+Immutable local `6c055deabbfb075d73bf19b5a7cdbeb74706237e` passed seven grouped
+integration checks on PostgreSQL17.11. The Python packaged bootstrap itself created
+all 49 tables; all four legacy Unicode values were preserved. Second bootstrap,
+existing objects and wrong database identity were rejected, and an injected real
+SQL error after DDL rolled back every new table. Archive queue/claim/progress/fail
+CAS, statistics, and actual scoped side-question HTTP/coordinator/dispatcher also
+passed with inert providers. Only PG17.11 was exercised; PG12 compatibility,
+built-in seeding, upgrades, archive execution and real-model interoperability are
+not claimed.

@@ -211,8 +211,11 @@ class LogService:
         # Unlike snapshot's legacy forgiving parser, an ambiguous reconnect
         # cursor must not silently replay a different range of sensitive logs.
         try:
-            query=parse_qs(urlsplit(request.target).query,keep_blank_values=True,max_num_fields=1)
-            if set(query)-{'since'} or any(len(v)!=1 for v in query.values()):raise ValueError()
+            query=parse_qs(urlsplit(request.target).query,keep_blank_values=True,max_num_fields=2)
+            # Frontend EventSource carries the JWT as a reserved transport parameter.
+            # Router authorization still verifies it before this handler runs.
+            if set(query)-{'since','token'} or any(len(v)!=1 for v in query.values()):raise ValueError()
+            if len(query.get('token',[''])[0])>16384:raise ValueError()
             raw=query.get('since',['0'])[0]
             if not re.fullmatch(r'[0-9]{1,19}',raw):raise ValueError()
             since=int(raw)

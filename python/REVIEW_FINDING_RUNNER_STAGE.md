@@ -474,3 +474,182 @@ optional template_store injection, protected registration and persisted factory'
 TaskTemplateStore construction. Independently reran 16 application tests, all
 passing. Missing injection is 503 after auth; no template startup queries or task
 creation/execution occur. The earlier pending-wiring note is now resolved.
+
+## Follow-up: English planner/goals/Auto prompt builders
+
+Compared `agent/planner_prompts.py` directly with Go plannerDefaultTmpl,
+plannerSystem, goalsDefaultTmpl/goalsScopeTail, goals message assembly and
+promptcatalog Auto body. Independently reran eight pure-text tests, all passing.
+No authorization weakening or removable code-owned tail found in this assembly.
+
+Translation retains planner/non-executor distinction, initial read-only orientation
+only before facts and capped at three probes, one recheck per negative direction,
+quantitative goal acceptance with evidence, nonduplication and dependency ordering,
+maximum four intents per submission, and operation constraints over route diversity.
+The added explicit constraints-over-hard-minimum wording clarifies rather than
+expands authorization. Goal decomposition keeps outcomes separate from steps,
+requires explicit self-contained constraints and forbids invented goals. The scope
+tail preserves exact host rather than expanding to root domain, explicit IP/CIDR,
+no inferred targets/company scope, audit reason and scope-before-goals ordering.
+Auto remains a platform operator rather than a pentest executor and reports actual
+results only.
+
+Overrides support substitution only, not functions/control flow; invalid syntax
+falls back wholly and substituted input is not recursively evaluated. Planner
+artifact/constraint tails are appended outside the editable body. Goal scope tail
+is likewise appended after override only when the host explicitly asserts the
+scope-tool capability. Description occurs only once in the user message; it is
+not duplicated into an editable system variable.
+
+These are text contracts, not model-behavior or authorization tests. The editable
+body can still be contradictory, as in the source; appended wording cannot replace
+host-side scope/approval enforcement. Existing source ModeBypass/tool execution is
+not ported here, nor Plan execution, goal graph writes, wake state or solo pentest.
+No tools, providers, probes or network were exercised.
+
+## Follow-up: dashboard stats aggregates and runtime selection
+
+Reviewed `db/stats.py`, `server/stats.py`, Go `server.stats`, and new application
+wiring. Independently ran 12 stats plus 18 application tests successfully.
+
+One lifecycle discrepancy is pending clarification: task mapping currently filters
+`deleted_at IS NULL` but not `archived_at IS NULL`, despite describing persisted
+live tasks. Archived task rows retain their exploration identity; if a stale runtime
+adapter supplies one, pruned exploration data can appear as empty live counts.
+Parent and HTTP owner were notified. Rejecting archived mappings would align this
+boundary with its stated live-only contract; archival dashboard support would
+instead need explicit archive aggregate handling. This was source inspection,
+not a live database concurrency reproduction.
+
+Otherwise explicit task selection never falls back to an unrelated active task:
+missing selected task is 404, mismatched runtime task or missing dependency is 503,
+and backend failures are redacted rather than replaced by zeros. Runtime state is
+explicitly injected and type checked; no provider readiness/heartbeat is fabricated.
+The stalled heuristic matches source: running, no active LLM call, persisted
+running intent, positive last activity, and more than 120 seconds elapsed. Goal
+and intent counts preserve source latest 10,000/latest 100,000 caps before filtering.
+Other grouped counts cover the real scoped exploration/global asset tables.
+
+Global assets require explicit allow_global on StatsStore; persisted factory
+intentionally opts in for its authenticated administrator dashboard. Construction
+forwards runtime callback without invocation or stats queries. SQL values are bound;
+HTTP rejects duplicate/unknown selectors. Aggregate/runtime reads remain separate
+snapshots, not one consistent transaction. No DB/provider/network action ran.
+
+Lifecycle clarification from the owner: normal Go archive completion sets both
+archived_at and deleted_at, so the existing predicate excludes normal completed
+archives. The additional archive predicate is defense against inconsistent or
+legacy archived-only state, not evidence of a normal-flow archive exposure. Owner
+is adding this conservative guard and a fake regression; verification pending.
+
+Stats guard verification: `task_counts` now requires both deleted_at and archived_at
+NULL. Independently reran 13 stats tests including the owner's archived-only fake
+regression; all pass. The lifecycle clarification above is resolved.
+
+## Follow-up: side-question HTTP, dispatcher ownership and SSE
+
+Reviewed `server/sidequestions.py`, changed coordinator admission/dispatch ownership,
+and `sidequestion/dispatch.py`. Independently reran 19 HTTP tests and 12 dispatcher
+(including independent review) tests, all passing with inert providers/stores.
+
+All 11 routes inherit auth. Parent-family resolution validates exact conversation
+or task/exploration/worker identity and store key; request lookup checks exchange
+ID and same parent key. Every subsequent polling read re-resolves request access
+and requires unchanged parent/key before fetching. Missing request or changed
+generation emits cleared; scope mismatch fails rather than displaying another
+parent's exchange. Finite poll-budget/cancellation EOF is explicitly not success.
+Only terminal snapshots/cleared events carry terminal meaning. Captured model
+request prompts are omitted from history metadata; stored errors are replaced by
+a fixed message. Sequence-driven SSE uses JSON escaping for payloads.
+
+Original trimmed question remains durable/idempotent; mention-expanded preparation
+is separately passed as agent_question. Idempotent original requests do not admit
+or dispatch again. Preparation failure precedes admission. Missing or mismatched
+coordinator/dispatcher capability fails before durable start. Dispatch success 202
+means ownership accepted, not inference completion. Closed/full dispatcher
+rejection aborts unstarted admission durably; uncertain persistence remains 500
+with retained coordinator/rejection ownership, not a false terminal success.
+The added coordinator claim_dispatch fence validates handle and exchange identity
+and binds exactly one executor, preventing foreign/double-dispatch consumption.
+
+Boundary conditions: resolvers remain responsible for actual live authorization
+and archive/delete barriers; type/key checks do not replace it. Cancel reports
+accepted, not drained. Clear adapter must serialize admission/cancel/clear and
+requires permanent-delete authorization; no real clear occurred here. Runtime
+requires a thread-safe executor and host recovery for retained failed settlements.
+A provider blocked forever is not preempted by dispatcher close. No default
+preparer, provider, resolver or lifecycle adapter is silently invented.
+
+Factory code observed forwarding all side adapters explicitly without starting
+workers or invoking callbacks. Dedicated new factory tests still pending at this
+snapshot; existing 18 application tests pass.
+
+Factory verification completed: all 21 application tests pass independently after
+new side-question cases landed. These exercise actual coordinator/dispatcher with
+inert provider, accepted 202 then idempotent 200, auth before admission, explicit
+adapter forwarding and bounded finally-close/drain. Pending factory-test note above
+is resolved. No live provider, network or database was used.
+
+## Follow-up: task metadata PATCH and batch pause/resume
+
+Reviewed new `server/tasks.py` metadata/batch paths against Go task_metadata and
+task_control handlers, plus manager update/control delegation. Independently ran
+12 new metadata/batch tests and existing task HTTP tests successfully. No new
+blocking defect found in this endpoint slice.
+
+Metadata accepts only name/pinned, preserves source null-as-omitted behavior and
+rejects no-op/blank reset. Go Unicode whitespace trimming and 200-code-point bound
+are retained; invalid UTF-8, NUL, duplicate keys and unsupported fields reject
+before mutation. False pin is carried explicitly and changes only pin metadata,
+not lifecycle. The source 16 KiB body bound is retained. DTO preflight ensures a
+known missing metrics dependency is caught before repository update. Manager
+updates name/pinned cache fields under its lock, not description/goal/lifecycle.
+
+Batch retains source 256 KiB/100 normalized-unique-ID bounds, ordered canonical
+positive numeric IDs, separate dedupe of invalid inputs and per-item failures.
+All body/schema validation precedes controls; only pause/resume are accepted.
+Each task is resolved independently; unexpected errors are fixed/redacted and
+malformed control DTOs cannot become success or leak arbitrary fields. Prior
+successful actions remain durable if another item fails, as source semantics
+require. Missing runner/profile admission remains manager-owned and does not
+produce a successful resume; fake real-manager tests exercise this boundary.
+
+Not an all-or-nothing batch transaction: per-item results are intentional. Metadata
+preflight cannot guarantee subsequent DTO enrichment/connection success after a
+write; callers must reread after an ambiguous error rather than assuming rollback.
+An adapter returning malformed data after an action can likewise yield an error
+although that action happened. No real task, runner, database or provider ran.
+
+## Follow-up: fresh-database schema bootstrap
+
+Reviewed `db/schema.py`, packaged SQL, packaging configuration and 11 inert schema
+tests. All 11 pass independently. Parsed both source and packaged SQL using the
+already-installed pglast: both contain 285 statements. Parsed structures match
+after removing source-position metadata, comments and normalizing four U& legacy
+literal spellings (including function-body strings). Existing source-equivalence
+and literal-decoding tests also pass. No DDL or real database was executed.
+
+Opt-in and non-maintenance expected database are mandatory. Advisory transaction
+lock precedes exact identity/version/read-only/string/temp checks and public-schema
+inventory. Existing public relations/functions/types, extra user schemas and
+non-plpgsql extensions reject before scripts. Search path is then set locally;
+packaged digest prevents partial edits, and the final exact 49-table manifest
+must match before commit. Failures roll back through the transaction adapter and
+redact unexpected database exceptions. Constructor does not connect or change
+settings; it requires a borrowed idle autocommit connection. Scripts use native
+multi-statement execution, not unsafe splitting or placeholder replacement.
+
+Package-data configuration includes schema.sql. Four Unicode-escaped historical
+values preserve decoded database semantics rather than changing migration matches.
+Static inspection found no obvious post-PG12-only construct: helper explicitly
+avoids PG16 pg_input_is_valid; trigger EXECUTE FUNCTION and used JSONB/aggregate
+syntax predate PG12. This is not a demonstrated PostgreSQL12 compatibility result:
+pglast is a newer parser, so minimum-version claims still need isolated versioned
+DDL QA. Cursor adapters must propagate all multi-statement errors; fakes cannot
+establish driver/protocol behavior.
+
+The fresh-only guard is not a general existing-database migration or full bootstrap:
+seed/catalog/configuration stages, optional usage/records tables and runtime
+startup are intentionally absent. Advisory locks coordinate only cooperating code;
+exclusive operational access remains mandatory against external DDL races. No real
+user data, infrastructure, schema or credentials were changed by this review.

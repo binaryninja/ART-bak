@@ -1,6 +1,7 @@
 """Protected task HTTP slice, matching the actual Go routes.
 
-GET/POST /api/tasks, GET /api/tasks/{id}, and POST /api/tasks/{id}/control
+GET/POST /api/tasks, GET/PATCH /api/tasks/{id}, POST /api/tasks/control/batch,
+and POST /api/tasks/{id}/control
 are implemented. Status is a TaskDTO field; upstream has no task /status or /stop
 endpoint. Control accepts pause/resume only. Pausing requires acknowledged
 cooperative cancellation and is not deletion or terminal completion.
@@ -13,6 +14,9 @@ never opens a network connection, starts a task runner, or executes a tool itsel
 
 Intentional hardening: 1 MiB JSON request limit (upstream handlers have no local
 limit), reject trailing JSON and invalid UTF-8, and redact unexpected errors.
+Metadata uses the source 16KiB bound and rejects blank names (not a reset);
+pinned=false clears pin metadata, never lifecycle. Batch uses the source256KiB
+limit/100 normalized unique IDs and per-item errors, with durable prior successes.
 """
 from __future__ import annotations
 
@@ -56,6 +60,7 @@ class TaskHTTPManager(Protocol):
     def create_task(self, description: str, goal: str, options: TaskCreateOptions,
                     *, start: bool = True, seed_first_intent: bool = False) -> Mapping: ...
     def control_task(self, task_id: str, action: str) -> Mapping: ...
+    def update_metadata(self, task_id: str, **patch) -> Mapping: ...
 
 
 @dataclass(frozen=True)
@@ -199,6 +204,7 @@ class TaskService:
         for method, path, action in (
             ('GET', '/api/tasks', 'list'), ('POST', '/api/tasks', 'create'),
             ('GET', '/api/tasks/{id}', 'get'), ('POST', '/api/tasks/{id}/control', 'control'),
+            ('PATCH', '/api/tasks/{id}', 'metadata'), ('POST', '/api/tasks/control/batch', 'batch'),
         ):
             router.add(method, path, lambda request, params, action=action:
                        self._handle(action, request, params))
@@ -224,6 +230,8 @@ class TaskService:
             return error_response(500, 'Task operation failed')
 
     def _dispatch(self, action: str, request: Request, params: Mapping[str, str]) -> Response:
+        if action in ('metadata','batch'):
+            return self._metadata_or_batch(action,request,params)
         if action == 'list':
             return json_response(200, {'tasks': self.manager.list_tasks(), 'active': self.manager.active_task_id()})
         if action in ('get', 'control'):
@@ -263,3 +271,87 @@ class TaskService:
         created = self.manager.create_task(parsed.description, parsed.goal, parsed.options,
                                            start=True, seed_first_intent=parsed.seed_first_intent)
         return json_response(201, dict(created))
+
+
+    def _metadata_or_batch(self,action,request,params):
+        from ..manager import RuntimeUnavailable,TaskNotFound,TaskConflict
+        from urllib.parse import urlsplit
+        def pairs(items):
+            out={}
+            for key,value in items:
+                if key in out:raise InvalidTaskRequest('Duplicate JSON keys')
+                out[key]=value
+            return out
+        def canonical(raw):
+            if not isinstance(raw,str):return None
+            value=raw.strip(_GO_SPACE)
+            if not _ID.fullmatch(value):return None
+            digits=value.lstrip('+-').lstrip('0') or '0'
+            if len(digits)>19:return None
+            number=int(('-' if value.startswith('-') else '')+digits)
+            return str(number) if 0<number<2**63 else None
+        if urlsplit(request.target).query:return error_response(400,'Unsupported task query')
+        limit=16<<10 if action=='metadata' else 256<<10
+        if len(request.body)>limit:return error_response(413 if action=='metadata' else 400,'Request body too large')
+        try:
+            data=json.loads(request.body.decode('utf-8'),object_pairs_hook=pairs,parse_constant=_invalid_number)
+            if not isinstance(data,dict):raise InvalidTaskRequest('Expected JSON object')
+            if action=='metadata':
+                task_id=canonical(params['id'])
+                if task_id is None or task_id!=params['id']:raise InvalidTaskRequest('Invalid task id')
+                if set(data)-{'name','pinned'}:raise InvalidTaskRequest('Unsupported metadata fields')
+                patch={}
+                if data.get('name') is not None:
+                    name=_string(data,'name').strip(_GO_SPACE)
+                    if not name or '\x00' in name or len(name)>200:raise InvalidTaskRequest('Task name must contain 1–200 characters')
+                    patch['name']=name
+                if data.get('pinned') is not None:
+                    if type(data['pinned']) is not bool:raise InvalidTaskRequest('pinned must be boolean')
+                    patch['pinned']=data['pinned']
+                if not patch:raise InvalidTaskRequest('Provide name or pinned')
+            else:
+                if set(data)-{'task_ids','action'}:raise InvalidTaskRequest('Unsupported batch fields')
+                command=data.get('action')
+                if command not in ('pause','resume'):raise InvalidTaskRequest('action must be pause|resume')
+                raw=data.get('task_ids')
+                if not isinstance(raw,list) or any(not isinstance(x,str) for x in raw):raise InvalidTaskRequest('task_ids must be strings')
+                ids=[];seen=set()
+                for value in raw:
+                    value.encode('utf-8')
+                    valid=canonical(value)
+                    identifier=valid if valid is not None else value.strip(_GO_SPACE)
+                    marker=(valid is not None,identifier)
+                    if marker not in seen:
+                        ids.append((identifier,valid is not None));seen.add(marker)
+                if not 1<=len(ids)<=100:raise InvalidTaskRequest('task_ids must contain 1–100 unique ids')
+        except (ValueError,UnicodeError):return error_response(400,'Invalid task metadata or batch request')
+        if action=='metadata':
+            if not callable(getattr(self.manager,'update_metadata',None)):raise RuntimeUnavailable()
+            # Preflight DTO dependencies before persistence; update_metadata must
+            # change only name/pinned_at, under the manager's synchronization.
+            if self.manager.task(task_id) is None:raise TaskNotFound()
+            result=self.manager.update_metadata(task_id,**patch)
+            if result is None:raise TaskNotFound()
+            if not isinstance(result,Mapping) or result.get('id')!=task_id:raise RuntimeError('Invalid metadata result')
+            return json_response(200,dict(result))
+        if not callable(getattr(self.manager,'control_task',None)):raise RuntimeUnavailable()
+        items=[]
+        for identifier,valid in ids:
+            item={'id':identifier,'ok':False}
+            if not valid:item['error']='bad task id'
+            else:
+                try:
+                    if self.manager.task(identifier) is None:raise TaskNotFound()
+                    result=self.manager.control_task(identifier,command)
+                    if (not isinstance(result,Mapping) or result.get('id')!=identifier
+                        or type(result.get('queued')) is not bool or type(result.get('paused')) is not bool
+                        or result.get('status') not in ('created','queued','running','paused','done','failed','timeout')):
+                        raise RuntimeError('Invalid control result')
+                    item.update(ok=True,status=result['status'])
+                    if result['queued']:item['queued']=True
+                except TaskNotFound:item['error']='task not found'
+                except (RuntimeUnavailable,NotImplementedError):item['error']='Task runtime or required adapter is unavailable'
+                except TaskConflict:item['error']='Task lifecycle operation conflicts with its current state'
+                except Exception:item['error']='Task control failed'
+            items.append(item)
+        return json_response(200,{'items':items})

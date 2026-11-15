@@ -5,30 +5,32 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 57,
-    "python_optional_service_routes": 52,
-    "matched_offline_contract_routes": 57,
-    "go_routes_without_python_registration": 204
+    "python_offline_contract_routes": 71,
+    "python_optional_service_routes": 66,
+    "matched_offline_contract_routes": 71,
+    "go_routes_without_python_registration": 190
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "2da720118496679cc0ee3da2cd056dbb9d43df6f199fa15ac77fa5afff3a3a86",
+    "python/artex/server/application.py": "d67206ec15e48761e072e3ff24572b25435e87190a8a3d7216e65e1e4ecb08b4",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
-    "python/artex/server/logs.py": "658a387531d61234dd1a62b4cf4ed611e09fb7dbe87f12993923532e87bacf11",
+    "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
+    "python/artex/server/sidequestions.py": "29ce6975dee1354b5ae589c216cf5a25a8dfa62149ba7100b495c0741e426110",
+    "python/artex/server/stats.py": "8f5120044a6c596065dece30055041026f6310200cfec385840366651a5cd0ef",
     "python/artex/server/streaming.py": "9fcc2755a12d3f9c2a451566eacd238fb806f5285012f74e2f63c6e04e17f1e2",
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
-    "python/artex/server/tasks.py": "9e545ccd8e55d51e0589d52cb4fd8ce2f1cff3c4ddb54054f37b44c1bb43d083",
+    "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
     "python/artex/server/wsgi.py": "3d90db4ab424349fe4922c75b4915b006caf749384d45104f91451efd5167e6d"
   },
   "go_routes": [
@@ -240,8 +242,19 @@
       "expression": "\"GET /api/stats\"",
       "method": "GET",
       "path": "/api/stats",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/stats",
+        "source": "python/artex/server/stats.py",
+        "line": 66,
+        "function": "StatsService.register",
+        "handler": "lambda request, params: self.get(request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/logs",
@@ -373,7 +386,7 @@
         "method": "GET",
         "path": "/api/tasks",
         "source": "python/artex/server/tasks.py",
-        "line": 203,
+        "line": 209,
         "function": "TaskService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request, params)",
         "public": false,
@@ -396,7 +409,7 @@
         "method": "POST",
         "path": "/api/tasks",
         "source": "python/artex/server/tasks.py",
-        "line": 203,
+        "line": 209,
         "function": "TaskService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request, params)",
         "public": false,
@@ -626,7 +639,7 @@
         "method": "GET",
         "path": "/api/tasks/{id}",
         "source": "python/artex/server/tasks.py",
-        "line": 203,
+        "line": 209,
         "function": "TaskService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request, params)",
         "public": false,
@@ -645,8 +658,19 @@
       "expression": "\"PATCH /api/tasks/{id}\"",
       "method": "PATCH",
       "path": "/api/tasks/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/tasks/{id}",
+        "source": "python/artex/server/tasks.py",
+        "line": 209,
+        "function": "TaskService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/tasks/{id}/category",
@@ -740,8 +764,19 @@
       "expression": "\"POST /api/tasks/control/batch\"",
       "method": "POST",
       "path": "/api/tasks/control/batch",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/control/batch",
+        "source": "python/artex/server/tasks.py",
+        "line": 209,
+        "function": "TaskService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/task-archives",
@@ -1140,7 +1175,7 @@
         "method": "POST",
         "path": "/api/tasks/{id}/control",
         "source": "python/artex/server/tasks.py",
-        "line": 203,
+        "line": 209,
         "function": "TaskService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request, params)",
         "public": false,
@@ -3668,8 +3703,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "GET",
       "path": "/api/conversations/{id}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/conversations/{id}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/chat/side-questions",
@@ -3680,8 +3726,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "GET",
       "path": "/api/tasks/{id}/chat/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/chat/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/intents/{iid}/side-questions",
@@ -3692,8 +3749,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "GET",
       "path": "/api/tasks/{id}/intents/{iid}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/conversations/{id}/side-questions",
@@ -3704,8 +3772,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "POST",
       "path": "/api/conversations/{id}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/conversations/{id}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/chat/side-questions",
@@ -3716,8 +3795,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "POST",
       "path": "/api/tasks/{id}/chat/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/chat/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/intents/{iid}/side-questions",
@@ -3728,8 +3818,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "POST",
       "path": "/api/tasks/{id}/intents/{iid}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/conversations/{id}/side-questions",
@@ -3740,8 +3841,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "DELETE",
       "path": "/api/conversations/{id}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/conversations/{id}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/tasks/{id}/chat/side-questions",
@@ -3752,8 +3864,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "DELETE",
       "path": "/api/tasks/{id}/chat/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/tasks/{id}/chat/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/tasks/{id}/intents/{iid}/side-questions",
@@ -3764,8 +3887,19 @@
       "expression": "method+\" \"+route.path+\"/side-questions\"",
       "method": "DELETE",
       "path": "/api/tasks/{id}/intents/{iid}/side-questions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 59,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/side-questions/{requestID}/events",
@@ -3776,8 +3910,19 @@
       "expression": "\"GET /api/side-questions/{requestID}/events\"",
       "method": "GET",
       "path": "/api/side-questions/{requestID}/events",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/side-questions/{requestID}/events",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 60,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params: self._handle('events', request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/side-questions/{requestID}/cancel",
@@ -3788,8 +3933,19 @@
       "expression": "\"POST /api/side-questions/{requestID}/cancel\"",
       "method": "POST",
       "path": "/api/side-questions/{requestID}/cancel",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/side-questions/{requestID}/cancel",
+        "source": "python/artex/server/sidequestions.py",
+        "line": 61,
+        "function": "SideQuestionHTTPService.register",
+        "handler": "lambda request, params: self._handle('cancel', request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     }
   ],
   "go_mounts": [
@@ -4329,6 +4485,150 @@
     },
     {
       "method": "GET",
+      "path": "/api/conversations/{id}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/{id}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/conversations/{id}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/chat/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/chat/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tasks/{id}/chat/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tasks/{id}/intents/{iid}/side-questions",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 59,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params, kind=kind: self._handle(kind, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/side-questions/{requestID}/events",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 60,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params: self._handle('events', request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/side-questions/{requestID}/cancel",
+      "source": "python/artex/server/sidequestions.py",
+      "line": 61,
+      "function": "SideQuestionHTTPService.register",
+      "handler": "lambda request, params: self._handle('cancel', request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/stats",
+      "source": "python/artex/server/stats.py",
+      "line": 66,
+      "function": "StatsService.register",
+      "handler": "lambda request, params: self.get(request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/task-categories",
       "source": "python/artex/server/task_categories.py",
       "line": 112,
@@ -4451,7 +4751,7 @@
       "method": "GET",
       "path": "/api/tasks",
       "source": "python/artex/server/tasks.py",
-      "line": 203,
+      "line": 209,
       "function": "TaskService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request, params)",
       "public": false,
@@ -4463,7 +4763,7 @@
       "method": "POST",
       "path": "/api/tasks",
       "source": "python/artex/server/tasks.py",
-      "line": 203,
+      "line": 209,
       "function": "TaskService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request, params)",
       "public": false,
@@ -4475,7 +4775,7 @@
       "method": "GET",
       "path": "/api/tasks/{id}",
       "source": "python/artex/server/tasks.py",
-      "line": 203,
+      "line": 209,
       "function": "TaskService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request, params)",
       "public": false,
@@ -4487,7 +4787,31 @@
       "method": "POST",
       "path": "/api/tasks/{id}/control",
       "source": "python/artex/server/tasks.py",
-      "line": 203,
+      "line": 209,
+      "function": "TaskService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/tasks/{id}",
+      "source": "python/artex/server/tasks.py",
+      "line": 209,
+      "function": "TaskService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/control/batch",
+      "source": "python/artex/server/tasks.py",
+      "line": 209,
       "function": "TaskService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request, params)",
       "public": false,

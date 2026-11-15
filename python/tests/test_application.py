@@ -339,6 +339,94 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/task-templates',token=sign_jwt(b'x'*32)),(200,{'templates':[]}))
         self.assertEqual(len(self.db.calls),2)
 
+    def test_stats_auth_missing_adapter_and_exact_selector(self):
+        from artex.server import sign_jwt
+        from artex.server.stats import RuntimeStats,TaskRuntimeStats
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.request('/api/stats')[0],401)
+        self.assertEqual(self.request('/api/stats',token=token)[0],503)
+        store=Mock();store.asset_counts.return_value={'ip':2}
+        snapshot=Mock(return_value=RuntimeStats(False))
+        self.app=build_application(self.db,b'x'*32,TestCodec(),stats_store=store,stats_runtime_snapshot=snapshot)
+        snapshot.assert_not_called();store.asset_counts.assert_not_called()
+        self.assertEqual(self.request('/api/stats')[0],401)
+        snapshot.assert_not_called()
+        self.assertEqual(self.request('/api/stats',token=token),(200,{'engine_mode':'idle','llm_configured':False,'assets':2,'asset_counts':{'ip':2}}))
+        snapshot.assert_called_once_with('active')
+        # Exercise the WSGI query selector explicitly; never let an explicit task
+        # silently follow an unrelated active task supplied by a broken adapter.
+        snapshot.return_value=RuntimeStats(True,TaskRuntimeStats('4','Other','Goal',True,False,False,0,0))
+        env={'REQUEST_METHOD':'GET','PATH_INFO':'/api/stats','QUERY_STRING':'task=3','CONTENT_LENGTH':'0',
+             'wsgi.input':io.BytesIO(), 'HTTP_AUTHORIZATION':'Bearer '+token}
+        statuses=[]
+        body=b''.join(self.app(env,lambda status,headers:statuses.append(status)))
+        self.assertTrue(statuses[0].startswith('503'))
+        snapshot.assert_called_with('3');store.task_counts.assert_not_called()
+        self.assertNotIn(b'Other',body)
+
+    def test_persisted_stats_admin_store_forwarding_without_reads(self):
+        class EmptyTasks(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        db=EmptyTasks();snapshot=Mock()
+        with patch('artex.db.stats.StatsStore') as store,patch('artex.server.application.StatsService') as service:
+            build_persisted_application(db,b'x'*32,TestCodec(),stats_runtime_snapshot=snapshot)
+            store.assert_called_once_with(db,allow_global=True)
+            service.assert_called_once_with(store.return_value,runtime_snapshot=snapshot)
+            store.return_value.asset_counts.assert_not_called();store.return_value.task_counts.assert_not_called()
+        snapshot.assert_not_called();self.assertEqual(len(db.calls),1)
+
+    def test_sidequestion_missing_dependencies_and_auth(self):
+        from artex.server import sign_jwt
+        path='/api/conversations/3/side-questions'
+        self.assertEqual(self.request(path)[0],401)
+        self.assertEqual(self.request(path,token=sign_jwt(b'x'*32))[0],503)
+        self.assertEqual(self.db.calls,[])
+
+    def test_sidequestion_actual_inert_submission_idempotency(self):
+        from artex.server import sign_jwt
+        from artex.sidequestion.runtime import SideQuestionCoordinator,ProviderBinding
+        from artex.sidequestion.dispatch import SideQuestionDispatcher
+        from test_sidequestion_runtime import Store,Provider
+        store=Store();provider=Provider()
+        coordinator=SideQuestionCoordinator(lambda model:ProviderBinding(model,provider))
+        dispatcher=SideQuestionDispatcher(coordinator,workers=1,capacity=1)
+        resolver=Mock(return_value=store);prepare=Mock(side_effect=lambda parent,question:question)
+        try:
+            self.app=build_application(self.db,b'x'*32,TestCodec(),side_parent_resolver=resolver,
+                                      side_coordinator=coordinator,side_dispatcher=dispatcher,side_prepare_question=prepare)
+            resolver.assert_not_called();prepare.assert_not_called();self.assertEqual(provider.calls,[])
+            path='/api/conversations/3/side-questions';data={'question':'hello','client_request_id':'client'}
+            self.assertEqual(self.request(path,method='POST',data=data)[0],401)
+            resolver.assert_not_called()
+            token=sign_jwt(b'x'*32)
+            status,body=self.request(path,method='POST',data=data,token=token)
+            self.assertEqual(status,202);self.assertEqual(body['question'],'hello');self.assertEqual(body['id'],'req-conv-3')
+            status,again=self.request(path,method='POST',data=data,token=token)
+            self.assertEqual(status,200);self.assertEqual(again['id'],body['id']);self.assertEqual(store.starts,1)
+        finally:
+            self.assertTrue(dispatcher.close(timeout=2).drained)
+        self.assertEqual(store.row.status,'completed');self.assertEqual(len(provider.calls),1)
+        self.assertEqual(self.db.calls,[])  # no inferred parent/store/database access
+
+    def test_persisted_sidequestion_adapters_forwarded_without_construction(self):
+        class Empty(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        db=Empty()
+        names=('parent_resolver','request_resolver','model_available','coordinator','dispatcher','prepare_question','cancel_request','clear_history','wait')
+        values={name:Mock() for name in names}
+        with patch('artex.server.application.SideQuestionHTTPService') as service:
+            build_persisted_application(db,b'x'*32,TestCodec(),**{'side_'+name:value for name,value in values.items()})
+            service.assert_called_once_with(values['parent_resolver'],**{name:value for name,value in values.items() if name!='parent_resolver'})
+            service.return_value.register.assert_called_once()
+        for value in values.values():value.assert_not_called()
+        self.assertEqual(len(db.calls),1)
+
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):
             build_application(self.db, b'short', TestCodec())

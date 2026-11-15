@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **57**.
-- python optional service routes: **52**.
-- matched offline contract routes: **57**.
-- go routes without python registration: **204**.
+- python offline contract routes: **71**.
+- python optional service routes: **66**.
+- matched offline contract routes: **71**.
+- go routes without python registration: **190**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -92,9 +92,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Not registered |
 | GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Not registered |
 | PATCH | `/api/conversations/{id}/profile` | `server/server.go:828` | Not registered |
-| DELETE | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Not registered |
-| GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Not registered |
-| POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Not registered |
+| DELETE | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Not registered |
 | GET | `/api/exploration/activity` | `server/server.go:773` | Not registered |
 | GET | `/api/exploration/activity/history` | `server/server.go:774` | Not registered |
@@ -184,8 +184,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PUT | `/api/settings` | `server/server.go:801` | Not registered |
 | POST | `/api/settings/python/detect` | `server/server.go:863` | Not registered |
 | POST | `/api/settings/web-search/test` | `server/server.go:812` | Not registered |
-| POST | `/api/side-questions/{requestID}/cancel` | `server/side_questions.go:285` | Not registered |
-| GET | `/api/side-questions/{requestID}/events` | `server/side_questions.go:284` | Not registered |
+| POST | `/api/side-questions/{requestID}/cancel` | `server/side_questions.go:285` | Optional registration; adapters required: `python/artex/server/sidequestions.py:61` |
+| GET | `/api/side-questions/{requestID}/events` | `server/side_questions.go:284` | Optional registration; adapters required: `python/artex/server/sidequestions.py:60` |
 | GET | `/api/skills` | `server/server.go:878` | Not registered |
 | POST | `/api/skills` | `server/server.go:879` | Not registered |
 | GET | `/api/skills/missing` | `server/server.go:882` | Not registered |
@@ -198,7 +198,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PUT | `/api/skills/{name}/files/{file...}` | `server/server.go:889` | Not registered |
 | PUT | `/api/skills/{name}/meta` | `server/server.go:884` | Not registered |
 | GET | `/api/skills/{name}/usage` | `server/server.go:883` | Not registered |
-| GET | `/api/stats` | `server/server.go:661` | Not registered |
+| GET | `/api/stats` | `server/server.go:661` | Optional registration; adapters required: `python/artex/server/stats.py:66` |
 | POST | `/api/sync/scopesentry/datasource` | `server/server.go:873` | Not registered |
 | GET | `/api/sync/scopesentry/projects` | `server/server.go:874` | Not registered |
 | GET | `/api/sync/scopesentry/status` | `server/server.go:872` | Not registered |
@@ -218,29 +218,29 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/task-templates` | `server/server.go:681` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
 | DELETE | `/api/task-templates/{id}` | `server/server.go:683` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
 | PATCH | `/api/task-templates/{id}` | `server/server.go:682` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
-| GET | `/api/tasks` | `server/server.go:673` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
-| POST | `/api/tasks` | `server/server.go:674` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
+| GET | `/api/tasks` | `server/server.go:673` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
+| POST | `/api/tasks` | `server/server.go:674` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | POST | `/api/tasks/archive/batch` | `server/server.go:697` | Not registered |
 | POST | `/api/tasks/category/batch` | `server/server.go:679` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
-| POST | `/api/tasks/control/batch` | `server/server.go:693` | Not registered |
+| POST | `/api/tasks/control/batch` | `server/server.go:693` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | DELETE | `/api/tasks/{id}` | `server/server.go:821` | Not registered |
-| GET | `/api/tasks/{id}` | `server/server.go:684` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
-| PATCH | `/api/tasks/{id}` | `server/server.go:685` | Not registered |
+| GET | `/api/tasks/{id}` | `server/server.go:684` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
+| PATCH | `/api/tasks/{id}` | `server/server.go:685` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | POST | `/api/tasks/{id}/archive` | `server/server.go:696` | Not registered |
 | GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Not registered |
 | POST | `/api/tasks/{id}/assets` | `server/server.go:705` | Not registered |
 | DELETE | `/api/tasks/{id}/assets/{assetID}` | `server/server.go:706` | Not registered |
 | PATCH | `/api/tasks/{id}/category` | `server/server.go:686` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
-| DELETE | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Not registered |
-| GET | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Not registered |
-| POST | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Not registered |
+| DELETE | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| GET | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| POST | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/tasks/{id}/chat/status` | `server/server.go:817` | Not registered |
 | POST | `/api/tasks/{id}/chat/stop` | `server/server.go:818` | Not registered |
 | GET | `/api/tasks/{id}/constraints` | `server/server.go:724` | Not registered |
 | POST | `/api/tasks/{id}/constraints` | `server/server.go:725` | Not registered |
 | DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Not registered |
 | PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Not registered |
-| POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
+| POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Not registered |
 | GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Not registered |
 | GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Not registered |
@@ -252,9 +252,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/{id}/intents/{iid}/control` | `server/server.go:731` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/messages` | `server/server.go:732` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/rerun` | `server/server.go:733` | Not registered |
-| DELETE | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Not registered |
-| GET | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Not registered |
-| POST | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Not registered |
+| DELETE | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| GET | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
+| POST | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/tasks/{id}/intercept-rules` | `server/server.go:688` | Not registered |
 | POST | `/api/tasks/{id}/intercept-rules` | `server/server.go:689` | Not registered |
 | DELETE | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:691` | Not registered |
@@ -345,6 +345,18 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/models`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/side-questions/{requestID}/events`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/side-questions/{requestID}/cancel`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/stats`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
@@ -359,6 +371,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `GET /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `POST /api/tasks/{id}/control`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `PATCH /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks/control/batch`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 
 ## Non-method mounts
 
