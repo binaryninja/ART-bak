@@ -111,6 +111,15 @@ function getToken(): string | null {
   return localStorage.getItem("artex_token");
 }
 
+// Preserve the server's original row version, including fractional precision.
+// Go ignores this header; the Python metadata API requires it for stale-edit CAS.
+function interceptVersion(updatedAt: string): Record<string, string> {
+  if (typeof updatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(updatedAt)) {
+    throw new Error("Rule version is missing or invalid. Reload the rules before editing.");
+  }
+  return { "X-Rule-Updated-At": updatedAt };
+}
+
 export async function http<T>(path: string, init?: RequestInit): Promise<T> {
   if (MOCK) return mockHandle<T>(init?.method ?? "GET", path, init?.body ?? null);
   const token = getToken();
@@ -414,12 +423,12 @@ export const api = {
     get<{ rules: AssetInterceptRule[] | null }>(`/tasks/${id}/intercept-rules`).then((r) => arr(r.rules)),
   createTaskInterceptRule: (id: string, rule: AssetInterceptRuleInput) =>
     post<AssetInterceptRule>(`/tasks/${id}/intercept-rules`, rule),
-  updateTaskInterceptRule: (id: string, ruleId: number, rule: AssetInterceptRuleInput) =>
-    put<AssetInterceptRule>(`/tasks/${id}/intercept-rules/${ruleId}`, rule),
-  deleteTaskInterceptRule: (id: string, ruleId: number) =>
-    del<{ deleted: boolean }>(`/tasks/${id}/intercept-rules/${ruleId}`),
-  toggleTaskInterceptRule: (id: string, ruleId: number, enabled: boolean) =>
-    post<{ ok: boolean; enabled: boolean }>(`/tasks/${id}/intercept-rules/${ruleId}/toggle`, { enabled }),
+  updateTaskInterceptRule: (id: string, ruleId: number, rule: AssetInterceptRuleInput, updatedAt: string) =>
+    http<AssetInterceptRule>(`/tasks/${id}/intercept-rules/${ruleId}`, { method: "PUT", headers: interceptVersion(updatedAt), body: JSON.stringify(rule) }),
+  deleteTaskInterceptRule: (id: string, ruleId: number, updatedAt: string) =>
+    http<{ deleted: boolean }>(`/tasks/${id}/intercept-rules/${ruleId}`, { method: "DELETE", headers: interceptVersion(updatedAt) }),
+  toggleTaskInterceptRule: (id: string, ruleId: number, enabled: boolean, updatedAt: string) =>
+    http<{ ok: boolean; enabled: boolean }>(`/tasks/${id}/intercept-rules/${ruleId}/toggle`, { method: "POST", headers: interceptVersion(updatedAt), body: JSON.stringify({ enabled }) }),
 
   // Task test scope, including scope inherited from source tasks.
   taskScope: (id: string) => get<{ scope: TaskScopeRow[] }>(`/tasks/${id}/scope`),
@@ -1205,11 +1214,11 @@ export const api = {
   assetInterceptRules: () => get<{ rules: AssetInterceptRule[] }>("/asset-intercept/rules").then((r) => arr(r.rules)),
   createAssetInterceptRule: (rule: Pick<AssetInterceptRule, "enabled" | "kind" | "pattern" | "note">) =>
     post<AssetInterceptRule>("/asset-intercept/rules", rule),
-  updateAssetInterceptRule: (id: number, rule: Pick<AssetInterceptRule, "enabled" | "kind" | "pattern" | "note">) =>
-    put<AssetInterceptRule>(`/asset-intercept/rules/${id}`, rule),
-  deleteAssetInterceptRule: (id: number) => del<{ deleted: number }>(`/asset-intercept/rules/${id}`),
-  toggleAssetInterceptRule: (id: number, enabled: boolean) =>
-    post<{ ok: boolean; enabled: boolean }>(`/asset-intercept/rules/${id}/toggle`, { enabled }),
+  updateAssetInterceptRule: (id: number, rule: Pick<AssetInterceptRule, "enabled" | "kind" | "pattern" | "note">, updatedAt: string) =>
+    http<AssetInterceptRule>(`/asset-intercept/rules/${id}`, { method: "PUT", headers: interceptVersion(updatedAt), body: JSON.stringify(rule) }),
+  deleteAssetInterceptRule: (id: number, updatedAt: string) => http<{ deleted: number }>(`/asset-intercept/rules/${id}`, { method: "DELETE", headers: interceptVersion(updatedAt) }),
+  toggleAssetInterceptRule: (id: number, enabled: boolean, updatedAt: string) =>
+    http<{ ok: boolean; enabled: boolean }>(`/asset-intercept/rules/${id}/toggle`, { method: "POST", headers: interceptVersion(updatedAt), body: JSON.stringify({ enabled }) }),
 
   // ---- intercept pending (ask) ----
   interceptPending: () => get<{ pending: InterceptPending[] }>("/intercept/pending").then((r) => arr(r.pending)),

@@ -137,7 +137,7 @@ export default function AssetInterceptPage() {
     setSaving(true);
     try {
       if (editing) {
-        await api.updateAssetInterceptRule(editing.id, payload);
+        await api.updateAssetInterceptRule(editing.id, payload, editing.updated_at);
         toast.success("Rule updated");
       } else {
         await api.createAssetInterceptRule(payload);
@@ -147,6 +147,8 @@ export default function AssetInterceptPage() {
       load();
     } catch (e) {
       toast.error((e as Error).message);
+      if (editing) toast.info("If the rule changed, reopen the refreshed rule and review it before trying again. Your edit is not retried.");
+      await load();
     } finally {
       setSaving(false);
     }
@@ -155,20 +157,24 @@ export default function AssetInterceptPage() {
   async function handleDelete(rule: AssetInterceptRule) {
     if (!window.confirm(`Delete asset blocking rule “${rule.pattern}”?`)) return;
     try {
-      await api.deleteAssetInterceptRule(rule.id);
+      await api.deleteAssetInterceptRule(rule.id, rule.updated_at);
       toast.success("Rule deleted");
       load();
     } catch (e) {
       toast.error((e as Error).message);
+      toast.info("If the rule changed, reopen the refreshed rule and review it before trying again. Your edit is not retried.");
+      await load();
     }
   }
 
   async function handleToggle(rule: AssetInterceptRule) {
     try {
-      await api.toggleAssetInterceptRule(rule.id, !rule.enabled);
+      await api.toggleAssetInterceptRule(rule.id, !rule.enabled, rule.updated_at);
       load();
     } catch (e) {
       toast.error((e as Error).message);
+      toast.info("If the rule changed, reopen the refreshed rule and review it before trying again. Your edit is not retried.");
+      await load();
     }
   }
 

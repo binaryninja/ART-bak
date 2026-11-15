@@ -1074,6 +1074,7 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
   const [newKind, setNewKind] = React.useState<AssetInterceptKind>("fuzzy_domain");
   const [newPattern, setNewPattern] = React.useState("");
   const [newNote, setNewNote] = React.useState("");
+  const [editUpdatedAt, setEditUpdatedAt] = React.useState("");
   const [editId, setEditId] = React.useState<number | null>(null);
   const [editAction, setEditAction] = React.useState<"block" | "allow">("block");
   const [editKind, setEditKind] = React.useState<AssetInterceptKind>("fuzzy_domain");
@@ -1084,7 +1085,7 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
     try {
       setRules(await api.taskInterceptRules(taskId));
     } catch {
-      // Ignore transient errors.
+      setErr((previous) => [previous, "Failed to refresh rules. Reload before editing again."].filter(Boolean).join(" "));
     }
   }, [taskId]);
 
@@ -1116,6 +1117,7 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
 
   function startEdit(r: AssetInterceptRule) {
     setEditId(r.id);
+    setEditUpdatedAt(r.updated_at);
     setEditAction(r.action ?? "block");
     setEditKind(r.kind);
     setEditPattern(r.pattern);
@@ -1134,11 +1136,12 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
         pattern: editPattern.trim(),
         note: editNote.trim(),
         enabled: r.enabled,
-      });
+      }, editUpdatedAt);
       setEditId(null);
       await load();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(`${(e as Error).message} If the rule changed, reopen the refreshed rule and review it before saving. Your draft is unchanged and was not retried.`);
+      await load();
     } finally {
       setBusy(false);
     }
@@ -1147,8 +1150,10 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
   async function remove(r: AssetInterceptRule) {
     setRules((prev) => prev.filter((x) => x.id !== r.id));
     try {
-      await api.deleteTaskInterceptRule(taskId, r.id);
-    } catch {
+      await api.deleteTaskInterceptRule(taskId, r.id, r.updated_at);
+      await load();
+    } catch (e) {
+      setErr((e as Error).message);
       await load();
     }
   }
@@ -1156,8 +1161,10 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
   async function toggle(r: AssetInterceptRule) {
     setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)));
     try {
-      await api.toggleTaskInterceptRule(taskId, r.id, !r.enabled);
-    } catch {
+      await api.toggleTaskInterceptRule(taskId, r.id, !r.enabled, r.updated_at);
+      await load();
+    } catch (e) {
+      setErr((e as Error).message);
       await load();
     }
   }

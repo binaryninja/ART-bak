@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **156**.
-- python optional service routes: **151**.
-- matched offline contract routes: **156**.
-- go routes without python registration: **105**.
+- python offline contract routes: **160**.
+- python optional service routes: **155**.
+- matched offline contract routes: **160**.
+- go routes without python registration: **101**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -126,7 +126,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
 | GET | `/api/exploration/main-sessions` | `server/server.go:775` | Not registered |
 | GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
-| GET | `/api/exploration/tokens` | `server/server.go:779` | Not registered |
+| GET | `/api/exploration/tokens` | `server/server.go:779` | Optional registration; adapters required: `python/artex/server/token_usage.py:26` |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
 | GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:105` |
 | GET | `/api/intercept/history` | `server/server.go:925` | Not registered |
@@ -265,8 +265,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/tasks/{id}/scope` | `server/server.go:717` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
 | POST | `/api/tasks/{id}/scope` | `server/server.go:718` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
 | DELETE | `/api/tasks/{id}/scope/{sid}` | `server/server.go:719` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
-| GET | `/api/tokens/conversations` | `server/server.go:781` | Not registered |
-| GET | `/api/tokens/daily` | `server/server.go:780` | Not registered |
+| GET | `/api/tokens/conversations` | `server/server.go:781` | Optional registration; adapters required: `python/artex/server/token_usage.py:26` |
+| GET | `/api/tokens/daily` | `server/server.go:780` | Optional registration; adapters required: `python/artex/server/token_usage.py:26` |
 | GET | `/api/tokens/usage` | `server/server.go:782` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
 | GET | `/api/tools` | `server/server.go:857` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/custom` | `server/server.go:859` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
@@ -297,7 +297,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/workspace/list` | `server/server.go:710` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
 | POST | `/api/workspace/mkdir` | `server/server.go:713` | Optional registration; adapters required: `python/artex/server/workspace_mutations.py:33` |
 | GET | `/api/workspace/read` | `server/server.go:711` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
-| POST | `/api/workspace/upload` | `server/server.go:716` | Not registered |
+| POST | `/api/workspace/upload` | `server/server.go:716` | Optional registration; adapters required: `python/artex/server/workspace_upload.py:72` |
 | POST | `/api/workspace/write` | `server/server.go:712` | Optional registration; adapters required: `python/artex/server/workspace_write.py:51` |
 
 ## Python registration prerequisites
@@ -441,6 +441,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/tasks/{id}/control`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `PATCH /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `POST /api/tasks/control/batch`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `GET /api/tokens/daily`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tokens/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/tokens`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tools`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tools/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tools/custom`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -457,6 +460,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/workspace/download`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/workspace/mkdir`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/workspace/delete`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/upload`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/workspace/write`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 
 ## Non-method mounts

@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 156,
-    "python_optional_service_routes": 151,
-    "matched_offline_contract_routes": 156,
-    "go_routes_without_python_registration": 105
+    "python_offline_contract_routes": 160,
+    "python_optional_service_routes": 155,
+    "matched_offline_contract_routes": 160,
+    "go_routes_without_python_registration": 101
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -16,7 +16,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agents.py": "4bf7c4176bdb1e33c146a36f0b987a3d4b73833f383effcf69afea2e9bbbf8c7",
-    "python/artex/server/application.py": "2b8630c68c1c172803bb00e832e21cdfb714dc43ac88ea3bbc95b144bfde95e0",
+    "python/artex/server/application.py": "45eff4f29928dba38c5c37b68e47c5d6c798493c5dbd40af912b6c81e2a3b083",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/chat.py": "75978f25b2a9f3d8a9ee1e781b025643dffdebecdc00b90dc80ed3adb56fa63f",
@@ -48,10 +48,12 @@
     "python/artex/server/task_scope.py": "a615839f470ec4b03d72cd39b1cd9215ea874baea0f3770187ecfe86060dcb01",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
+    "python/artex/server/token_usage.py": "bbdf17c4ebf208b045c8985061181dd5a2cee83080b7c3b323a93cdf68e99b52",
     "python/artex/server/tool_catalog.py": "7cd1af0502dbb15e1043765d673ee2550df8a148cba7402ef81307262670af6a",
     "python/artex/server/traffic_read.py": "5d94c95cb2f80e564a893aa6f6d0461127f7363c78ac82e967a288b6055ab28f",
     "python/artex/server/workspace.py": "662b502ac862175085cacc5072486af5a686c0270f4adeb6c545a256fb2f3b4e",
     "python/artex/server/workspace_mutations.py": "0e485b004c2209a76d9a2cab1ef4a30f86c2e5666e4512b07cc42c10e687a552",
+    "python/artex/server/workspace_upload.py": "46af0c6313a71a4571d199866e841193f3ffc6bca1f28d2ca618cf0a9b4136c2",
     "python/artex/server/workspace_write.py": "a0b9a8898ef97e91ce5726f52a52792919be46703f3b9897c421654d4ce75341",
     "python/artex/server/wsgi.py": "3d90db4ab424349fe4922c75b4915b006caf749384d45104f91451efd5167e6d"
   },
@@ -1203,8 +1205,19 @@
       "expression": "\"POST /api/workspace/upload\"",
       "method": "POST",
       "path": "/api/workspace/upload",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/workspace/upload",
+        "source": "python/artex/server/workspace_upload.py",
+        "line": 72,
+        "function": "WorkspaceUploadService.register",
+        "handler": "lambda req, p: self.handle(req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/scope",
@@ -2359,8 +2372,19 @@
       "expression": "\"GET /api/exploration/tokens\"",
       "method": "GET",
       "path": "/api/exploration/tokens",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/tokens",
+        "source": "python/artex/server/token_usage.py",
+        "line": 26,
+        "function": "TokenUsageService.register",
+        "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tokens/daily",
@@ -2371,8 +2395,19 @@
       "expression": "\"GET /api/tokens/daily\"",
       "method": "GET",
       "path": "/api/tokens/daily",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tokens/daily",
+        "source": "python/artex/server/token_usage.py",
+        "line": 26,
+        "function": "TokenUsageService.register",
+        "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tokens/conversations",
@@ -2383,8 +2418,19 @@
       "expression": "\"GET /api/tokens/conversations\"",
       "method": "GET",
       "path": "/api/tokens/conversations",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tokens/conversations",
+        "source": "python/artex/server/token_usage.py",
+        "line": 26,
+        "function": "TokenUsageService.register",
+        "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tokens/usage",
@@ -6594,6 +6640,42 @@
     },
     {
       "method": "GET",
+      "path": "/api/tokens/daily",
+      "source": "python/artex/server/token_usage.py",
+      "line": 26,
+      "function": "TokenUsageService.register",
+      "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tokens/conversations",
+      "source": "python/artex/server/token_usage.py",
+      "line": 26,
+      "function": "TokenUsageService.register",
+      "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/tokens",
+      "source": "python/artex/server/token_usage.py",
+      "line": 26,
+      "function": "TokenUsageService.register",
+      "handler": "lambda req, params, a=op: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/tools",
       "source": "python/artex/server/tool_catalog.py",
       "line": 22,
@@ -6779,6 +6861,18 @@
       "line": 34,
       "function": "WorkspaceMutationService.register",
       "handler": "lambda req, p: self.handle('delete', req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspace/upload",
+      "source": "python/artex/server/workspace_upload.py",
+      "line": 72,
+      "function": "WorkspaceUploadService.register",
+      "handler": "lambda req, p: self.handle(req)",
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",

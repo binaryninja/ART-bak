@@ -717,3 +717,35 @@ on manifest `c2b3c4180bc22bb9eccca1eb4e6c7918507f210c6a28f64ab4662514292fba24`.
 One text-trimming difference is retained explicitly: Go can keep a truncated
 invalid UTF-8 byte, while Python drops it to preserve valid text. These fixtures
 do not exercise provider calls, actual retries, streaming or network behavior.
+
+## Scoped token accounting reads (stage 58)
+
+Four real PostgreSQL groups passed on manifest
+`83114dd32aaa0b699b3a2a753e208644879bd3b3055aad23d97686ccc476fc3e`.
+Exact integer/Decimal totals, UTC daily grouping, conversation-creation date
+semantics and archived refusals were verified. Two-connection archive/prune
+ordering was checked around the single aggregate SQL snapshot. These source
+APIs expose token counts, not prices or billing costs; no broad archive recovery
+or reconciliation is claimed.
+
+## Bounded single-file workspace upload (stage 59)
+
+Thirteen existing/review tests and four additional checks passed on manifest
+`1afd324200aa6e3316506daabc2d7564a483c9a7b6f895656dd84c9acc898d3a`.
+Exact binary bytes/hash, immutable proposals, revoked overwrite preserving old
+content/mode, post-fsync uncertainty without retry, and malformed-header rejection
+before resolution were verified. Only disposable fixture files were used. The
+subset accepts one file, not recursive directories, extraction or source multi-file
+batch parity. Default routes and permissions are unchanged.
+
+## New frontend timestamp helper only
+
+The AST-extracted newly authored interceptVersion helper (SHA256
+`1b410015211dcdaeb8fb0efcf43943003fe25aec71742fc3759690bdba7731ee`)
+passed four precision/offset preservation cases and ten malformed-input rejection
+cases. Only that function was transpiled with the existing trusted TypeScript
+parser and executed in an isolated context without app imports, fetch or browser.
+Its regex validates timestamp shape, not calendar validity; backend ISO parsing
+and timestamp CAS remain required. Source-level review verified original edit
+snapshots, no mutation replay and read-only refresh after conflicts. No component,
+frontend build/typecheck, browser or request-serialization end-to-end claim.
