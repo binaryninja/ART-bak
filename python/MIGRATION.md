@@ -15,9 +15,9 @@ network scanner, or integration suite was executed for this inventory.
 ## Measured baseline
 
 - 600 tracked files; 327 Go files totaling 93,282 lines, including 153 Go test files.
-- 252 HTTP method/path route registrations, plus two mount handlers, across
+- 261 HTTP method/path route registrations, plus two mount handlers, across
   `server/server.go`, `server/finding_traffic.go`, and `server/side_questions.go`.
-  Seven finding-traffic paths are constructed from a common base, so counting
+  Nine side-question routes are loop-generated. Seven finding-traffic paths are constructed from a common base, so counting
   quoted path literals alone is insufficient. Counts describe registrations, not
   proven externally reachable unique endpoints.
 - 49 `CREATE TABLE` statements in `db/schema.sql`. This is not a complete count of
@@ -73,7 +73,7 @@ PORT_NOTES file. Passing mocks does not establish Go or production parity.
 | llmpool / llmrec | Ordered provider chain, ranking/retry/capacity; request/response capture via injected providers and sinks | Norma SDK, production transport, async lifecycle, cancellation and DB wiring |
 | intercept | Priority rules/cache, reviewer envelopes, human approval/cancellation adapters | SQL/config/model/trace services; deliberate fail-closed differences need acceptance testing |
 | agent | Deadline/metadata/boundary/trace/replay primitives | Main/goals/planner/workers SDK loop, real tools, graph transitions, scheduling |
-| server | Isolated HTTP router, health/auth contracts, JWT and injected stores/bcrypt | Listener, production keys/DB/bcrypt, most of 252 routes, SSE, frontend integration |
+| server | Isolated HTTP router, health/auth contracts, JWT and injected stores/bcrypt | Listener, production keys/DB/bcrypt, most of 261 routes, SSE, frontend integration |
 | mcphttp / skills | Injected-transport RPC/session/SSE parsing; metadata and offline catalog | Real HTTP/TLS, legacy SSE pump, Norma registry, full YAML/ZIP, tool invocation |
 | traffic / evidence | Offline SQLite search/capture/archive and blob/reference/hash/store helpers | MITM proxy/CA, DB/SDK wiring, staged deletion/recovery/retention |
 | notify | Filtering, credential destination guard, signatures/rendering, static SSRF checks | Production transports, digests/retry services, dynamic DNS/connect-time safeguards |

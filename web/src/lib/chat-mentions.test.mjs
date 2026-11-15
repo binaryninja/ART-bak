@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeMention, mentionSearch, mentionToken, selectedMentions } from "./chat-mentions.ts";
+import { activeMention, mentionKinds, mentionSearch, mentionToken, selectedMentions } from "./chat-mentions.ts";
 
 test("mention trigger supports Chinese and cursor placement without hijacking email", () => {
   assert.equal(activeMention("user@example.com", 16), null);
@@ -30,4 +30,21 @@ test("tokens roundtrip labels and removing one reference preserves its neighbors
   assert.equal(selected[0].label, "Finding #12 · \u6807\u9898（1） \u63cf\u8ff0");
   const next = value.slice(0, selected[0].start) + value.slice(selected[0].start + selected[0].token.length);
   assert.equal(selectedMentions(next)[0].token, second);
+});
+
+
+test("all mention kinds emit English tokens and parse both English and legacy history", () => {
+  for (const [index, entry] of mentionKinds.entries()) {
+    const id = index + 1;
+    const token = mentionToken({ kind: entry.kind, id, label: "Example", description: "" });
+    assert.equal(token, `@[${entry.label}#${id} Example]`);
+    for (const prefix of [entry.label, entry.legacyLabel]) {
+      const records = selectedMentions(`@[${prefix}#${id} Example]`);
+      assert.equal(records.length, 1);
+      assert.equal(records[0].label, `${entry.label} #${id} · Example`);
+    }
+  }
+  assert.equal(selectedMentions("@[App#42 Example]")[0].label, "Application #42 · Example");
+  assert.equal(selectedMentions("@[Unknown#42 Example]").length, 0);
+  assert.equal(mentionSearch("App Example").kind, "app");
 });
