@@ -35,6 +35,7 @@ from ..db.conversation_activity import ConversationActivityStore
 from ..sidequestion import Model
 from .runtime_setup import RuntimeBundle
 from .chat import ChatResources, ChatService
+from ..agent.chat_compaction import ChatCompaction
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,7 @@ class ChatRuntimeBundle:
 def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
                                authorize, gate, tools, system_prompt, single_process,
                                workers=1, capacity=4, max_receipts=10000,
-                               capture=None, limits=Limits()):
+                               capture=None, limits=Limits(), compaction=None):
     """Return an unregistered service and explicit owned dispatcher.
 
     authorize(request, conversation)->True is required for every live resource
@@ -61,6 +62,8 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
     profile_runtime must use the same authorized database deployment as executor.
     Construction reads no conversation or private profile and calls no provider.
     """
+    if compaction is not None and not isinstance(compaction,ChatCompaction):
+        raise ValueError('Explicit valid compaction configuration required')
     if single_process is not True:
         raise ValueError('Explicit single-process conversation authority required')
     if not isinstance(profile_runtime, RuntimeBundle):
@@ -133,7 +136,7 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
 
         return ChatResources(transcript=transcript, model=model, resolver=binding,
             gate=checked_gate, durable_result=transcript.finalized_result, tools=tools,
-            system=prompt, capture=capture, limits=limits)
+            system=prompt, capture=capture, limits=limits, compaction=compaction)
 
     dispatcher = ChatDispatcher(workers=workers, capacity=capacity, max_receipts=max_receipts, single_process=True)
     try:
@@ -159,7 +162,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
                            transport_factory, health, transcript_root,
                            authorize, gate, tools, agent_available, system_prompt,
                            single_process, workers=1, capacity=4, max_receipts=10000,
-                           capture=None, limits=Limits(), application_options=None,
+                           capture=None, limits=Limits(), compaction=None, application_options=None,
                            catalog_store=None, catalog_prompt=None, catalog_detail_defaults=None):
     """Opt-in complete configuration/conversation WSGI wiring, without listening.
 
@@ -179,6 +182,9 @@ def build_chat_application(executor, signing_key, password_codec, *,
     Catalog reads do not require a provider. No builtins are seeded.
     On assembly failure any newly created dispatcher is cancelled and drained.
     """
+    if compaction is not None and not isinstance(compaction,ChatCompaction):
+        raise ValueError('Explicit valid compaction configuration required')
+
     from .runtime_setup import build_profile_runtime_application
     if not callable(agent_available) or not callable(system_prompt):
         raise ValueError('Explicit agent registry and prompt resolver required')
@@ -246,7 +252,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
         chat = build_conversation_runtime(executor, profiles,
             transcript_root=transcript_root, authorize=authorize, gate=gate, tools=tools,
             system_prompt=prompt, single_process=single_process, workers=workers,
-            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits)
+            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits, compaction=compaction)
         state['chat'] = chat
         chat.service.register(profiles.application.router)
         if catalog is not None:catalog.register(profiles.application.router)

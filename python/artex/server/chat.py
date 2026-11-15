@@ -25,6 +25,7 @@ from ..agent.chat import ChatAgent,ChatBusy,ChatUnavailable,ChatPersistenceError
 from ..agent.runtime import Limits,RunResult,RunStopped,BoundedAgent
 from ..chat_dispatch import DispatchConflict,DispatchUnavailable,DispatchPersistenceError
 from ..sidequestion import Model
+from ..agent.chat_compaction import ChatCompaction
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ChatResources:
     capture: object=field(default=None,repr=False)
     limits: Limits=Limits()
     clock: object=field(default=None,repr=False)
+    compaction: ChatCompaction|None=None
 
 
 def _object(pairs):
@@ -161,6 +163,10 @@ class ChatService:
             if not isinstance(resources.model,Model) or not resources.model.identity:
                 raise ValueError('Identified model required')
             if not isinstance(resources.system,str):raise ValueError('Invalid system prompt')
+            if resources.compaction is not None:
+                if not isinstance(resources.compaction,ChatCompaction):raise ValueError('Invalid compaction configuration')
+                if resources.compaction.budget.context_window!=(resources.model.window_tokens or 200000):
+                    raise ValueError('Compaction window must match identified model')
             resources.system.encode('utf-8')
             binding=resources.resolver(deepcopy(resources.model))
             from ..agent.chat import ChatBinding
@@ -171,7 +177,7 @@ class ChatService:
             BoundedAgent(preflight_provider,gate=resources.gate,tools=resources.tools,limits=resources.limits)
             # Validate remaining adapter prerequisites before user activity.
             ChatAgent(resources.transcript,resources.resolver,gate=resources.gate,tools=resources.tools,
-                      capture=resources.capture,limits=resources.limits,clock=resources.clock)
+                      capture=resources.capture,limits=resources.limits,clock=resources.clock,compaction=resources.compaction)
             def run(token):
                 def check():
                     token.check()
@@ -181,7 +187,7 @@ class ChatService:
                 def resolver(model):
                     check();binding=resources.resolver(model);check();return binding
                 agent=ChatAgent(resources.transcript,resolver,gate=gate,tools=resources.tools,
-                                capture=resources.capture,limits=resources.limits,clock=resources.clock)
+                                capture=resources.capture,limits=resources.limits,clock=resources.clock,compaction=resources.compaction)
                 check()
                 outcome=agent.run(conversation.session_id,client,message,model=resources.model,system=resources.system,
                                   metadata={'conversation_id':identifier,'agent_key':conversation.agent_key},token=token)

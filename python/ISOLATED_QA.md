@@ -276,3 +276,72 @@ denied launch creates no process, output bound, timeout, cancellation/reap and
 exit-code annotation. Commands were fixed harmless printf/exit/sleep fixtures,
 not agent-selected workloads or targets. This is not proof of OS confinement,
 escaped-descendant cleanup, arbitrary spawn/wait bounds or absence of PGID reuse.
+
+## Scoped planner and worker cycles (stage 20)
+
+Six grouped real-PG checks passed on immutable manifest
+`74ca17de52862d929f5b1a2c6a8d6932d2516029ffa5cba41029b1eb49f80310`.
+Actual stores, registered memory-only spy tools and durable JSONL verified scoped
+intent creation/anchors/lineage, transactional batch rollback, replay without a
+second provider call, fresh wake context, worker claim/version/settlement and
+three cancellation reasons. Model text claiming success did not mark a goal met.
+Two contenders had one claim winner under a shared fixture lifecycle lock; this
+is not overlapping-transaction or distributed lease stress. Injected settlement
+SQL failure left a running, unresolved intent and prevented provider replay.
+No autonomous scheduler, model, externally effective tools or targets ran. This
+is not proof of cross-store atomicity, automatic recovery or complete orchestration.
+
+## Explicit provider recording adapter (stage 21)
+
+Six real-PG groups passed on immutable manifest
+`ae8dd9d61486172e2b5720f7b882acb053e7087b76b6ae15c73059c3fab0ee22`.
+Complete, streamed, partial-close, cancellation and error observations produced
+redacted records plus known usage atomically. Explicit immutable provider binding
+required literal approval; rejected and never-started streams caused no provider
+work. A real trigger failure rolled back both rows. A committed transaction with
+simulated lost acknowledgment raised recording uncertainty without provider retry.
+The fixture used inert providers and explicit recording opt-in; automatic app
+wiring, production redaction completeness and provider equivalence are not proven.
+
+## Scoped graph tools (stage 22)
+
+Six real-PG groups passed on immutable manifest
+`7ebe2e6e389583e9fb1d22dc85029ee4b6fb00ee35ff8a65e7a5e0791ecaad49`:
+local fact payload/asset anchors/intent lineage, foreign-evidence denial, actual
+second-fact FK rollback, evidence-linked proof and duplicate edge behavior, actual
+goal-state trigger failure rollback, and stale/cancel guards before writes.
+Proving a graph relation does not establish semantic truth of evidence and never
+automatically completes a task. Inherited-union writes remain unsupported.
+
+## Explicit resolved-resource compaction (stage 23)
+
+Six real-PG/JWT/profile/conversation/JSONL groups passed on manifest
+`2e16f32e8f275ebeca6312d33377edc2367c43b9136bf777e2712de9af2fe439`.
+The actual compacted main request matched capture; raw history was retained.
+Summary usage survived denied main approval and main failure; exhausted budget
+prevented a main call. Real transcript and profile changes during the final
+resolver prevented stale summary transport. This snapshot explicitly constructed
+ChatAgent from resolved resources; it did not test HTTP POST admission wiring or
+automatic recording. Later assembly changes require their own evidence.
+
+## Graph context non-mutating views (stage 24)
+
+Five requested real-PG groups passed on manifest
+`7db4c52a79d5b86f50eb94eaca22dd7ad2ab27258f21a5b73261177c5486e9d8`:
+hot/cold lineage and revival-aware persisted digest views, source list limits,
+node/edge/byte bounds, stale/cancel rejection and foreign-scope rejection.
+An extra compatibility probe failed: PostgreSQL READ ONLY rejects FOR SHARE.
+This is a non-mutating view requiring a transaction capable of parent row locks,
+not a read-only-replica adapter. No inherited graph, cold-stamp persistence or
+cross-writer consistency guarantee was tested.
+
+## HTTP-admitted compaction (stage 25)
+
+Four actual POST202 groups passed on manifest
+`6b69eeceebb838cb7c059c699feb4d89ba738838d56a2afdc0d08461e1c6515f`.
+JWT/PG-backed profile and conversation admission invoked the concrete inert
+provider twice for summary/main; capture, raw JSONL, activity and combined usage
+matched. Duplicate admission did not repeat providers. Denial/main failure kept
+known summary usage and persisted an error. A real profile-window mismatch
+returned 400 before activity or provider work. Dispatcher and pool drains were
+clean. This is optional conversation compaction, not autonomous task orchestration.

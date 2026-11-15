@@ -104,10 +104,28 @@ class RuntimeContext(dict):
     A decorator that copies mappings loses the methods, so `runtime_context` is
     also carried in metadata for injected transports/tools to call check().
     """
-    def __init__(self, metadata, token, deadline, clock):
+    def __init__(self, metadata, token, deadline, clock, *, usage=None, max_tokens=None):
         super().__init__(metadata or {})
         self.token, self.deadline, self.clock = token, deadline, clock
         self['runtime_context'] = self
+        self._usage, self._max_tokens = usage, max_tokens
+        self._ledger_active=usage is not None
+
+    @property
+    def remaining_tokens(self):
+        if not self._ledger_active or self._usage is None or self._max_tokens is None:
+            raise RunStopped('usage_ledger_unavailable')
+        return max(0,self._max_tokens-self._usage['input_tokens']-self._usage['output_tokens'])
+
+    def charge_auxiliary_usage(self, used):
+        # Account known auxiliary cost even if cancellation/staleness occurred
+        # during the call; those fences run immediately afterward.
+        if not self._ledger_active or self._usage is None or type(used) is not dict:
+            raise RunStopped('invalid_usage')
+        if set(used)-set(self._usage) or any(type(v) is not int or v<0 for v in used.values()):
+            raise RunStopped('invalid_usage')
+        for key,value in used.items():self._usage[key]+=value
+        if self.remaining_tokens<=0:raise RunStopped('token_budget')
 
     def check(self):
         cancelled = getattr(self.token, 'cancelled', False)
@@ -195,9 +213,9 @@ class BoundedAgent:
 
     def run(self, request, *, token=None, metadata=None):
         limits = self.limits
-        context = RuntimeContext(metadata, token, self.clock() + limits.max_seconds, self.clock)
         messages, events = [], []
         usage = dict(input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_write_tokens=0)
+        context = RuntimeContext(metadata, token, self.clock() + limits.max_seconds, self.clock,usage=usage,max_tokens=limits.max_tokens)
         turns = tool_calls = 0
         reason = 'max_turns'
         seen = set()
@@ -358,4 +376,6 @@ class BoundedAgent:
                     break
         except RunStopped as exc:
             reason = exc.reason
+        finally:
+            context._ledger_active=False
         return RunResult(reason, messages, usage, turns, tool_calls, events)

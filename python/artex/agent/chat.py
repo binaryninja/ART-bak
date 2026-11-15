@@ -3,7 +3,8 @@
 Source: agent/chat.go creates/resumes a session, records human/assistant/tool turns,
 captures normalized main requests, and closes the session. This narrower port
 uses BoundedAgent; NEVER source ModeBypass/default shell/web/skills/MCP tools.
-No filesystem, threads, listener, provider transport, compaction, deferred unlock,
+No filesystem, threads, listener, provider transport or deferred unlock; optional
+working-context compaction requires explicit ChatCompaction. No
 automatic retry is supplied. Streaming profiles use bounded whole-turn assembly. No task/goal completion is implied.
 
 Adapter contract: begin must atomically reserve a running turn and persist its
@@ -25,9 +26,11 @@ from dataclasses import dataclass,field
 from threading import RLock,Event
 import re
 from typing import Protocol
-from .runtime import BoundedAgent,Limits,RunResult,RunStopped
+from .runtime import Action,Grant,BoundedAgent,Limits,RunResult,RunStopped
 from ..sidequestion import Model
 from .streaming import StreamingCompletion, StreamLimits
+from .chat_compaction import ChatCompaction
+import json
 
 
 class ChatBusy(RuntimeError):pass
@@ -102,6 +105,44 @@ class _Provider:
         binding=self.host._binding(self.model)
         context.check()
         self.host._check_turn(self.session,self.turn)
+        if self.host.compaction is not None:
+            def live():
+                context.check()
+                self.host._check_turn(self.session,self.turn)
+                self.host._binding(self.model)
+                self.host._check_turn(self.session,self.turn)
+                context.check()
+                return True
+            outer=self
+            class SummaryProvider:
+                def complete(inner,ctx,summary_request):
+                    live()
+                    fresh=outer.host._binding(outer.model)
+                    # Resolver callbacks may block or invalidate this turn.
+                    # Fence after the final resolution before any transport.
+                    ctx.check()
+                    outer.host._check_turn(outer.session,outer.turn)
+                    ctx.check()
+                    provider=fresh.provider
+                    if outer.model.streaming:
+                        provider=StreamingCompletion(provider,check=live,
+                            limits=StreamLimits(max_bytes=outer.host.limits.max_request_bytes),
+                            usage_callback=ctx.charge_auxiliary_usage)
+                        return provider.complete(ctx,summary_request)
+                    result=provider.complete(ctx,summary_request)
+                    ctx.charge_auxiliary_usage(result[2])
+                    return result
+            request=self.host.compaction.prepare(context,request,provider=SummaryProvider(),
+                gate=self.host.gate,current=live,usage_accounted=True)
+            live()
+            # The outer runtime gate saw the raw request. Authorize the exact
+            # transformed main request separately, never reuse its old grant.
+            encoded=json.dumps(request,ensure_ascii=False,allow_nan=False,separators=(',',':'))
+            if len(encoded.encode('utf-8'))>self.host.limits.max_request_bytes:raise RunStopped('request_budget')
+            grant=self.host.gate(context,Action('model','complete',encoded))
+            if not isinstance(grant,Grant) or not all(v is True for v in (grant.permission,grant.in_scope,grant.approved)):
+                raise RunStopped('permission_denied')
+            live()
         if self.host.capture is not None:
             self.version+=1
             self.host.capture(ChatCapture(self.session,self.turn.run_id,self.version,deepcopy(binding.model),deepcopy(request)))
@@ -122,11 +163,13 @@ class _Provider:
 
 
 class ChatAgent:
-    def __init__(self,transcript:TranscriptAdapter,resolver,*,gate,tools=(),capture=None,limits=Limits(),clock=None):
+    def __init__(self,transcript:TranscriptAdapter,resolver,*,gate,tools=(),capture=None,limits=Limits(),clock=None,compaction=None):
         if any(not callable(getattr(transcript,name,None)) for name in ('begin','current','commit')):
             raise ValueError('Explicit transcript adapter required')
         if not callable(resolver) or not callable(gate):raise ValueError('Explicit resolver and permission gate required')
         if capture is not None and not callable(capture):raise ValueError('Capture must be callable')
+        if compaction is not None and not isinstance(compaction,ChatCompaction):raise ValueError('Explicit compaction configuration required')
+        self.compaction=compaction
         self.transcript,self.resolver,self.gate,self.tools=transcript,resolver,gate,tuple(tools)
         self.capture,self.limits,self.clock=capture,limits,clock
         self._lock=RLock();self._running={}
@@ -158,6 +201,8 @@ class ChatAgent:
         message.encode('utf-8');system.encode('utf-8')
         if not isinstance(model,Model) or not model.identity:
             raise ValueError('Identified model configuration required')
+        if self.compaction is not None and self.compaction.budget.context_window!=(model.window_tokens or 200000):
+            raise ValueError('Compaction window must match identified model')
         user={'role':'user','content':[{'type':'text','text':message}]}
         token=_Token(token)
         if token.cancelled:raise RunStopped('cancelled')

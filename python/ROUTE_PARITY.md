@@ -88,14 +88,14 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/conversations/delete/batch` | `server/server.go:826` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
 | DELETE | `/api/conversations/{id}` | `server/server.go:829` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
 | PATCH | `/api/conversations/{id}` | `server/server.go:827` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
-| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Optional registration; adapters required: `python/artex/server/chat.py:77` |
-| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Optional registration; adapters required: `python/artex/server/chat.py:75` |
-| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Optional registration; adapters required: `python/artex/server/chat.py:78` |
+| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Optional registration; adapters required: `python/artex/server/chat.py:79` |
+| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Optional registration; adapters required: `python/artex/server/chat.py:77` |
+| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Optional registration; adapters required: `python/artex/server/chat.py:80` |
 | PATCH | `/api/conversations/{id}/profile` | `server/server.go:828` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
 | DELETE | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
-| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:76` |
+| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:78` |
 | GET | `/api/exploration/activity` | `server/server.go:773` | Not registered |
 | GET | `/api/exploration/activity/history` | `server/server.go:774` | Not registered |
 | GET | `/api/exploration/activity/stream` | `server/server.go:777` | Not registered |

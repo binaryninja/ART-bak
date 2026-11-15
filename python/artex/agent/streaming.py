@@ -11,6 +11,9 @@ Cancellation and an explicit live-generation/profile fence run before/after each
 iterator advance and before progress delivery. Blocking next()/close() still
 requires transport deadlines/cooperation. The owned iterator is closed on every
 exit; cleanup failure is an error, never a successfully completed response.
+An optional trusted usage_callback receives validated cumulative-counter
+increments before the post-read live fence, retaining known costs on stale or
+cancelled summaries without exposing content or authorizing further actions.
 """
 from copy import deepcopy
 from dataclasses import dataclass
@@ -51,11 +54,13 @@ def _pairs(pairs):
 
 
 class StreamingCompletion:
-    def __init__(self, provider, *, check, limits=StreamLimits(), progress=None):
+    def __init__(self, provider, *, check, limits=StreamLimits(), progress=None, usage_callback=None):
         if not callable(getattr(provider, 'stream', None)) or not callable(check):
             raise ValueError('Explicit streaming provider and live fence required')
         if not isinstance(limits, StreamLimits) or (progress is not None and not callable(progress)):
             raise ValueError('Invalid stream configuration')
+        if usage_callback is not None and not callable(usage_callback):raise ValueError('Invalid usage callback')
+        self.usage_callback=usage_callback
         self.provider, self.check, self.limits, self.progress = provider, check, limits, progress
 
     def complete(self, context, request):
@@ -92,7 +97,6 @@ class StreamingCompletion:
                     event = next(iterator)
                 except StopIteration:
                     break
-                fence()
                 event_count += 1
                 if event_count > self.limits.max_events:
                     raise RunStopped('stream_budget')
@@ -102,6 +106,19 @@ class StreamingCompletion:
                 if byte_count > self.limits.max_bytes:
                     raise RunStopped('stream_budget')
                 kind = event.get('type')
+                if 'usage' in event:
+                    if kind not in {'message_start', 'message_delta'} or type(event['usage']) is not dict:
+                        raise StreamProtocolError('Invalid stream usage')
+                    delta={key:0 for key in usage}
+                    for field, value in event['usage'].items():
+                        if field not in usage or type(value) is not int or value < 0:
+                            raise StreamProtocolError('Invalid stream usage counter')
+                        delta[field]=max(0,value-usage[field])
+                        usage[field] = max(usage[field], value)
+                    if self.usage_callback is not None:self.usage_callback(delta)
+                    if usage['output_tokens'] > output_cap:
+                        raise RunStopped('token_budget')
+                fence()
                 if kind == 'message_start':
                     if started:
                         raise StreamProtocolError('Duplicate stream start')
@@ -151,15 +168,6 @@ class StreamingCompletion:
                         current[field] = current.get(field, '') + _text(event.get('text'))
                 else:
                     raise StreamProtocolError('Unsupported stream event')
-                if 'usage' in event:
-                    if kind not in {'message_start', 'message_delta'} or type(event['usage']) is not dict:
-                        raise StreamProtocolError('Invalid stream usage')
-                    for field, value in event['usage'].items():
-                        if field not in usage or type(value) is not int or value < 0:
-                            raise StreamProtocolError('Invalid stream usage counter')
-                        usage[field] = max(usage[field], value)
-                    if usage['output_tokens'] > output_cap:
-                        raise RunStopped('token_budget')
                 if self.progress is not None:
                     fence()
                     self.progress(deepcopy(event))
