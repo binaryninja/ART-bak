@@ -62,7 +62,7 @@ restriction. Screenshot/image translations are a separate deliverable.
 
 ## Architecture and parity gates
 
-The following is the integrated checkpoint, verified by 212 offline authored
+The following is the integrated checkpoint, verified by 298 offline authored
 Python tests. Every package remains a partial port; see its README/PORT_STATUS/
 PORT_NOTES file. Passing mocks does not establish Go or production parity.
 
@@ -73,7 +73,7 @@ PORT_NOTES file. Passing mocks does not establish Go or production parity.
 | llmpool / llmrec | Ordered provider chain, ranking/retry/capacity; request/response capture via injected providers and sinks | Norma SDK, production transport, async lifecycle, cancellation and DB wiring |
 | intercept | Priority rules/cache, reviewer envelopes, human approval/cancellation adapters | SQL/config/model/trace services; deliberate fail-closed differences need acceptance testing |
 | agent | Deadline/metadata/boundary/trace/replay primitives | Main/goals/planner/workers SDK loop, real tools, graph transitions, scheduling |
-| server | Isolated HTTP router, health/auth contracts, JWT and injected stores/bcrypt | Listener, production keys/DB/bcrypt, most of 261 routes, SSE, frontend integration |
+| server | Isolated HTTP router, health/auth contracts, JWT and injected stores/bcrypt | WSGI/auth/category composition and optional DB/bcrypt adapters added; real dependencies, production keys, live manager, most of 261 routes, SSE and frontend integration remain unverified |
 | mcphttp / skills | Injected-transport RPC/session/SSE parsing; metadata and offline catalog | Real HTTP/TLS, legacy SSE pump, Norma registry, full YAML/ZIP, tool invocation |
 | traffic / evidence | Offline SQLite search/capture/archive and blob/reference/hash/store helpers | MITM proxy/CA, DB/SDK wiring, staged deletion/recovery/retention |
 | notify | Filtering, credential destination guard, signatures/rendering, static SSRF checks | Production transports, digests/retry services, dynamic DNS/connect-time safeguards |
@@ -96,7 +96,7 @@ Python architecture.
 
 ## Authored-test milestone
 
-Combined suite: **212 tests pass** after integrating thirteen additional worker
+Combined suite: **298 tests pass** after integrating thirteen additional worker
 packages and credential-query regression coverage. No upstream application,
 Go test suite, integration database, live provider or target execution was run.
 TypeScript parse checks are syntax checks only, not type/build/runtime checks.

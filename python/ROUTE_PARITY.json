@@ -5,17 +5,22 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 5,
-    "matched_offline_contract_routes": 5,
-    "go_routes_without_python_registration": 256
+    "python_offline_contract_routes": 11,
+    "python_optional_service_routes": 6,
+    "matched_offline_contract_routes": 11,
+    "go_routes_without_python_registration": 250
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
+    "python/artex/server/application.py": "ec14ddf8e18fe6ee251707aa9f07ffe896d5fbecc4e19726eeabb33b1dc9456d",
     "python/artex/server/auth.py": "180b3901ee0bf1a1557fbcf8b704127136b831e82e8e395d983dc9e8a8836f21",
-    "python/artex/server/core.py": "dd16ee56c2f5a9086f83fa4e5077503c72541aacd4efcc3f0b2d658e7c9d5c94"
+    "python/artex/server/core.py": "dd16ee56c2f5a9086f83fa4e5077503c72541aacd4efcc3f0b2d658e7c9d5c94",
+    "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
+    "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
+    "python/artex/server/wsgi.py": "71252b9308b4466f5c44f0db62961948d038d944f1921372f4b3e34f9ff04872"
   },
   "go_routes": [
     {
@@ -119,9 +124,11 @@
         "function": "AuthService.router",
         "handler": "lambda r, p, name=name: self.handle(name, r)",
         "public": true,
-        "status": "offline contract only; production adapters missing"
+        "registration_mode": "auth router factory",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "offline contract only; production integration unverified"
       },
-      "status": "offline contract only; production adapters missing"
+      "status": "offline contract only; production integration unverified"
     },
     {
       "pattern": "POST /api/auth/init",
@@ -140,9 +147,11 @@
         "function": "AuthService.router",
         "handler": "lambda r, p, name=name: self.handle(name, r)",
         "public": true,
-        "status": "offline contract only; production adapters missing"
+        "registration_mode": "auth router factory",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "offline contract only; production integration unverified"
       },
-      "status": "offline contract only; production adapters missing"
+      "status": "offline contract only; production integration unverified"
     },
     {
       "pattern": "POST /api/auth/login",
@@ -161,9 +170,11 @@
         "function": "AuthService.router",
         "handler": "lambda r, p, name=name: self.handle(name, r)",
         "public": true,
-        "status": "offline contract only; production adapters missing"
+        "registration_mode": "auth router factory",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "offline contract only; production integration unverified"
       },
-      "status": "offline contract only; production adapters missing"
+      "status": "offline contract only; production integration unverified"
     },
     {
       "pattern": "POST /api/auth/change-password",
@@ -182,9 +193,11 @@
         "function": "AuthService.router",
         "handler": "lambda r, p, name=name: self.handle(name, r)",
         "public": false,
-        "status": "offline contract only; production adapters missing"
+        "registration_mode": "auth router factory",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "offline contract only; production integration unverified"
       },
-      "status": "offline contract only; production adapters missing"
+      "status": "offline contract only; production integration unverified"
     },
     {
       "pattern": "GET /api/health",
@@ -203,9 +216,11 @@
         "function": "AuthService.router",
         "handler": "lambda r, p: json_response(200, {'ok': True, 'service': 'artex', 'version': version})",
         "public": true,
-        "status": "offline contract only; production adapters missing"
+        "registration_mode": "auth router factory",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "offline contract only; production integration unverified"
       },
-      "status": "offline contract only; production adapters missing"
+      "status": "offline contract only; production integration unverified"
     },
     {
       "pattern": "GET /api/stats",
@@ -336,8 +351,19 @@
       "expression": "\"GET /api/task-categories\"",
       "method": "GET",
       "path": "/api/task-categories",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/task-categories",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/task-categories",
@@ -348,8 +374,19 @@
       "expression": "\"POST /api/task-categories\"",
       "method": "POST",
       "path": "/api/task-categories",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/task-categories",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/task-categories/{id}",
@@ -360,8 +397,19 @@
       "expression": "\"PATCH /api/task-categories/{id}\"",
       "method": "PATCH",
       "path": "/api/task-categories/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/task-categories/{id}",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/task-categories/{id}",
@@ -372,8 +420,19 @@
       "expression": "\"DELETE /api/task-categories/{id}\"",
       "method": "DELETE",
       "path": "/api/task-categories/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/task-categories/{id}",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/category/batch",
@@ -384,8 +443,19 @@
       "expression": "\"POST /api/tasks/category/batch\"",
       "method": "POST",
       "path": "/api/tasks/category/batch",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/category/batch",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/task-templates",
@@ -468,8 +538,19 @@
       "expression": "\"PATCH /api/tasks/{id}/category\"",
       "method": "PATCH",
       "path": "/api/tasks/{id}/category",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/tasks/{id}/category",
+        "source": "python/artex/server/task_categories.py",
+        "line": 112,
+        "function": "TaskCategoryService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/intercept-rules",
@@ -3223,7 +3304,9 @@
       "function": "AuthService.router",
       "handler": "lambda r, p: json_response(200, {'ok': True, 'service': 'artex', 'version': version})",
       "public": true,
-      "status": "offline contract only; production adapters missing"
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
     },
     {
       "method": "GET",
@@ -3233,7 +3316,9 @@
       "function": "AuthService.router",
       "handler": "lambda r, p, name=name: self.handle(name, r)",
       "public": true,
-      "status": "offline contract only; production adapters missing"
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
     },
     {
       "method": "POST",
@@ -3243,7 +3328,9 @@
       "function": "AuthService.router",
       "handler": "lambda r, p, name=name: self.handle(name, r)",
       "public": true,
-      "status": "offline contract only; production adapters missing"
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
     },
     {
       "method": "POST",
@@ -3253,7 +3340,9 @@
       "function": "AuthService.router",
       "handler": "lambda r, p, name=name: self.handle(name, r)",
       "public": true,
-      "status": "offline contract only; production adapters missing"
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
     },
     {
       "method": "POST",
@@ -3263,7 +3352,81 @@
       "function": "AuthService.router",
       "handler": "lambda r, p, name=name: self.handle(name, r)",
       "public": false,
-      "status": "offline contract only; production adapters missing"
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task-categories",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task-categories",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/task-categories/{id}",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/task-categories/{id}",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/tasks/{id}/category",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/category/batch",
+      "source": "python/artex/server/task_categories.py",
+      "line": 112,
+      "function": "TaskCategoryService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
     }
   ],
   "python_only": []

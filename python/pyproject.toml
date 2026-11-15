@@ -9,5 +9,9 @@ description = "Incremental, non-production Python port of ARTEX"
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0-only"}
 
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+auth = ["bcrypt>=5.0,<6"]
+
 [tool.setuptools.packages.find]
 include = ["artex*"]
