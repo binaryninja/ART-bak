@@ -25,10 +25,16 @@ from .task_coverage import TaskCoverageService
 from .traffic_read import TrafficReadService
 from .workspace_mutations import WorkspaceMutationService
 from .workspace_upload import WorkspaceUploadService
+from .visibility import VisibilityService
+from ..db.visibility import VisibilityStore
 from .intercept_rules import InterceptRuleService
 from ..db.intercept_rules import InterceptRuleStore
 from .token_usage import TokenUsageService
 from ..db.token_usage import TokenUsageStore
+from .command_history import CommandHistoryService
+from ..db.command_history import CommandHistoryStore
+from .pool_health import PoolHealthService
+from ..health import Registry
 
 
 def _validate_coverage_service(executor, service):
@@ -71,6 +77,39 @@ def _validate_workspace_upload_service(service):
         raise ValueError("Explicit scoped workspace upload service required")
 
 
+def _validate_command_history_service(executor, service):
+    if service is None:return
+    if (type(service) is not CommandHistoryService or type(service.store) is not CommandHistoryStore
+        or service.store is not service._store or service._executor is not executor
+        or service.store.executor is not executor or service.store._executor is not executor
+        or service.store.scope is not service._scope or service.store._scope is not service._scope
+        or service.store.guard is not service._guard):
+        raise ValueError('Command history requires exact application executor and fixed scope')
+
+
+def _validate_visibility_service(executor, service):
+    if service is None:
+        return
+    if type(service) is not VisibilityService or type(service.store) is not VisibilityStore:
+        raise ValueError("Explicit scoped visibility service required")
+    store = service.store
+    if (store is not service._store or service._executor is not executor
+            or store.executor is not executor or store._executor is not executor
+            or store.scope is not service._scope or store._scope is not service._scope
+            or store.guard is not service._guard or store._guard is not service._guard):
+        raise ValueError("Visibility service requires original store, scope, guard and application executor")
+
+
+def _validate_pool_health_service(executor, service):
+    if service is None:return
+    if (type(service) is not PoolHealthService or type(service.settings) is not SettingsStore
+        or service.settings is not service._settings or service._executor is not executor
+        or service.settings.executor is not executor or type(service.registry) is not Registry
+        or service.registry is not service._registry or service.guard is not service._guard
+        or service.scope!=service._scope):
+        raise ValueError('Pool service requires exact application settings and registry bindings')
+
+
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
                       finding_store=None, finding_asset_resolver=None, company_store=None,
@@ -83,7 +122,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, workspace_mutation_service=None, workspace_upload_service=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -126,14 +165,30 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     policies; no folder creation/extraction or root inference. Raw request bytes
     pass unchanged after the existing global body limit. That limit is never
     expanded for uploads: the smaller global/service bound wins.
+    Optional command_history_service exposes historical tool inputs/results (not
+    merely shell commands), never command execution. The legacy ?task selector
+    means exploration ID. Its exact scoped/global grants and separate raw-data
+    policy remain explicit; no default routes or inferred narrowing/global reads.
+    Optional visibility_service retains exact scoped store/executor/guard and
+    independent read/mutation policies. Capability-selection metadata does not
+    authorize execution; no seeding, runtime catalog/cache activation or reload
+    is inferred. Absent service installs no visibility routes.
+    Optional pool_health_service uses an explicitly supplied Registry and this
+    executor's SettingsStore. No profiles/providers, read grants, reset approval,
+    idle policy or cache coordination are inferred. Only single-profile reset is
+    supported; reset-all remains unavailable, and raw diagnostic errors redacted.
+    No pool/retry routes are registered by default.
     This is not the full server.
     """
     _validate_coverage_service(executor, coverage_service)
     _validate_traffic_service(traffic_service)
     _validate_workspace_mutation_service(workspace_mutation_service)
     _validate_workspace_upload_service(workspace_upload_service)
+    _validate_visibility_service(executor, visibility_service)
     _validate_intercept_service(executor, intercept_service)
     _validate_token_usage_service(executor, token_usage_service)
+    _validate_command_history_service(executor, command_history_service)
+    _validate_pool_health_service(executor, pool_health_service)
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
     TaskCategoryService(TaskCategoryStore(executor), category_manager).register(router)
@@ -169,6 +224,12 @@ def build_application(executor, signing_key: bytes, password_codec, *,
         token_usage_service.register(router)
     if workspace_upload_service is not None:
         workspace_upload_service.register(router)
+    if command_history_service is not None:
+        command_history_service.register(router)
+    if visibility_service is not None:
+        visibility_service.register(router)
+    if pool_health_service is not None:
+        pool_health_service.register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -184,7 +245,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, workspace_mutation_service=None, workspace_upload_service=None, version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -209,8 +270,11 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     _validate_traffic_service(traffic_service)
     _validate_workspace_mutation_service(workspace_mutation_service)
     _validate_workspace_upload_service(workspace_upload_service)
+    _validate_visibility_service(executor, visibility_service)
     _validate_intercept_service(executor, intercept_service)
     _validate_token_usage_service(executor, token_usage_service)
+    _validate_command_history_service(executor, command_history_service)
+    _validate_pool_health_service(executor, pool_health_service)
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
@@ -257,5 +321,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_wait=side_wait,
                              coverage_service=coverage_service, traffic_service=traffic_service,
                              workspace_mutation_service=workspace_mutation_service,
-                             workspace_upload_service=workspace_upload_service, intercept_service=intercept_service, token_usage_service=token_usage_service,
+                             workspace_upload_service=workspace_upload_service, visibility_service=visibility_service, intercept_service=intercept_service, token_usage_service=token_usage_service, command_history_service=command_history_service, pool_health_service=pool_health_service,
                              version=version, max_body_bytes=max_body_bytes)

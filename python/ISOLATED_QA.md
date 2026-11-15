@@ -749,3 +749,64 @@ Its regex validates timestamp shape, not calendar validity; backend ISO parsing
 and timestamp CAS remain required. Source-level review verified original edit
 snapshots, no mutation replay and read-only refresh after conflicts. No component,
 frontend build/typecheck, browser or request-serialization end-to-end claim.
+
+## Go/Python asset-DSL differential
+
+Of 212 fixtures, 208 matched and four documented Unicode-whitespace cases differed
+on manifest `a0f7ea7f04064ad12c40c019636d749798a9704b51d0f65802196227709483e5`.
+Python treats EM SPACE and NBSP as whitespace; Go's bytewise tokenizer absorbs or
+rejects those cases. Acceptance, whitespace-normalized SQL structure and exact
+ordered parameters were compared without executing SQL. No unexpected mismatch
+was found. This proves neither SQL row semantics nor task-scope authorization;
+callers must still parenthesize OR expressions before adding scoped predicates.
+
+## Scoped command-history reads (stage 60)
+
+Three actual PostgreSQL groups passed on manifest
+`16b08402586b32df3f680aed31def1c32576d9b7a40541e8766e58d3444fbac8`.
+Exact result pairing, ambiguous duplicate rejection, source DTO/filter/statistics,
+separate raw-read authority, SQL text bounds and archive refusal were verified.
+Only synthetic activity text was used; no command was executed. The source `task`
+query parameter denotes an exploration ID, not a task ID. Stricter result pairing
+prevents source cross-scope/duplicate matches rather than reproducing them.
+
+## Visibility metadata (stage 61)
+
+Three actual PostgreSQL groups passed on manifest
+`a606b32baa1c6b642ff02301f355a501a4e808e40bcf937f873067aabbd08a17`.
+Duplicate agent IDs, MCP all-tool-row disable, skill last-write-wins/default-false,
+explicit authority, existence locks and postcommit uncertainty were verified.
+An unsupported fixture role was corrected without source changes. Metadata can
+influence available tool selection upstream, but it is not execution permission;
+no runtime catalog, seeding or permission activation was performed.
+
+## Go/Python health-registry differential
+
+Twenty-five synthetic state transitions matched on manifest
+`a22ae037b74f01b5ae6def22fd8e198ab7b9859d8ca65f7be17021a28fd11ec9`.
+Counts, states, errors and callback counts matched; relative cooldowns matched
+within 0.1 seconds. No persistence-ordering or concurrency parity is claimed.
+
+## Reusable disposable PostgreSQL runner (stage 62, reviewed)
+
+The optional `python/integration/local_postgres_acceptance.py` harness now makes
+current bootstrap-to-completion and representative token/command reads reproducible.
+On manifest `7980cc61554f01ee3926281b5cda61596c5f9c499e9b7ed85a88ecd2cd00d1f0`,
+both actual PostgreSQL groups passed, a populated-schema rerun refused, and three
+independent guard tests passed, including optimized-interpreter refusal before
+connection/schema effects. Fourteen pure argument/environment/path cases also
+passed. Literal-loopback connection was exercised; actual Unix-socket startup
+was blocked by the sandbox, so only its path guards were tested. Isolation was
+not relaxed. The runner never installs dependencies, starts servers or creates/
+drops databases. It leaves fixtures for operator disposal and requires a fresh
+explicitly confirmed local test database with no implicit credentials.
+
+## Pool-health and retry-policy adapters (stage 63)
+
+Three actual PostgreSQL/Registry groups and twelve focused tests passed on the
+same stage-62-reviewed manifest. Validated wire timestamps, bounded profile data,
+error redaction, real settings writes, immutable approvals/idle policies and
+single-profile resets were checked. Retained/cross-thread application callbacks,
+SQL trigger rollback, postcommit coordination uncertainty and reset persistence
+failure were exercised. No provider calls, real keys or default enabling. Reset
+all remains explicitly unavailable in this subset.

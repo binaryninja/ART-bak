@@ -74,3 +74,21 @@ links retain their actual Chinese filename targets. Runtime strings in that
 comments-only slice were not translated. `mcpdiscover.go` and `logsink.go` were
 inspected but unchanged. These bounded passes do not establish whole-server
 English completion.
+
+### Asset DSL and constraint error presentation
+
+Translated 11 error-message occurrences in `db/asset_dsl.go` and four occurrences
+(two distinct messages) in `db/constraints.go`. These cover syntax, invalid field
+or operator, integer requirements, invalid constraint kind, and missing constraint
+errors. Repository consumer/test searches found no comparisons against these
+localized messages; the constraint HTTP layer forwards store errors as prose.
+Its separate validation messages were not changed in this tranche.
+
+An explicit 13-string mapping, original copies and before/after hashes were saved
+in the review evidence. Exact lexical comparison after official gofmt verified
+that every executable token and literal outside that mapping is unchanged,
+including format verbs, SQL, aliases, kind values and control flow. Both files now
+have zero literal Han. No original Go code was executed and no test assertion
+needed alteration. `db/task_scope.go`, `db/company_scope.go` and schema SQL were
+not edited; the `备案` input matcher remains unchanged. This is not a claim of
+whole-repository English completion.
