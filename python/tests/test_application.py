@@ -427,6 +427,44 @@ class ApplicationTests(unittest.TestCase):
         for value in values.values():value.assert_not_called()
         self.assertEqual(len(db.calls),1)
 
+    def test_conversation_auth_missing_and_real_store(self):
+        from artex.server import sign_jwt
+        from artex.db.conversations import ConversationStore
+        from test_conversations import Executor as ConversationExecutor
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.request('/api/conversations')[0],401)
+        self.assertEqual(self.request('/api/conversations',token=token)[0],503)
+        db=ConversationExecutor();running=Mock(return_value=False);agent=Mock(return_value=True)
+        self.app=build_application(self.db,b'x'*32,TestCodec(),conversation_store=ConversationStore(db),
+                                  conversation_running=running,conversation_agent_available=agent)
+        self.assertEqual(db.calls,[]);running.assert_not_called();agent.assert_not_called()
+        self.assertEqual(self.request('/api/conversations')[0],401);self.assertEqual(db.calls,[])
+        status,body=self.request('/api/conversations',token=token)
+        self.assertEqual(status,200);self.assertFalse(body['conversations'][0]['running'])
+        running.assert_called_once_with(1)
+        status,body=self.request('/api/conversations',method='POST',data={'agent_key':'assistant'},token=token)
+        self.assertEqual(status,200);self.assertEqual(body['agent_key'],'assistant')
+        agent.assert_called_once_with('assistant');self.assertEqual(db.events,['begin','commit'])
+        status,body=self.request('/api/conversations/1',method='PATCH',data={'title':'Renamed'},token=token)
+        self.assertEqual(status,200);self.assertEqual(db.calls[-1].params,(1,True,'Renamed',None))
+        self.assertEqual(self.request('/api/conversations/1',method='DELETE',token=token)[0],503)
+
+    def test_persisted_conversation_forward_no_reads(self):
+        class Empty(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        db=Empty();running=Mock();agent=Mock();profile=Mock()
+        with patch('artex.db.conversations.ConversationStore') as store,patch('artex.server.application.ConversationService') as service:
+            build_persisted_application(db,b'x'*32,TestCodec(),conversation_running=running,
+                                        conversation_agent_available=agent,conversation_profile_available=profile)
+            store.assert_called_once_with(db)
+            service.assert_called_once_with(store.return_value,running=running,agent_available=agent,profile_available=profile)
+            store.return_value.list.assert_not_called();store.return_value.get.assert_not_called()
+        running.assert_not_called();agent.assert_not_called();profile.assert_not_called()
+        self.assertEqual(len(db.calls),1)
+
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):
             build_application(self.db, b'short', TestCodec())

@@ -15,6 +15,7 @@ from .tasks import TaskService
 from .assets import AssetService
 from .findings import FindingService
 from .task_templates import TaskTemplateService
+from .conversations import ConversationService
 from .profiles import ProfileService
 from .companies import CompanyService
 from .stats import StatsService
@@ -26,6 +27,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
                       finding_store=None, finding_asset_resolver=None, company_store=None,
                       stats_store=None, stats_runtime_snapshot=None, template_store=None,
+                      conversation_store=None, conversation_running=None,
+                      conversation_agent_available=None, conversation_profile_available=None,
                       profile_store=None, profile_coordinator=None, runtime_snapshot=None,
                       exploration_store_resolver=None, active_task_id=None,
                       exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
@@ -47,7 +50,10 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     resolvers are also explicit and receive the authorized exploration store; no
     global fallback or inherited scope is inferred. Side-question resolvers,
     coordinator, dispatcher, preparation and lifecycle adapters are explicit;
-    construction never starts dispatch workers or performs provider calls. This is not the full server.
+    construction never starts dispatch workers or performs provider calls. Conversation
+    metadata uses explicit agent/profile/running resolvers, never inferred idle state
+    or provider readiness. Conversation store construction performs no reads.
+    This is not the full server.
     """
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
@@ -57,6 +63,9 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     AssetService(asset_store).register(router)
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
     TaskTemplateService(template_store).register(router)
+    ConversationService(conversation_store, running=conversation_running,
+                        agent_available=conversation_agent_available,
+                        profile_available=conversation_profile_available).register(router)
     CompanyService(company_store).register(router)
     StatsService(stats_store, runtime_snapshot=stats_runtime_snapshot).register(router)
     ExplorationService(exploration_store_resolver, active_task_id=active_task_id,
@@ -74,6 +83,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
 
 def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 runner=None, profile_available=None,
+                                conversation_running=None, conversation_agent_available=None,
+                                conversation_profile_available=None,
                                 live_last_activity=None, log_ring=None, allow_global_assets=False,
                                 finding_asset_resolver=None, root_domain_resolver=None,
                                 profile_coordinator=None, runtime_snapshot=None, stats_runtime_snapshot=None,
@@ -108,6 +119,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     from ..db.tasks import TaskStore
     from ..db.findings import FindingStore
     from ..db.task_templates import TaskTemplateStore
+    from ..db.conversations import ConversationStore
     from ..db.profiles import ProfileStore
     from ..db.companies import CompanyStore
     from ..db.stats import StatsStore
@@ -126,6 +138,10 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
                              template_store=TaskTemplateStore(executor),
+                             conversation_store=ConversationStore(executor),
+                             conversation_running=conversation_running,
+                             conversation_agent_available=conversation_agent_available,
+                             conversation_profile_available=conversation_profile_available,
                              company_store=CompanyStore(executor),
                              stats_store=StatsStore(executor, allow_global=True),
                              stats_runtime_snapshot=stats_runtime_snapshot,

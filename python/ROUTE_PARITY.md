@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **71**.
-- python optional service routes: **66**.
-- matched offline contract routes: **71**.
-- go routes without python registration: **190**.
+- python offline contract routes: **82**.
+- python optional service routes: **77**.
+- matched offline contract routes: **82**.
+- go routes without python registration: **179**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -72,7 +72,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/auth/init` | `server/server.go:656` | Offline contract only: `python/artex/server/auth.py:107` |
 | POST | `/api/auth/login` | `server/server.go:657` | Offline contract only: `python/artex/server/auth.py:107` |
 | GET | `/api/auth/status` | `server/server.go:655` | Offline contract only: `python/artex/server/auth.py:107` |
-| POST | `/api/chat` | `server/server.go:815` | Not registered |
+| POST | `/api/chat` | `server/server.go:815` | Optional registration; adapters required: `python/artex/server/chat.py:75` |
 | GET | `/api/chat/mentions` | `server/server.go:814` | Not registered |
 | POST | `/api/chat/upload` | `server/server.go:816` | Not registered |
 | GET | `/api/commands` | `server/server.go:793` | Not registered |
@@ -83,19 +83,19 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/companies/{id}` | `server/server.go:751` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
 | GET | `/api/companies/{id}` | `server/server.go:750` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
 | POST | `/api/companies/{id}/scope` | `server/server.go:752` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
-| GET | `/api/conversations` | `server/server.go:824` | Not registered |
-| POST | `/api/conversations` | `server/server.go:825` | Not registered |
-| POST | `/api/conversations/delete/batch` | `server/server.go:826` | Not registered |
-| DELETE | `/api/conversations/{id}` | `server/server.go:829` | Not registered |
-| PATCH | `/api/conversations/{id}` | `server/server.go:827` | Not registered |
-| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Not registered |
-| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Not registered |
-| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Not registered |
-| PATCH | `/api/conversations/{id}/profile` | `server/server.go:828` | Not registered |
+| GET | `/api/conversations` | `server/server.go:824` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
+| POST | `/api/conversations` | `server/server.go:825` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
+| POST | `/api/conversations/delete/batch` | `server/server.go:826` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
+| DELETE | `/api/conversations/{id}` | `server/server.go:829` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
+| PATCH | `/api/conversations/{id}` | `server/server.go:827` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
+| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Optional registration; adapters required: `python/artex/server/chat.py:78` |
+| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Optional registration; adapters required: `python/artex/server/chat.py:76` |
+| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Optional registration; adapters required: `python/artex/server/chat.py:79` |
+| PATCH | `/api/conversations/{id}/profile` | `server/server.go:828` | Optional registration; adapters required: `python/artex/server/conversations.py:28` |
 | DELETE | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
-| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Not registered |
+| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:77` |
 | GET | `/api/exploration/activity` | `server/server.go:773` | Not registered |
 | GET | `/api/exploration/activity/history` | `server/server.go:774` | Not registered |
 | GET | `/api/exploration/activity/stream` | `server/server.go:777` | Not registered |
@@ -311,12 +311,23 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/chat`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/messages`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/stop`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages/{seq}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/companies/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/companies/reattribute`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/conversations/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/conversations/{id}/profile`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/conversations/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/delete/batch`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/frontier`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/intents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.

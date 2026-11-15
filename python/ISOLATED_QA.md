@@ -142,3 +142,26 @@ CAS, statistics, and actual scoped side-question HTTP/coordinator/dispatcher als
 passed with inert providers. Only PG17.11 was exercised; PG12 compatibility,
 built-in seeding, upgrades, archive execution and real-model interoperability are
 not claimed.
+
+## Conversation stores and bounded pool (stage 10)
+
+Disposable PostgreSQL 17.11 and psycopg 3.3.9, under the same credential-free,
+network-isolated namespace/bwrap harness, exercised the new conversation metadata,
+activity store and connection pool. Initial run: eight checks passed and three
+failed because optional-row fake tests returned None while the real executor
+raises NoRowsError. Narrow absence handling was corrected; other driver failures
+still propagate. The original failure evidence was retained.
+
+The corrected immutable targeted snapshot passed all 13 grouped checks: missing
+conversation/profile/parent outcomes, missing patch/profile-update behavior,
+transactional creation rollback, actual UndefinedTable propagation, independent
+connection pool concurrency/savepoints/query cancellation/close, observed profile
+key-share blocking, and atomic activity/title/touch rollback. Source SHA256:
+
+- conversations.py: 795a7e0cf7d08c099b81cce36efcc073f25af9ad652d0d5167fb1f91f84afed5
+- conversation_activity.py: 52330da74c743676f39dd57a9f014e88b1181a5dedf5b308be42b251631f2ba9
+- pool.py: 47f5bcf1dabcf0f2007cdf6961fc088f7c1cdf1108b00ad1ee651849dc8f361c
+
+These are scoped DB checks with synthetic fixtures, not a complete chat browser
+or provider integration, distributed transaction proof, or PostgreSQL-version
+matrix. No production data, credentials, targets or providers were used.

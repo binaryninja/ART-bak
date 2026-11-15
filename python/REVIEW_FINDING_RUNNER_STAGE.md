@@ -653,3 +653,213 @@ seed/catalog/configuration stages, optional usage/records tables and runtime
 startup are intentionally absent. Advisory locks coordinate only cooperating code;
 exclusive operational access remains mandatory against external DDL races. No real
 user data, infrastructure, schema or credentials were changed by this review.
+
+## Follow-up: Norma-compatible filesystem transcripts
+
+Read `transcripts.py` and local Norma v0.4.3 reference transcript/types source.
+Independently ran 12 existing temp-file tests and added two passing independent
+`test_transcripts_review.py` checks: hardlinked lock rejection without mutation,
+and post-replace directory-fsync failure leaves an uncertain committed record,
+whose stable-UUID retry through WorkerTranscriptBackend does not duplicate it.
+Only disposable temporary directories were used.
+
+Main/sidechain layout, record fields, parent UUID chaining, boundary exclusion and
+four cumulative usage fields match Norma. Unknown fields survive reconstruction;
+compaction/working-set selection is explicitly not implemented. Unlike original
+append, this store uses full-file CAS replacement and stricter sizes/permissions.
+Session/agent names exclude traversal/separators; root components and all opened
+file/lock/directory components use no-follow/dirfd. Regular-file and single-link
+checks reject symlink/hardlink/FIFO data or lock targets. Stable session locks span
+read-compare-write; temporary files use exclusive creation, private mode, fsync,
+atomic same-directory replace and directory fsync. Repeated CAS writers do not
+silently overwrite another turn.
+
+Guarantees assume trusted root/ancestors and cooperating writers: permission
+ownership is not itself checked, original Norma append does not share advisory
+locks, and a privileged directory-renaming actor is out of scope. Reads create
+lock files and, for sidechains, directories; they are not filesystem-read-only.
+Existing record identity/schema is trusted by file placement: load checks JSON
+objects, but not session_id/agent_id/UUID/message types. Upcoming chat adapters
+must not use such embedded metadata as authorization. New commit batches validate
+identity and UUID duplication, but this is not corrupted-history repair.
+
+Worker backend requires an explicit authoritative generation guard held through
+commit; no default generation check is invented. UUID-equal record retry is
+idempotent, while changed content conflicts. Filesystem durability is not atomic
+with database state; post-rename failure is intentionally ambiguous and must be
+reconciled, not blindly retried as a new record. Deletion/export remain unavailable.
+No new blocking defect found within these stated boundaries.
+
+## Follow-up: frontend SSE fix and durable chat transcript bridge
+
+Independently ran four frontend-shaped query-JWT WSGI tests after the reserved-token
+fix. All pass. Updated FRONTEND_INTEGRATION_GAPS.md to mark this concrete blocker
+resolved, without implying runtime/deployment readiness.
+
+Reviewed `chat_transcripts.py` and ran all 14 temporary-file bridge tests, passing.
+Identity/schema/version checks, user/prefix/result digests and generated-range
+validation prevent malformed ordinary metadata from granting turn authority.
+Loaded session/agent identity is now checked here, addressing the lower-level
+TranscriptStore trust boundary noted earlier. Finalized replay requires verified
+terminal metadata; unresolved duplicate/admission remains blocked. The bridge
+preserves source Norma message records and adds namespaced admission metadata,
+not arbitrary control messages in provider history.
+
+Exact-byte revision CAS fences external append/clear; completed history cannot
+rewrite its admitted prefix. Generated message/tool-result batches validate before
+one atomic replacement, including zero-output denied turns without fabricated
+messages. Terminal digest reconciliation supports retry after uncertain rename
+without rerunning inference. Admission uncertainty remains pending rather than
+claiming completion. Recovery requires an explicit guard asserting old writers
+cannot act and persists interrupted_unknown_effects, not guessed success.
+Actual ChatAgent/inert-provider tests confirm durable completion and duplicate
+replay without another model/tool invocation. Sidechain paths remain separate.
+
+Remaining boundaries: hashes are integrity checks, not cryptographic authenticity
+against a writer controlling the trusted root (such a writer can recompute hashes).
+The root/ancestor/cooperating-lock assumptions still apply. Pending inspection is
+not permission to resume, and the host must supply authoritative recovery fencing.
+History validation repeatedly reconstructs prefixes; large long-lived transcripts
+need performance measurement/compaction design beyond bounded file size. Finalized
+ChatOutcome reuse reports persisted=True with result=None; a future HTTP adapter
+must retrieve/display existing output rather than fabricate a new response. No
+conversation HTTP routes/default runtime are created by this bridge. No blocking
+new defect found in the reviewed scope; only temp fixtures and inert callbacks ran.
+
+## Follow-up: conversation metadata and factory integration
+
+Reviewed `db/conversations.py`, `server/conversations.py`, Go conversation handlers,
+new factory forwarding and associated tests. Independently ran 12 conversation
+and 23 application tests, all passing; no blocking new defect found.
+
+List/create/metadata/profile DTOs retain numeric IDs and source optional profile/
+pin fields; internal session identity is exactly conv-N and is not injected into
+public DTO. List running flags require exact boolean callbacks for nonempty lists,
+not a default false. Empty lists need no invented running state. Source creation
+status is 200, not 201. Missing explicit agent capability fails 503; unknown agent
+is 404, invalid/missing selected profile is 400, and callback/storage errors are
+redacted. Global authenticated administrator access matches source, not a claim of
+per-user tenant isolation. No arbitrary path is accepted as a session ID.
+
+Create inserts child then locks profile FOR KEY SHARE in one transaction; missing
+profile rolls back child insertion. Profile update locks child before profile.
+Atomic metadata PATCH preserves omitted title/pin, and unpin changes only pin
+metadata. Default title is translated. Delete and batch delete remain 503 before
+storage mutation, avoiding false FK-only cleanup without runtime/retest/sidequestion/
+transcript drain. No real conversation execution or deletion occurred.
+
+Application wires optional store plus explicit running/agent/profile callbacks;
+persisted factory constructs the repository without reads or implicit agent startup.
+Updated FRONTEND_INTEGRATION_GAPS.md for metadata progress: /api/agents and ordinary
+message/history/detail/stop/upload routes are still missing, so metadata parity is
+not a working frontend chat flow. Validation uses Python whitespace trim/JSON byte
+encoding auto-detection, stricter shape checks but not exact Go byte-format parity.
+
+## Follow-up: executor pool and explicit profile runtime assembly
+
+Reviewed `db/pool.py` and `server/runtime_setup.py`. Existing 14 pool and five setup
+tests pass independently. Added `test_pool_runtime_review.py` with three passing
+inert checks: cancellation retires a transaction lease, concurrent close does not
+close the same idle executor twice, and durable profile-save/apply failure recovers
+only after explicit reload without invoking transport.
+
+Concrete cancellation defect: `_acquire` catches BaseException from the factory,
+restores capacity, then always raises PoolFactoryError. This swallows process/
+cancellation exceptions unlike operation/transaction paths. Parent agreed the
+contract should preserve these after cleanup; added a fourth failing regression
+requiring cancellation propagation and subsequent capacity reuse. Owner notified
+to change only ordinary Exception into the fixed redacted factory error. No
+cancellation payload is logged. Fix verification pending.
+
+Otherwise construction stays lazy; per-thread outer leases remain pinned through
+commit/rollback and nested savepoints use the same executor. Caught nested errors
+still retire after outer completion. Duplicate factory objects cannot be borrowed
+or closed while another lease owns them. Closed pools wake blocked acquisitions;
+active leases can finish and are retired, and failed closes remain inspectable for
+retry. Capacity timeout does not pretend to interrupt a factory or driver close;
+there is no forced SQL cancellation or mutation retry.
+
+Runtime setup validates options before reads/construction, explicitly reloads
+stored profiles and loads tasks without starting them. ProfileApplyPending is
+wired correctly: durable save remains, published runtime is cleared on apply
+failure, and HTTP reports persisted true/runtime_applied false. It never substitutes
+provider probes or silently constructs task/sidequestion execution. Transport
+factory remains trusted construction-only and host-origin constrained; the helper
+cannot enforce a malicious callback's lack of network side effects. Outstanding
+provider refs/transport resources still require host drain and explicit close.
+All review tests used fake SQL/executors/transports; no connections were opened.
+
+Cancellation fix verified: owner now restores capacity then re-raises non-Exception
+BaseExceptions unchanged; ordinary factory exceptions remain redacted. Independently
+reran all four review tests successfully. The pending cancellation finding above
+is resolved; no known blocking finding remains from this pass.
+
+## Follow-up: async conversation HTTP and dispatcher/frontend contracts
+
+Reviewed in-progress `server/chat.py`, `chat_dispatch.py`, activity persistence and
+`server/chat_setup.py` against frontend api.ts/chat polling and Go activityDTO.
+Found two concrete integration/lifecycle defects, now fixed by owners: HTTP emitted
+raw activity id/created_at rather than frontend seq/ts, breaking merge identity and
+history cursors; dispatcher callback BaseException could terminate a worker without
+settling its receipt. Added `test_async_chat_review.py` with two independent passing
+regressions for frontend DTO identity and cancelled callback receipt settlement/
+retained uncertainty. Independently ran 14 HTTP, 12 dispatcher, four setup tests,
+all passing. Only inert providers, fake SQL and temp transcripts were exercised.
+
+Also flagged and verified corrected dispatcher error mapping (busy/conflict 409,
+closed/capacity 503, persistence uncertainty 503) and finite close-timeout validation.
+Parent-found issues were fixed independently: real tools/limits preflight now
+precedes durable user activity, and GET history/detail plus stop authorize separately
+from provider/resource resolution, so unavailable model configuration does not
+prevent reviewing history or requesting cancellation.
+
+Source-shaped GET returns ascending item order, source seq/ts, cursor and hasMore;
+reverse pages return latest bounded records in chronological order, while since
+polling retains ascending progress. Detail is separately parent-scoped. POST uses
+actual frontend message/attachments shape and returns 202 only after dispatcher owns
+busy/cancel state and durable user activity. Attachments/mentions fail explicitly,
+not silently disappear. Stop requests cancellation, not proven drain. Durable
+transcript completion precedes terminal activity, and uncertain execution/projection
+retains busy ownership for reconciliation rather than enabling an automatic rerun.
+
+No full streaming parity claimed: this is conversation polling, not task/main-agent
+SSE; terminal batch projection is not live per-token/tool progress. Local receipts
+are bounded, not evicted into silent reruns. Frontend currently sends no durable
+client key, so network retries/new POSTs without Idempotency-Key are distinct;
+restart can duplicate user activity because SQL activity and JSONL are not a shared
+transaction. Durable turn metadata prevents rerunning a known finalized client ID,
+not automatic crash recovery. Explicit single-process authority, deletion barriers,
+provider/tool gates and host drain remain required.
+
+## Follow-up: opt-in chat application assembly and task-main core
+
+Independently verified `test_chat_setup.py` (9), `test_task_chat.py` (8),
+`test_chat_assembly_review.py` (1), and `test_task_chat_core_review.py` (3).
+Only disposable JSONL, fake SQL/provider and inert callbacks; no listener/network.
+No new implementation blocker identified in this pass.
+
+Assembly: `build_chat_application` wires the same JWT router for metadata,
+profile configuration and conversation execution. Explicit agent registry excludes
+retester; live running status comes from the dispatcher, profile readiness uses
+supported nonstreaming configuration validation. Model identity is per-bundle HMAC
+of private configuration, not a public key-bearing string. Invalid tool registry
+fails before dispatcher creation; registration failure cancels and drains the newly
+created dispatcher. Profile transport/database resources remain host-owned even
+when construction fails; the helper does not claim to close caller resources.
+Startup configuration reads are explicit and no inference is performed.
+
+Task core: external lifecycle guard and current-scope authority fence admission,
+provider/tool boundaries and commit; this is not implicitly connected to AgentHost.
+Independent tests invalidate scope during capture (no provider call/commit, retained
+busy), inject an uncertain begin after durable admission (retained busy, no provider),
+and reject invalid registry before admission (no lingering busy state). Existing
+real temporary JSONL test confirms finalized duplicate reuse without inference;
+existing cancellation test confirms persisted cancellation can release ownership.
+Uncertain/stale results deliberately retain task ownership. No reconciliation API,
+autonomous planner, activity projection or task-main HTTP readiness is implied.
+Callbacks already in flight cannot be undone; deletion requires cancellation plus
+verified drain under the real host lifecycle barrier.
+
+`FRONTEND_INTEGRATION_GAPS.md` refreshed: optional runtime/profile assembly and
+202/polling message/history/detail/stop service now described as implemented;
+agent catalog, uploads/mentions, task-main HTTP and default deployment remain gaps.

@@ -5,26 +5,30 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 71,
-    "python_optional_service_routes": 66,
-    "matched_offline_contract_routes": 71,
-    "go_routes_without_python_registration": 190
+    "python_offline_contract_routes": 82,
+    "python_optional_service_routes": 77,
+    "matched_offline_contract_routes": 82,
+    "go_routes_without_python_registration": 179
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "d67206ec15e48761e072e3ff24572b25435e87190a8a3d7216e65e1e4ecb08b4",
+    "python/artex/server/application.py": "5c332b7113e2320fa682809273f12119d9e0d5b4238ffae4ea8ad53404410cd9",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
+    "python/artex/server/chat.py": "2ff0c423e9cff1416e3bd102ad7eb1e31d6d8b34a5d145ca29f63d8032d43aa6",
+    "python/artex/server/chat_setup.py": "1ee1a24f11901dce7dd1a48080467e41728316430dc8574bc4d54d727743033f",
     "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
+    "python/artex/server/conversations.py": "2927d9dac2c95472749d709177e56a96c2ff2507fc29ead364bcab9629a71ed1",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
+    "python/artex/server/runtime_setup.py": "1cd2dc501a7eda1c93ff319ba49a8b7ae8667c9ec712c918cf758c12b4b3b19f",
     "python/artex/server/sidequestions.py": "29ce6975dee1354b5ae589c216cf5a25a8dfa62149ba7100b495c0741e426110",
     "python/artex/server/stats.py": "8f5120044a6c596065dece30055041026f6310200cfec385840366651a5cd0ef",
     "python/artex/server/streaming.py": "9fcc2755a12d3f9c2a451566eacd238fb806f5285012f74e2f63c6e04e17f1e2",
@@ -2436,8 +2440,19 @@
       "expression": "\"POST /api/chat\"",
       "method": "POST",
       "path": "/api/chat",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/chat",
+        "source": "python/artex/server/chat.py",
+        "line": 75,
+        "function": "ChatService.register",
+        "handler": "lambda request, params: error_response(503, 'Task chat runtime is not configured')",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/chat/upload",
@@ -2496,8 +2511,19 @@
       "expression": "\"GET /api/conversations\"",
       "method": "GET",
       "path": "/api/conversations",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/conversations",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/conversations",
@@ -2508,8 +2534,19 @@
       "expression": "\"POST /api/conversations\"",
       "method": "POST",
       "path": "/api/conversations",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/conversations",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/conversations/delete/batch",
@@ -2520,8 +2557,19 @@
       "expression": "\"POST /api/conversations/delete/batch\"",
       "method": "POST",
       "path": "/api/conversations/delete/batch",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/conversations/delete/batch",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/conversations/{id}",
@@ -2532,8 +2580,19 @@
       "expression": "\"PATCH /api/conversations/{id}\"",
       "method": "PATCH",
       "path": "/api/conversations/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/conversations/{id}",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/conversations/{id}/profile",
@@ -2544,8 +2603,19 @@
       "expression": "\"PATCH /api/conversations/{id}/profile\"",
       "method": "PATCH",
       "path": "/api/conversations/{id}/profile",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/conversations/{id}/profile",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/conversations/{id}",
@@ -2556,8 +2626,19 @@
       "expression": "\"DELETE /api/conversations/{id}\"",
       "method": "DELETE",
       "path": "/api/conversations/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/conversations/{id}",
+        "source": "python/artex/server/conversations.py",
+        "line": 28,
+        "function": "ConversationService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/conversations/{id}/messages",
@@ -2568,8 +2649,19 @@
       "expression": "\"GET /api/conversations/{id}/messages\"",
       "method": "GET",
       "path": "/api/conversations/{id}/messages",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/conversations/{id}/messages",
+        "source": "python/artex/server/chat.py",
+        "line": 78,
+        "function": "ChatService.register",
+        "handler": "lambda request, params: self.read(request, params['id'])",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/conversations/{id}/messages",
@@ -2580,8 +2672,19 @@
       "expression": "\"POST /api/conversations/{id}/messages\"",
       "method": "POST",
       "path": "/api/conversations/{id}/messages",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/conversations/{id}/messages",
+        "source": "python/artex/server/chat.py",
+        "line": 76,
+        "function": "ChatService.register",
+        "handler": "lambda request, params: self.handle(request, params['id'])",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/conversations/{id}/stop",
@@ -2592,8 +2695,19 @@
       "expression": "\"POST /api/conversations/{id}/stop\"",
       "method": "POST",
       "path": "/api/conversations/{id}/stop",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/conversations/{id}/stop",
+        "source": "python/artex/server/chat.py",
+        "line": 77,
+        "function": "ChatService.register",
+        "handler": "lambda request, params: self.handle(request, params['id'], stop=True)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/conversations/{id}/messages/{seq}",
@@ -2604,8 +2718,19 @@
       "expression": "\"GET /api/conversations/{id}/messages/{seq}\"",
       "method": "GET",
       "path": "/api/conversations/{id}/messages/{seq}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/conversations/{id}/messages/{seq}",
+        "source": "python/artex/server/chat.py",
+        "line": 79,
+        "function": "ChatService.register",
+        "handler": "lambda request, params: self.read(request, params['id'], params['seq'])",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/agents",
@@ -4076,6 +4201,66 @@
       "status": "offline contract only; production integration unverified"
     },
     {
+      "method": "POST",
+      "path": "/api/chat",
+      "source": "python/artex/server/chat.py",
+      "line": 75,
+      "function": "ChatService.register",
+      "handler": "lambda request, params: error_response(503, 'Task chat runtime is not configured')",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/{id}/messages",
+      "source": "python/artex/server/chat.py",
+      "line": 76,
+      "function": "ChatService.register",
+      "handler": "lambda request, params: self.handle(request, params['id'])",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/{id}/stop",
+      "source": "python/artex/server/chat.py",
+      "line": 77,
+      "function": "ChatService.register",
+      "handler": "lambda request, params: self.handle(request, params['id'], stop=True)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/conversations/{id}/messages",
+      "source": "python/artex/server/chat.py",
+      "line": 78,
+      "function": "ChatService.register",
+      "handler": "lambda request, params: self.read(request, params['id'])",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/conversations/{id}/messages/{seq}",
+      "source": "python/artex/server/chat.py",
+      "line": 79,
+      "function": "ChatService.register",
+      "handler": "lambda request, params: self.read(request, params['id'], params['seq'])",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
       "method": "GET",
       "path": "/api/companies",
       "source": "python/artex/server/companies.py",
@@ -4142,6 +4327,78 @@
       "line": 86,
       "function": "CompanyService.register",
       "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/conversations",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/conversations/{id}",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/conversations/{id}/profile",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/conversations/{id}",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/delete/batch",
+      "source": "python/artex/server/conversations.py",
+      "line": 28,
+      "function": "ConversationService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
