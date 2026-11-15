@@ -1,6 +1,8 @@
 import io
 import json
 import unittest
+from unittest.mock import Mock, patch
+from datetime import datetime, timezone
 from artex.server.application import build_application, build_persisted_application
 
 
@@ -68,6 +70,8 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/tasks', token=token)[0], 503)
         self.assertEqual(self.request('/api/logs', token=token)[0], 503)
         self.assertEqual(self.request('/api/assets', token=token)[0], 503)
+        self.assertEqual(self.request('/api/exploration/findings')[0], 401)
+        self.assertEqual(self.request('/api/exploration/findings', token=token)[0], 503)
         self.assertEqual(self.request('/api/logs/history', token=token), (200, {'items': [], 'has_more': False}))
 
     def test_persisted_factory_loads_without_starting(self):
@@ -94,6 +98,54 @@ class ApplicationTests(unittest.TestCase):
                 raise RuntimeError('database unavailable')
         with self.assertRaisesRegex(RuntimeError, 'database unavailable'):
             build_persisted_application(Broken(), b'x' * 32, TestCodec())
+
+    def test_injected_findings_and_explicit_asset_resolver(self):
+        from artex.db.findings import Finding
+        finding = Finding(7,4,None,'CWE-79','','high','summary','proof','worker',[2],
+                          'pending',datetime(2026,11,15,tzinfo=timezone.utc),'Example',1,1,0)
+        store=Mock()
+        store.list.return_value=[finding]
+        store.get.return_value=finding
+        resolver=Mock(return_value={2:{'id':2,'type':'root_domain','domain':'example.test'}})
+        self.app=build_application(self.db,b'x'*32,TestCodec(),finding_store=store,finding_asset_resolver=resolver)
+        self.assertEqual(self.request('/api/exploration/findings')[0],401)
+        store.list.assert_not_called();resolver.assert_not_called()
+        _,payload=self.request('/api/auth/init',method='POST',data={'password':'dummy-password'})
+        token=payload['token']
+        status,body=self.request('/api/exploration/findings',token=token)
+        self.assertEqual(status,200)
+        self.assertEqual(body[0]['assets'],[{'id':'2','type':'root_domain','label':'example.test'}])
+        self.assertEqual(self.request('/api/exploration/findings/7',token=token)[0],200)
+        self.assertEqual(self.request('/api/exploration/findings/export',token=token)[0],503)
+        self.assertEqual(self.request('/api/exploration/findings/7',method='DELETE',token=token)[0],503)
+        store.delete.assert_not_called()
+        self.app=build_application(self.db,b'x'*32,TestCodec(),finding_store=store)
+        self.assertEqual(self.request('/api/exploration/findings',token=token)[0],503)
+
+    def test_persisted_findings_no_startup_enrichment_and_resolver_forwarding(self):
+        class FindingsExecutor(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                if 'FROM findings f' in query.sql:
+                    self.calls.append(query)
+                    return [(7,4,None,'CWE-79','','high','summary','proof','worker',[],
+                             'pending',datetime(2026,11,15,tzinfo=timezone.utc),'Example',1,1,0)]
+                return super().fetch_all(query)
+        self.db=FindingsExecutor()
+        resolver=Mock(return_value={})
+        root=Mock(return_value='example.test')
+        with patch('artex.db.asset_store.AssetStore') as assets:
+            self.app=build_persisted_application(self.db,b'x'*32,TestCodec(),
+                                               finding_asset_resolver=resolver,root_domain_resolver=root)
+            assets.assert_called_once_with(self.db,allow_global=False,root_domain_resolver=root)
+        resolver.assert_not_called();root.assert_not_called()
+        self.assertEqual(len(self.db.calls),1)  # load existing tasks only, never start
+        _,payload=self.request('/api/auth/init',method='POST',data={'password':'dummy-password'})
+        response=self.request('/api/exploration/findings',token=payload['token'])
+        self.assertEqual(response[0],200)
+        self.assertEqual(response[1][0]['finding_id'],'7')
+        resolver.assert_not_called()  # no anchored assets, no guessed/global lookup
 
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):

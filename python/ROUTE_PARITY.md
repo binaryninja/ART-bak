@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **21**.
-- python optional service routes: **16**.
-- matched offline contract routes: **21**.
-- go routes without python registration: **240**.
+- python offline contract routes: **34**.
+- python optional service routes: **29**.
+- matched offline contract routes: **34**.
+- go routes without python registration: **227**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -63,10 +63,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/asset-intercept/rules/{id}` | `server/server.go:919` | Not registered |
 | PUT | `/api/asset-intercept/rules/{id}` | `server/server.go:918` | Not registered |
 | POST | `/api/asset-intercept/rules/{id}/toggle` | `server/server.go:920` | Not registered |
-| DELETE | `/api/assets` | `server/server.go:745` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
-| GET | `/api/assets` | `server/server.go:742` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
-| POST | `/api/assets` | `server/server.go:744` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
-| GET | `/api/assets/counts` | `server/server.go:743` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
+| DELETE | `/api/assets` | `server/server.go:745` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
+| GET | `/api/assets` | `server/server.go:742` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
+| POST | `/api/assets` | `server/server.go:744` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
+| GET | `/api/assets/counts` | `server/server.go:743` | Optional registration; adapters required: `python/artex/server/assets.py:211` |
 | GET | `/api/audit` | `server/server.go:784` | Not registered |
 | POST | `/api/auth/change-password` | `server/server.go:658` | Offline contract only: `python/artex/server/auth.py:107` |
 | POST | `/api/auth/init` | `server/server.go:656` | Offline contract only: `python/artex/server/auth.py:107` |
@@ -100,19 +100,19 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/activity/history` | `server/server.go:774` | Not registered |
 | GET | `/api/exploration/activity/stream` | `server/server.go:777` | Not registered |
 | GET | `/api/exploration/activity/{seq}` | `server/server.go:778` | Not registered |
-| GET | `/api/exploration/findings` | `server/server.go:756` | Not registered |
-| GET | `/api/exploration/findings/asset-tree` | `server/server.go:758` | Not registered |
-| GET | `/api/exploration/findings/export` | `server/server.go:760` | Not registered |
-| GET | `/api/exploration/findings/groups` | `server/server.go:757` | Not registered |
-| GET | `/api/exploration/findings/retests/active` | `server/server.go:766` | Not registered |
-| GET | `/api/exploration/findings/stats` | `server/server.go:759` | Not registered |
-| DELETE | `/api/exploration/findings/{id}` | `server/server.go:769` | Not registered |
-| GET | `/api/exploration/findings/{id}` | `server/server.go:762` | Not registered |
-| PATCH | `/api/exploration/findings/{id}` | `server/server.go:768` | Not registered |
-| POST | `/api/exploration/findings/{id}/deepen` | `server/server.go:764` | Not registered |
-| GET | `/api/exploration/findings/{id}/lineage` | `server/server.go:763` | Not registered |
-| GET | `/api/exploration/findings/{id}/retests` | `server/server.go:765` | Not registered |
-| POST | `/api/exploration/findings/{id}/retests` | `server/server.go:767` | Not registered |
+| GET | `/api/exploration/findings` | `server/server.go:756` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/asset-tree` | `server/server.go:758` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/export` | `server/server.go:760` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/groups` | `server/server.go:757` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/retests/active` | `server/server.go:766` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/stats` | `server/server.go:759` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| DELETE | `/api/exploration/findings/{id}` | `server/server.go:769` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/{id}` | `server/server.go:762` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| PATCH | `/api/exploration/findings/{id}` | `server/server.go:768` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| POST | `/api/exploration/findings/{id}/deepen` | `server/server.go:764` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/{id}/lineage` | `server/server.go:763` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/findings/{id}/retests` | `server/server.go:765` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| POST | `/api/exploration/findings/{id}/retests` | `server/server.go:767` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
 | GET | `/api/exploration/findings/{id}/traffic` | `server/finding_traffic.go:84` | Not registered |
 | POST | `/api/exploration/findings/{id}/traffic` | `server/finding_traffic.go:85` | Not registered |
 | PUT | `/api/exploration/findings/{id}/traffic/order` | `server/finding_traffic.go:88` | Not registered |
@@ -311,6 +311,19 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/stats`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/groups`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/asset-tree`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/export`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/{id}/lineage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/{id}/retests`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/retests/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/exploration/findings/{id}/retests`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/exploration/findings/{id}/deepen`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/exploration/findings/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.

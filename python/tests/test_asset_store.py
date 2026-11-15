@@ -135,7 +135,7 @@ class AssetStoreTests(unittest.TestCase):
                  {'type':'root_domain','domain':''}, {'type':[]}, {'type':'ip','ip':'192.0.2.1','bound_domains':[None]}]
         for value in invalid:
             with self.subTest(value=value), self.assertRaises(AssetInvalid): self.store.validate_upsert(value)
-        for value in ({'type':'service'},{'type':'root_domain','domain':'x','company_id':1}):
+        for value in ({'type':'unknown'},{'type':'root_domain','domain':'x','company_id':1}):
             with self.assertRaises(AssetUnsupported): self.store.validate_upsert(value)
         self.assertEqual(self.executor.queries,[])
 
@@ -167,6 +167,90 @@ class AssetStoreTests(unittest.TestCase):
     def test_unimplemented_mutations_are_explicit(self):
         with self.assertRaises(AssetUnsupported): self.store.update(7,{'type':'app'})
         with self.assertRaises(AssetUnsupported): self.store.delete(7)
+
+    def test_all_extended_sql_matches_source(self):
+        from artex.db import asset_store as module
+        source=(Path(__file__).resolve().parents[2]/'db/assets.go').read_text()
+        for name in ('_SUBDOMAIN_UPSERT','_APP_BUNDLE_UPSERT','_APP_NAME_UPSERT','_HTTP_UPSERT','_OTHER_UPSERT','_ENDPOINT_UPSERT'):
+            self.assertIn('`'+getattr(module,name)+'`',source)
+
+    def test_psl_required_before_writes(self):
+        for asset in ({'type':'subdomain','domain':'a.example.test'}, {'type':'endpoint','url':'https://example.test','method':'get'}):
+            with self.assertRaises(AssetUnavailable): self.store.upsert(asset)
+        self.assertEqual(self.executor.events,[])
+        self.store.root_domain_resolver=lambda host:'unrelated.test'
+        with self.assertRaises(AssetUnavailable): self.store.upsert({'type':'subdomain','domain':'a.example.test'})
+
+    def test_subdomain_relationships_share_transaction(self):
+        self.store.root_domain_resolver=lambda host:'example.test'
+        self.store.upsert({'type':'subdomain','domain':' A.EXAMPLE.TEST. ', 'record_type':'A',
+                           'record_value':['bad, 192.0.2.1','2001:db8::1'], 'icp':'registration'},task_id=1)
+        self.assertEqual(self.executor.events,['begin','commit'])
+        inserts=[q for q in self.executor.queries if q.sql.startswith('\nINSERT INTO assets')]
+        self.assertEqual(len(inserts),4)
+        self.assertEqual(inserts[-1].params[:3],('a.example.test','example.test','A'))
+        self.assertEqual(inserts[-1].params[4:7],('192.0.2.1','192.0.2.0/24','registration'))
+        self.assertEqual(len(self.guard_calls),4)
+        self.assertEqual(sum('INSERT INTO task_asset_links' in q.sql for q in self.executor.queries),1)
+
+    def test_app_natural_keys_and_icp(self):
+        self.store.upsert({'type':'app','app_name':'Example','app_icp':'registration'})
+        query=self.executor.queries[-1]
+        self.assertIn('ON CONFLICT (app_name)',query.sql)
+        self.assertEqual(query.params,('Example',None,None,'registration',4,'scope','{}'))
+        self.store.upsert({'type':'app','app_name':'Example','bundle_id':'org.example'})
+        self.assertIn('ON CONFLICT (bundle_id)',self.executor.queries[-1].sql)
+        self.assertEqual(self.executor.queries[-1].params[:2],('org.example','Example'))
+
+    def test_http_normalization_and_linked_port(self):
+        self.store.root_domain_resolver=lambda host:'example.test'
+        self.store.upsert({'type':'service','url':'HTTPS://A.EXAMPLE.TEST/', 'service_ip':'192.0.2.5',
+                          'technologies':['demo'], 'status_code':200,'auth':[{'user':'demo'}]})
+        query=self.executor.queries[1]
+        self.assertEqual(query.params[:6],('https://a.example.test','HTTPS','a.example.test','192.0.2.5',443,'example.test'))
+        self.assertEqual(query.params[9],200)
+        self.assertIn('443',self.executor.queries[-1].params[3])
+        self.assertEqual(self.executor.events,['begin','commit'])
+
+    def test_other_service_ip_only_requires_no_psl(self):
+        self.store.upsert({'type':'service','ip':'2001:db8::1','port':22,'service_name':' SSH '})
+        query=self.executor.queries[1]
+        self.assertEqual(query.params[:6],('ssh',None,'2001:db8::1',22,None,'2001:db8::/48'))
+        self.assertEqual(len(self.guard_calls),2)
+
+    def test_endpoint_params_and_ip_literal(self):
+        self.store.upsert({'type':'endpoint','url':'https://192.0.2.1/a?x=1','method':'get',
+                          'params':[{'location':'query','name':'x','value':'1'}], 'ip':'192.0.2.1'})
+        query=self.executor.queries[1]
+        self.assertEqual(query.params[:6],('https://192.0.2.1/a?x=1','GET','192.0.2.1','192.0.2.1',443,'192.0.2.1'))
+        self.assertIn('location',query.params[6])
+        self.assertIn("DISTINCT ON ((elem->>'location'), (elem->>'name'))",query.sql)
+
+    def test_url_normalization_preserves_raw_path_query(self):
+        norm=AssetStore._url
+        self.assertEqual(norm('https://EXAMPLE.TEST:443/a%2Fb?b=2&a=1')[0], 'https://example.test:443/a%2Fb?b=2&a=1')
+        self.assertEqual(norm('https://EXAMPLE.TEST/?')[0],'https://example.test/?')
+        for raw in ('https://x/a%xy','https://u:p@x/','//example.test/','https://x:0/','https://x/a b','https://x/é','https://x\\evil/'):
+            with self.subTest(raw=raw), self.assertRaises(AssetInvalid): norm(raw)
+
+    def test_extended_invalid_inputs_before_write(self):
+        values=[{'type':'app','app_name':''}, {'type':'endpoint','url':'https://192.0.2.1','method':''},
+                {'type':'service','ip':'192.0.2.1','service_name':'ssh','port':True},
+                {'type':'service','url':'https://192.0.2.1','auth':[{'x':float('nan')}]},
+                {'type':'service','url':'https://192.0.2.1','status_code':True},
+                {'type':'endpoint','url':'https://192.0.2.1','method':'GET','params':[{'x':{'bad':object()}}]}]
+        for value in values:
+            with self.subTest(value=value), self.assertRaises(AssetInvalid): self.store.upsert(value)
+        self.assertEqual(self.executor.events,[])
+
+    def test_linked_asset_denial_rolls_back_parent(self):
+        def guard(tx,n,task):
+            if n['type']=='root_domain': raise AssetInvalid('denied linked host')
+        self.store.mutation_guard=guard
+        with self.assertRaises(AssetInvalid):
+            self.store.upsert({'type':'endpoint','url':'https://192.0.2.1','method':'GET'},task_id=1)
+        self.assertEqual(self.executor.events,['begin','rollback'])
+        self.assertFalse(any('task_asset_links' in q.sql for q in self.executor.queries))
 
 
 if __name__=='__main__': unittest.main()

@@ -5,20 +5,21 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 21,
-    "python_optional_service_routes": 16,
-    "matched_offline_contract_routes": 21,
-    "go_routes_without_python_registration": 240
+    "python_offline_contract_routes": 34,
+    "python_optional_service_routes": 29,
+    "matched_offline_contract_routes": 34,
+    "go_routes_without_python_registration": 227
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "246e8e9d3c9068a7647bd11dccb14d63fba8cfa6d930974f75d746282b5862b5",
-    "python/artex/server/assets.py": "792754cbaacdc2308219d221f41555a5568ec32c6a05d0813fe25ac72394ae0f",
+    "python/artex/server/application.py": "b69e7db9ea916676d90755c41ff0535b68ac4dcb850e8f7402be9f1295df7f20",
+    "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
+    "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
     "python/artex/server/logs.py": "29fb2ffbe5548540b660a01500da0dfd957b4e559176e3a5f9be5900218cb8c2",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
@@ -1222,7 +1223,7 @@
         "method": "GET",
         "path": "/api/assets",
         "source": "python/artex/server/assets.py",
-        "line": 209,
+        "line": 211,
         "function": "AssetService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1245,7 +1246,7 @@
         "method": "GET",
         "path": "/api/assets/counts",
         "source": "python/artex/server/assets.py",
-        "line": 209,
+        "line": 211,
         "function": "AssetService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1268,7 +1269,7 @@
         "method": "POST",
         "path": "/api/assets",
         "source": "python/artex/server/assets.py",
-        "line": 209,
+        "line": 211,
         "function": "AssetService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1291,7 +1292,7 @@
         "method": "DELETE",
         "path": "/api/assets",
         "source": "python/artex/server/assets.py",
-        "line": 209,
+        "line": 211,
         "function": "AssetService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1394,8 +1395,19 @@
       "expression": "\"GET /api/exploration/findings\"",
       "method": "GET",
       "path": "/api/exploration/findings",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/groups",
@@ -1406,8 +1418,19 @@
       "expression": "\"GET /api/exploration/findings/groups\"",
       "method": "GET",
       "path": "/api/exploration/findings/groups",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/groups",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/asset-tree",
@@ -1418,8 +1441,19 @@
       "expression": "\"GET /api/exploration/findings/asset-tree\"",
       "method": "GET",
       "path": "/api/exploration/findings/asset-tree",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/asset-tree",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/stats",
@@ -1430,8 +1464,19 @@
       "expression": "\"GET /api/exploration/findings/stats\"",
       "method": "GET",
       "path": "/api/exploration/findings/stats",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/stats",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/export",
@@ -1442,8 +1487,19 @@
       "expression": "\"GET /api/exploration/findings/export\"",
       "method": "GET",
       "path": "/api/exploration/findings/export",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/export",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/{id}",
@@ -1454,8 +1510,19 @@
       "expression": "\"GET /api/exploration/findings/{id}\"",
       "method": "GET",
       "path": "/api/exploration/findings/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/{id}",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/{id}/lineage",
@@ -1466,8 +1533,19 @@
       "expression": "\"GET /api/exploration/findings/{id}/lineage\"",
       "method": "GET",
       "path": "/api/exploration/findings/{id}/lineage",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/{id}/lineage",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/exploration/findings/{id}/deepen",
@@ -1478,8 +1556,19 @@
       "expression": "\"POST /api/exploration/findings/{id}/deepen\"",
       "method": "POST",
       "path": "/api/exploration/findings/{id}/deepen",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/exploration/findings/{id}/deepen",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/{id}/retests",
@@ -1490,8 +1579,19 @@
       "expression": "\"GET /api/exploration/findings/{id}/retests\"",
       "method": "GET",
       "path": "/api/exploration/findings/{id}/retests",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/{id}/retests",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/findings/retests/active",
@@ -1502,8 +1602,19 @@
       "expression": "\"GET /api/exploration/findings/retests/active\"",
       "method": "GET",
       "path": "/api/exploration/findings/retests/active",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/findings/retests/active",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/exploration/findings/{id}/retests",
@@ -1514,8 +1625,19 @@
       "expression": "\"POST /api/exploration/findings/{id}/retests\"",
       "method": "POST",
       "path": "/api/exploration/findings/{id}/retests",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/exploration/findings/{id}/retests",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/exploration/findings/{id}",
@@ -1526,8 +1648,19 @@
       "expression": "\"PATCH /api/exploration/findings/{id}\"",
       "method": "PATCH",
       "path": "/api/exploration/findings/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/exploration/findings/{id}",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/exploration/findings/{id}",
@@ -1538,8 +1671,19 @@
       "expression": "\"DELETE /api/exploration/findings/{id}\"",
       "method": "DELETE",
       "path": "/api/exploration/findings/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/exploration/findings/{id}",
+        "source": "python/artex/server/findings.py",
+        "line": 126,
+        "function": "FindingService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/intents",
@@ -3413,7 +3557,7 @@
       "method": "GET",
       "path": "/api/assets",
       "source": "python/artex/server/assets.py",
-      "line": 209,
+      "line": 211,
       "function": "AssetService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3425,7 +3569,7 @@
       "method": "GET",
       "path": "/api/assets/counts",
       "source": "python/artex/server/assets.py",
-      "line": 209,
+      "line": 211,
       "function": "AssetService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3437,7 +3581,7 @@
       "method": "POST",
       "path": "/api/assets",
       "source": "python/artex/server/assets.py",
-      "line": 209,
+      "line": 211,
       "function": "AssetService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3449,7 +3593,7 @@
       "method": "DELETE",
       "path": "/api/assets",
       "source": "python/artex/server/assets.py",
-      "line": 209,
+      "line": 211,
       "function": "AssetService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3516,6 +3660,162 @@
       "registration_mode": "auth router factory",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/{id}",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/exploration/findings/{id}",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/stats",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/groups",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/asset-tree",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/export",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/{id}/lineage",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/{id}/retests",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings/retests/active",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/exploration/findings/{id}/retests",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/exploration/findings/{id}/deepen",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/exploration/findings/{id}",
+      "source": "python/artex/server/findings.py",
+      "line": 126,
+      "function": "FindingService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "method": "GET",

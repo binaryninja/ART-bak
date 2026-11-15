@@ -156,9 +156,9 @@ class AssetHTTPTests(unittest.TestCase):
         self.assertEqual(result.json()['results'],[{'index':2,'id':8,'type':'root_domain'}])
         self.assertEqual([x['index'] for x in result.json()['errors']],[0,1])
 
-    def test_known_unported_type_preflights_entire_batch(self):
+    def test_extended_type_unknown_metadata_preflights_entire_batch(self):
         for typ in ('subdomain','app','service','endpoint'):
-            result=self.request('POST',data={'assets':[{'type':'root_domain','domain':'valid.test'},{'type':typ}]})
+            result=self.request('POST',data={'assets':[{'type':'root_domain','domain':'valid.test'},{'type':typ,'extra':{'not':'supported'}}]})
             self.assertEqual(result.status,503)
         self.assertEqual(self.store.calls,[])
 
@@ -297,6 +297,71 @@ class AssetHTTPTests(unittest.TestCase):
                                   {'type':'root_domain','domain':'two.test','url':'https://two.test'}]}).encode()
         response=router.dispatch(Request('POST','/api/assets',{'Authorization':'Bearer '+self.token},body))
         self.assertEqual(response.status,503)
+
+    def test_extended_types_real_store_bound_atomic_writes(self):
+        class Executor:
+            def __init__(self): self.events=[]
+            @contextmanager
+            def transaction(self):
+                self.events.append('begin')
+                try: yield self
+                except Exception:
+                    self.events.append('rollback')
+                    raise
+                else: self.events.append('commit')
+            def execute(self,q): self.events.append(q); return 1
+            def fetch_one(self,q): self.events.append(q); return (8,)
+        executor=Executor()
+        guarded=[]
+        store=AssetStore(executor,company_resolver=lambda *a:3,
+                         mutation_guard=lambda tx,a,t:guarded.append((a['type'],t)),
+                         root_domain_resolver=lambda host:'example.test')
+        router=self.auth.router()
+        AssetService(store).register(router)
+        cases=[
+            ({'type':'subdomain','domain':'www.example.test','record_type':'A','record_value':['192.0.2.4']},"'subdomain'"),
+            ({'type':'app','app_name':'Sample','bundle_id':'test.example','description':'Keep description','app_icp':'ICP'},"'app'"),
+            ({'type':'service','url':'https://www.example.test/path','service_ip':'192.0.2.4','technologies':['Example'],
+              'auth':[{'custom':'retained'}],'status_code':200},"'service'"),
+            ({'type':'service','ip':'192.0.2.4','port':22,'service_name':'SSH'},"'service'"),
+            ({'type':'endpoint','url':'https://www.example.test/api','method':'post','params':[{'name':'id','custom':'retained'}]},"'endpoint'")]
+        for asset, marker in cases:
+            with self.subTest(asset=asset):
+                executor.events.clear();guarded.clear()
+                response=router.dispatch(Request('POST','/api/assets',{'Authorization':'Bearer '+self.token},
+                    json.dumps({'task_id':2,'assets':[asset]}).encode()))
+                self.assertEqual(response.status,200)
+                self.assertIsNone(response.json()['errors'])
+                self.assertEqual(response.json()['results'][0]['type'],asset['type'])
+                self.assertEqual(executor.events[0],'begin');self.assertEqual(executor.events[-1],'commit')
+                self.assertEqual(executor.events.count('begin'),1)
+                self.assertIn((asset['type'],2),guarded)
+                sql=[q for q in executor.events if hasattr(q,'sql')]
+                self.assertTrue(any(marker in q.sql and 'INSERT INTO assets' in q.sql for q in sql))
+                self.assertTrue(any('task_asset_links' in q.sql for q in sql))
+                self.assertTrue(all('www.example.test' not in q.sql for q in sql))
+                if asset['type']=='app':
+                    self.assertTrue(any('Keep description' in q.params for q in sql))
+                if asset.get('params'):
+                    self.assertTrue(any('retained' in str(q.params) and 'POST' in q.params for q in sql))
+
+    def test_missing_psl_resolver_rejects_entire_batch_before_writes(self):
+        class Executor:
+            def transaction(self): raise AssertionError('No writes may start')
+        store=AssetStore(Executor(),allow_global=True,company_resolver=lambda *a:None,mutation_guard=lambda *a:None)
+        router=self.auth.router();AssetService(store).register(router)
+        for asset in ({'type':'subdomain','domain':'www.example.test'},
+                      {'type':'service','url':'https://www.example.test'},
+                      {'type':'endpoint','url':'https://www.example.test/api','method':'GET'}):
+            response=router.dispatch(Request('POST','/api/assets',{'Authorization':'Bearer '+self.token},
+                json.dumps({'assets':[{'type':'root_domain','domain':'first.test'},asset]}).encode()))
+            self.assertEqual(response.status,503)
+
+    def test_nested_open_port_metadata_not_silently_dropped(self):
+        response=self.request('POST',data={'assets':[{'type':'ip','ip':'192.0.2.1',
+            'open_ports':[{'port':22,'service':'ssh','extra':'important'}]}]})
+        self.assertEqual(response.status,503)
+        self.assertEqual(self.store.calls,[])
 
     def test_missing_store_503_and_auth_precedes_availability(self):
         router=self.auth.router()

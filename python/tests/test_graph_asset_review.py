@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import unittest
 from artex.db.asset_store import AssetStore, AssetUnavailable
 from artex.db.exploration import ExplorationStore, InheritedWriteError
-from artex.server.assets import _parse_insert, _query, InvalidAssetRequest
+from artex.server.assets import _parse_insert, _query, InvalidAssetRequest, AssetService
 from artex.server.core import Request
 
 
@@ -41,12 +41,27 @@ class ReviewExecutor:
 
 class GraphAssetReviewTests(unittest.TestCase):
     def test_duplicate_body_scope_is_rejected_not_globalized(self):
-        with self.assertRaises((InvalidAssetRequest, ValueError)):
-            _parse_insert(b'{"task_id":7,"task_id":0,"assets":[]}')
+        for body in (b'{"task_id":7,"task_id":0,"assets":[]}',
+                     b'{"task_id":0,"task_id":7,"assets":[]}',
+                     b'{"task_id":7,"assets":[{"type":"ip","ip":"127.0.0.1","ip":"127.0.0.2"}]}'):
+            with self.subTest(body=body), self.assertRaises((InvalidAssetRequest, ValueError)):
+                _parse_insert(body)
 
     def test_explicit_null_body_scope_is_rejected(self):
         with self.assertRaises((InvalidAssetRequest, ValueError)):
             _parse_insert(b'{"task_id":null,"assets":[]}')
+
+    def test_ambiguous_body_scope_causes_no_store_calls(self):
+        class NoCalls:
+            def __getattr__(self, name):
+                raise AssertionError('Unexpected store call: ' + name)
+        service = AssetService(NoCalls())
+        for body in (b'{"task_id":7,"task_id":0,"assets":[]}',
+                     b'{"task_id":0,"task_id":7,"assets":[]}',
+                     b'{"task_id":null,"assets":[]}',
+                     b'{"task_id":7,"assets":[{"type":"ip","ip":"127.0.0.1","ip":"127.0.0.2"}]}'):
+            with self.subTest(body=body):
+                self.assertEqual(service._handle('insert', Request('POST','/api/assets',body=body)).status, 400)
 
     def test_malformed_query_scope_never_reaches_store(self):
         for query in ('task_id=', 'task_id=1&task_id=0', 'company_id=null',

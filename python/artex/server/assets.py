@@ -2,9 +2,9 @@
 
 Upstream exposes GET/POST/DELETE /api/assets and GET /api/assets/counts, not
 GET /api/assets/{id} or PATCH asset endpoints. Updates use the POST upsert route.
-This slice supports root-domain/IP upserts through injected persistence only;
-recognized unported types, unsupported mutation fields and deletion return 503
-before mutation. No DNS lookup,
+All six asset types use injected guarded persistence; unsupported mutation
+fields and deletion return 503 before mutation. Hostname-derived writes require
+an offline public-suffix resolver. No DNS lookup,
 enrichment, synchronization, provider request or target traffic occurs here.
 
 Safety differences are explicit: malformed/ambiguous scope selectors return 400
@@ -31,7 +31,7 @@ DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 MAX_REQUEST_BYTES = 1 << 20
 _TYPES = {'root_domain', 'ip', 'subdomain', 'app', 'service', 'endpoint'}
-_IMPLEMENTED_UPSERTS = {'root_domain', 'ip'}
+_IMPLEMENTED_UPSERTS = _TYPES
 _INT = re.compile(r'[+-]?[0-9]+\Z')
 _STRING_FIELDS = {'type','domain','icp','record_type','ip','app_name','bundle_id','category','description',
                   'app_icp','url','page_title','favicon_mmh3','service_ip','service_name','method'}
@@ -181,6 +181,8 @@ def _parse_insert(body: bytes) -> tuple[int, list[dict]]:
             if field == 'open_ports':
                 ports = []
                 for item in value:
+                    if set(item) - {'port','service'}:
+                        raise AssetUnsupported('Unsupported open-port mutation fields')
                     port = _int64(item.get('port'), 'port', default=0)
                     service = item.get('service')
                     if service is None: service = ''
@@ -240,10 +242,8 @@ class AssetService:
             task_id, assets = _parse_insert(request.body)
         except (ValueError, UnicodeError):
             return error_response(400, 'Invalid asset request')
-        # Preflight the entire batch so recognized-but-unported types never cause
-        # earlier supported entries to be committed before an overall 503.
-        if any(asset.get('type','') in _TYPES - _IMPLEMENTED_UPSERTS for asset in assets):
-            raise AssetUnsupported('Asset type upsert is not ported')
+        # Preflight the entire batch before any durable write: a missing offline
+        # resolver or unsupported metadata must not cause a partial 503 batch.
         if any(asset.get('type') in _IMPLEMENTED_UPSERTS for asset in assets):
             self.store.check_mutation_available()
         invalid = set()
