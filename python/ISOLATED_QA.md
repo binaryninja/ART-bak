@@ -54,3 +54,13 @@ Fixture company resolution returns no company, mutation guards are inert and
 root-domain resolution is a deterministic mapping. Production policy adapters,
 public suffix handling, notification/evidence workflows and concurrent lock
 contention remain unverified. Fixture domains/addresses were never contacted.
+
+## Profile and node-board real PostgreSQL checks
+
+The exact tree `dad29d5c007eabc1c6ec638674b117ba15917abf` (published as
+`ecece212d8309c3e6798fd30e00f56328a7571ec`) passed eight additional isolated
+PostgreSQL fixture checks: profile public/private masking, blank-key preservation,
+active selection and missing-ID rollback, explicit unsupported deletion guard,
+node paging/search/scope, inherited intent filtering, edges and anchors.
+Dummy credentials only; no provider calls. Profile deletion, concurrent activation,
+failover repair, pagination snapshot consistency and broader parity remain unproven.

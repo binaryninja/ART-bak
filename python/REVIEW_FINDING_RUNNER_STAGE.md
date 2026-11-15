@@ -149,3 +149,49 @@ authorized asset DTO hydration. The docstring's 'size 20..200' means a default o
 20 and cap of 200; actual positive sizes below 20 remain accepted like upstream.
 No mutation, transport, live PostgreSQL query or traversal execution occurred in
 this review. No additional failing regression was necessary for this pass.
+
+## Follow-up: build translations and profile HTTP
+
+Source-only comparison against translator-provided pre-edit snapshots covered
+Dockerfile, build.sh, update.sh and .github/workflows/release.yml. Dockerfile and
+workflow differences are comments only. Shell changes are help/log/prompt text
+and comments; commands, variable expansions, option parsing, answer defaults and
+control flow remain unchanged. No build, release, install or update was executed.
+
+Profile HTTP registers only upstream paths, using protected Router defaults.
+Inputs reject duplicate JSON, invalid types, masked credentials and oversize
+bodies. Blank-key handling reaches key-preserving ProfileStore SQL through an
+explicit coordinator; there is no accidental direct persistence fallback. The
+persisted-but-apply-pending outcome is distinguishable and redacts adapter errors.
+Runtime snapshots use an allowlisted projection rather than arbitrary key fields.
+Actual cache invalidation/runtime application remains coordinator-owned, not
+implemented or verified merely by these route contracts.
+
+One additional output-integrity issue was found: coordinator.save's return value
+was serialized directly as id. Invalid None/bool/out-of-range IDs or accidentally
+returned private structures produced a 200 response. Independent inert regression
+covers seven invalid return values and requires fixed 500 without leaked content.
+The owner added exact positive-int64 result validation with a fixed storage error.
+Independent rerun: all six review tests pass, including all seven invalid return
+values yielding redacted 500. This finding is fixed and verified.
+This is a trusted-adapter integration hazard, not a claim that remote callers can
+supply arbitrary coordinator implementations.
+
+## Follow-up: node-board HTTP composition
+
+Reviewed new `_nodeboard` HTTP composition and application-factory argument
+forwarding. Pagination uses the effective capped size and validates offset before
+board reads. Board exploration/read-only identity is checked against the resolved
+task; neighbour edges must touch the page, neighbour IDs must be requested, anchor
+keys must belong to selected nodes, and unique neighbours/assets are bounded.
+Only the selected task participates in board pages, not inherited source merging.
+Missing adapters fail unavailable; errors do not expose resolver exception text.
+
+Found an incomplete-resolution gap: an asset resolver could omit requested IDs,
+causing silent loss of decorations. The owner now requires exact requested-key
+coverage; explicit `None` means a confirmed deleted asset. Independent tests in
+`tests/test_nodeboard_http_review.py` verify missing/partial coverage ->503,
+explicit deleted assets ->200, and redacted resolver exceptions ->500. All three
+pass after the fix; existing exploration HTTP suite (21 tests) also passes.
+Application factories forward both board adapters without silently enabling a
+global asset resolver. No worker source was changed by this reviewer.

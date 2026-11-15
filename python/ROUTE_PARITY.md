@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **38**.
-- python optional service routes: **33**.
-- matched offline contract routes: **38**.
-- go routes without python registration: **223**.
+- python offline contract routes: **46**.
+- python optional service routes: **41**.
+- matched offline contract routes: **46**.
+- go routes without python registration: **215**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -120,12 +120,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}` | `server/finding_traffic.go:89` | Not registered |
 | PATCH | `/api/exploration/findings/{id}/traffic/{binding_id}` | `server/finding_traffic.go:86` | Not registered |
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}/body` | `server/finding_traffic.go:90` | Not registered |
-| GET | `/api/exploration/frontier` | `server/server.go:755` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
-| GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
-| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
+| GET | `/api/exploration/frontier` | `server/server.go:755` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
+| GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
+| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
 | GET | `/api/exploration/main-sessions` | `server/server.go:775` | Not registered |
-| GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:68` |
+| GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/tokens` | `server/server.go:779` | Not registered |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
 | GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:105` |
@@ -146,15 +146,15 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/intercept/task/{taskID}` | `server/server.go:928` | Not registered |
 | GET | `/api/intercept/tool-config` | `server/server.go:929` | Not registered |
 | PUT | `/api/intercept/tool-config` | `server/server.go:930` | Not registered |
-| GET | `/api/llm` | `server/server.go:737` | Not registered |
-| POST | `/api/llm` | `server/server.go:738` | Not registered |
-| POST | `/api/llm/models` | `server/server.go:906` | Not registered |
+| GET | `/api/llm` | `server/server.go:737` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| POST | `/api/llm` | `server/server.go:738` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| POST | `/api/llm/models` | `server/server.go:906` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | GET | `/api/llm/pool` | `server/server.go:904` | Not registered |
 | POST | `/api/llm/pool/reset` | `server/server.go:905` | Not registered |
-| GET | `/api/llm/profiles` | `server/server.go:898` | Not registered |
-| POST | `/api/llm/profiles` | `server/server.go:899` | Not registered |
-| POST | `/api/llm/profiles/active` | `server/server.go:901` | Not registered |
-| DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Not registered |
+| GET | `/api/llm/profiles` | `server/server.go:898` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| POST | `/api/llm/profiles` | `server/server.go:899` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| POST | `/api/llm/profiles/active` | `server/server.go:901` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | DELETE | `/api/llm/records` | `server/server.go:796` | Not registered |
 | GET | `/api/llm/records` | `server/server.go:795` | Not registered |
 | GET | `/api/llm/records/by-model` | `server/server.go:798` | Not registered |
@@ -162,7 +162,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/llm/records/{id}` | `server/server.go:799` | Not registered |
 | GET | `/api/llm/retry-policy` | `server/server.go:902` | Not registered |
 | POST | `/api/llm/retry-policy` | `server/server.go:903` | Not registered |
-| POST | `/api/llm/test` | `server/server.go:739` | Not registered |
+| POST | `/api/llm/test` | `server/server.go:739` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | GET | `/api/logs` | `server/server.go:662` | Optional registration; adapters required: `python/artex/server/logs.py:85` |
 | GET | `/api/logs/history` | `server/server.go:663` | Optional registration; adapters required: `python/artex/server/logs.py:86` |
 | GET | `/api/logs/stream` | `server/server.go:664` | Not registered |
@@ -330,6 +330,14 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/profiles/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/llm/profiles/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/models`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.

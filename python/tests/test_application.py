@@ -72,6 +72,9 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/assets', token=token)[0], 503)
         self.assertEqual(self.request('/api/exploration/findings')[0], 401)
         self.assertEqual(self.request('/api/exploration/findings', token=token)[0], 503)
+        self.assertEqual(self.request('/api/llm/profiles')[0], 401)
+        self.assertEqual(self.request('/api/llm/profiles', token=token)[0], 503)
+        self.assertEqual(self.request('/api/llm', token=token)[0], 503)
         self.assertEqual(self.request('/api/logs/history', token=token), (200, {'items': [], 'has_more': False}))
 
     def test_persisted_factory_loads_without_starting(self):
@@ -181,14 +184,83 @@ class ApplicationTests(unittest.TestCase):
                 if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
                     self.calls.append(query);return []
                 return super().fetch_all(query)
-        db=EmptyTasks();resolver=Mock();active=Mock()
+        db=EmptyTasks();resolver=Mock();active=Mock();board=Mock();asset_labels=Mock()
         with patch('artex.server.application.ExplorationService') as service:
             build_persisted_application(db,b'x'*32,TestCodec(),
-                                        exploration_store_resolver=resolver,active_task_id=active)
-            service.assert_called_once_with(resolver,active_task_id=active)
+                                        exploration_store_resolver=resolver,active_task_id=active,
+                                        exploration_nodeboard_factory=board,exploration_nodeboard_asset_resolver=asset_labels)
+            service.assert_called_once_with(resolver,active_task_id=active,nodeboard_factory=board,nodeboard_asset_resolver=asset_labels)
             service.return_value.register.assert_called_once()
-        resolver.assert_not_called();active.assert_not_called()
+        resolver.assert_not_called();active.assert_not_called();board.assert_not_called();asset_labels.assert_not_called()
         self.assertEqual(len(db.calls),1)  # existing task registry load only
+
+    def test_profile_factory_injection_no_runtime_substitution(self):
+        from artex.db.profiles import LLMProfile
+        store=Mock()
+        store.list.return_value=[LLMProfile(id=4,name='Example',model='dummy',api_key='dummy-secret')]
+        coordinator=Mock();coordinator.save.return_value=4
+        self.app=build_application(self.db,b'x'*32,TestCodec(),profile_store=store,profile_coordinator=coordinator)
+        self.assertEqual(self.request('/api/llm/profiles')[0],401)
+        store.list.assert_not_called()
+        _,payload=self.request('/api/auth/init',method='POST',data={'password':'dummy-password'})
+        token=payload['token']
+        status,body=self.request('/api/llm/profiles',token=token)
+        self.assertEqual(status,200);self.assertEqual(body['profiles'][0]['id'],'4')
+        self.assertNotIn('api_key',body['profiles'][0])
+        self.assertEqual(self.request('/api/llm',token=token)[0],503)
+        store.active.assert_not_called()
+        self.assertEqual(self.request('/api/llm/profiles',method='POST',data={'name':'Example','model':'dummy'},token=token),
+                         (200,{'id':4}))
+        self.assertEqual(self.request('/api/llm/profiles/active',method='POST',data={'id':4},token=token),(200,{'ok':True}))
+        coordinator.set_active.assert_called_once_with(4)
+        self.assertEqual(self.request('/api/llm/test',method='POST',token=token)[0],503)
+        self.assertEqual(self.request('/api/llm/profiles/4',method='DELETE',token=token)[0],503)
+
+    def test_persisted_profile_adapters_forwarded_without_startup_reads(self):
+        class EmptyTasks(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        self.db=EmptyTasks();coordinator=Mock();snapshot=Mock()
+        with patch('artex.db.profiles.ProfileStore') as profile_store, patch('artex.server.application.ProfileService') as service:
+            self.app=build_persisted_application(self.db,b'x'*32,TestCodec(),profile_coordinator=coordinator,runtime_snapshot=snapshot)
+            profile_store.assert_called_once_with(self.db)
+            service.assert_called_once_with(profile_store.return_value,coordinator=coordinator,runtime_snapshot=snapshot)
+            service.return_value.register.assert_called_once()
+            profile_store.return_value.list.assert_not_called()
+            profile_store.return_value.active.assert_not_called()
+        snapshot.assert_not_called();self.assertEqual(coordinator.mock_calls,[])
+        self.assertEqual(len(self.db.calls),1)
+
+    def test_nodeboard_explicit_scoped_adapters_and_auth(self):
+        from artex.server import sign_jwt
+        from artex.db.exploration import Node
+        store=Mock(read_only=False,exploration_id=9)
+        store.task_id.return_value=1
+        board=Mock(read_only=False,exploration_id=9)
+        node=Node(7,'fact',{},1,'done','','','','',datetime(2026,11,15,tzinfo=timezone.utc))
+        board.nodes_page.return_value=([node],1)
+        board.edges_touching.return_value=[];board.nodes_by_ids.return_value=[]
+        board.node_assets.return_value={7:[2]}
+        factory=Mock(return_value=board)
+        labels=Mock(return_value={2:{'id':2,'type':'root_domain','domain':'example.test'}})
+        resolver=Mock(return_value=store);active=Mock(return_value='1')
+        self.app=build_application(self.db,b'x'*32,TestCodec(),exploration_store_resolver=resolver,
+            active_task_id=active,exploration_nodeboard_factory=factory,exploration_nodeboard_asset_resolver=labels)
+        resolver.assert_not_called();factory.assert_not_called();labels.assert_not_called()
+        self.assertEqual(self.request('/api/exploration/nodes')[0],401)
+        resolver.assert_not_called();factory.assert_not_called();labels.assert_not_called()
+        token=sign_jwt(b'x'*32)
+        status,body=self.request('/api/exploration/nodes',token=token)
+        self.assertEqual(status,200)
+        self.assertEqual(body['assets'],{'7':[{'id':'2','type':'root_domain','label':'example.test'}]})
+        factory.assert_called_once_with(store);labels.assert_called_once_with(store,[2])
+        # Same authorized selection without capability adapters must not infer a
+        # nodeboard or globally scoped asset lookup.
+        self.app=build_application(self.db,b'x'*32,TestCodec(),exploration_store_resolver=resolver,active_task_id=active)
+        self.assertEqual(self.request('/api/exploration/nodes',token=token)[0],503)
+        self.assertEqual(factory.call_count,1);self.assertEqual(labels.call_count,1)
 
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):

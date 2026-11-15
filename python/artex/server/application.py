@@ -14,25 +14,30 @@ from .logs import LogService
 from .tasks import TaskService
 from .assets import AssetService
 from .findings import FindingService
+from .profiles import ProfileService
 from .exploration import ExplorationService
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
                       finding_store=None, finding_asset_resolver=None,
+                      profile_store=None, profile_coordinator=None, runtime_snapshot=None,
                       exploration_store_resolver=None, active_task_id=None,
+                      exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
                       log_ring=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
-    Registers health/auth, category, task, asset, finding and log snapshot/history
+    Registers health/auth, category, task, asset, finding, profile and log snapshot/history
     slices. Missing stores/managers/adapters produce 503, not placeholder success.
     Finding status notifications, evidence exports and runtime-dependent routes
     remain unavailable; anchored findings require an explicit asset resolver.
     Supplied finding stores retain their own task/exploration scope unchanged.
     Exploration reads require an explicit authorized task-to-store resolver;
     optional active selection is never inferred from the task manager. Neither
-    callback is invoked during construction. This is not the full ARTEX server.
+    callback is invoked during construction. Nodeboard factories and asset-label
+    resolvers are also explicit and receive the authorized exploration store; no
+    global fallback or inherited scope is inferred. This is not the full server.
     """
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
@@ -41,7 +46,11 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     TaskService(task_manager, profile_available=profile_available).register(router)
     AssetService(asset_store).register(router)
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
-    ExplorationService(exploration_store_resolver, active_task_id=active_task_id).register(router)
+    ExplorationService(exploration_store_resolver, active_task_id=active_task_id,
+                       nodeboard_factory=exploration_nodeboard_factory,
+                       nodeboard_asset_resolver=exploration_nodeboard_asset_resolver).register(router)
+    ProfileService(profile_store, coordinator=profile_coordinator,
+                   runtime_snapshot=runtime_snapshot).register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -49,7 +58,9 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 runner=None, profile_available=None,
                                 live_last_activity=None, log_ring=None, allow_global_assets=False,
                                 finding_asset_resolver=None, root_domain_resolver=None,
+                                profile_coordinator=None, runtime_snapshot=None,
                                 exploration_store_resolver=None, active_task_id=None,
+                                exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
                                 version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
@@ -70,6 +81,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
     from ..db.findings import FindingStore
+    from ..db.profiles import ProfileStore
     from ..db.asset_store import AssetStore
     from ..db.task_metrics import TaskMetricsStore, TaskMetricsEnricher
     from ..manager import TaskManager
@@ -84,7 +96,11 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              asset_store=AssetStore(executor, allow_global=allow_global_assets,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
+                             profile_store=ProfileStore(executor),
+                             profile_coordinator=profile_coordinator, runtime_snapshot=runtime_snapshot,
                              finding_asset_resolver=finding_asset_resolver,
                              exploration_store_resolver=exploration_store_resolver,
                              active_task_id=active_task_id,
+                             exploration_nodeboard_factory=exploration_nodeboard_factory,
+                             exploration_nodeboard_asset_resolver=exploration_nodeboard_asset_resolver,
                              version=version, max_body_bytes=max_body_bytes)

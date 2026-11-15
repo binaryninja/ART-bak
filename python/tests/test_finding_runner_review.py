@@ -81,3 +81,17 @@ class ProfileBoundaryReviewTests(unittest.TestCase):
         with self.assertRaises(ProfileInvalid):
             ProfileStore(executor).save(LLMProfile(id=7,name='fixture',model='fixture',api_key='…1234'))
         self.assertEqual(executor.queries,[])
+
+
+class ProfileHTTPReviewTests(unittest.TestCase):
+    def test_malformed_coordinator_result_is_not_success_or_private_output(self):
+        from artex.server.profiles import ProfileService
+        from artex.server.core import Request
+        class Coordinator:
+            def save(self, profile): return result
+        request = Request('POST','/api/llm/profiles',body=b'{"name":"fixture","model":"fixture"}')
+        for result in (None,True,0,-1,2**63,'fixture-private-key',{'api_key':'fixture-private-key'}):
+            with self.subTest(result=result):
+                response = ProfileService(object(),coordinator=Coordinator())._handle('save',request)
+                self.assertEqual(response.status,500)
+                self.assertNotIn(b'fixture-private-key',response.body)

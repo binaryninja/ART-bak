@@ -5,24 +5,25 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 38,
-    "python_optional_service_routes": 33,
-    "matched_offline_contract_routes": 38,
-    "go_routes_without_python_registration": 223
+    "python_offline_contract_routes": 46,
+    "python_optional_service_routes": 41,
+    "matched_offline_contract_routes": 46,
+    "go_routes_without_python_registration": 215
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "15d45e4b6e7292deb09860d1c412ba1bc79dcdebe36f713b032b17a6cbd98ba1",
+    "python/artex/server/application.py": "c470d9deeec4442ee52e85cdef12396d3b65dbbdf29439e0977d80c673d71f9c",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
-    "python/artex/server/exploration.py": "f905831037f7351d2cfd17bdbe45822bc84780aa54eb0450cf83a1aaa0003560",
+    "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
     "python/artex/server/logs.py": "29fb2ffbe5548540b660a01500da0dfd957b4e559176e3a5f9be5900218cb8c2",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
+    "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
     "python/artex/server/tasks.py": "9e545ccd8e55d51e0589d52cb4fd8ce2f1cff3c4ddb54054f37b44c1bb43d083",
     "python/artex/server/wsgi.py": "71252b9308b4466f5c44f0db62961948d038d944f1921372f4b3e34f9ff04872"
@@ -1184,8 +1185,19 @@
       "expression": "\"GET /api/llm\"",
       "method": "GET",
       "path": "/api/llm",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/llm",
@@ -1196,8 +1208,19 @@
       "expression": "\"POST /api/llm\"",
       "method": "POST",
       "path": "/api/llm",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/llm",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/llm/test",
@@ -1208,8 +1231,19 @@
       "expression": "\"POST /api/llm/test\"",
       "method": "POST",
       "path": "/api/llm/test",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/llm/test",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/assets",
@@ -1388,7 +1422,7 @@
         "method": "GET",
         "path": "/api/exploration/frontier",
         "source": "python/artex/server/exploration.py",
-        "line": 68,
+        "line": 78,
         "function": "ExplorationService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1710,7 +1744,7 @@
         "method": "GET",
         "path": "/api/exploration/intents",
         "source": "python/artex/server/exploration.py",
-        "line": 68,
+        "line": 78,
         "function": "ExplorationService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1733,7 +1767,7 @@
         "method": "GET",
         "path": "/api/exploration/graph",
         "source": "python/artex/server/exploration.py",
-        "line": 68,
+        "line": 78,
         "function": "ExplorationService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -1756,7 +1790,7 @@
         "method": "GET",
         "path": "/api/exploration/nodes",
         "source": "python/artex/server/exploration.py",
-        "line": 68,
+        "line": 78,
         "function": "ExplorationService.register",
         "handler": "lambda request, params, action=action: self._handle(action, request)",
         "public": false,
@@ -3083,8 +3117,19 @@
       "expression": "\"GET /api/llm/profiles\"",
       "method": "GET",
       "path": "/api/llm/profiles",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm/profiles",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/llm/profiles",
@@ -3095,8 +3140,19 @@
       "expression": "\"POST /api/llm/profiles\"",
       "method": "POST",
       "path": "/api/llm/profiles",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/llm/profiles",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/llm/profiles/{id}",
@@ -3107,8 +3163,19 @@
       "expression": "\"DELETE /api/llm/profiles/{id}\"",
       "method": "DELETE",
       "path": "/api/llm/profiles/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/llm/profiles/{id}",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/llm/profiles/active",
@@ -3119,8 +3186,19 @@
       "expression": "\"POST /api/llm/profiles/active\"",
       "method": "POST",
       "path": "/api/llm/profiles/active",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/llm/profiles/active",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/llm/retry-policy",
@@ -3179,8 +3257,19 @@
       "expression": "\"POST /api/llm/models\"",
       "method": "POST",
       "path": "/api/llm/models",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/llm/models",
+        "source": "python/artex/server/profiles.py",
+        "line": 126,
+        "function": "ProfileService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/intercept/rules",
@@ -3710,7 +3799,7 @@
       "method": "GET",
       "path": "/api/exploration/frontier",
       "source": "python/artex/server/exploration.py",
-      "line": 68,
+      "line": 78,
       "function": "ExplorationService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3722,7 +3811,7 @@
       "method": "GET",
       "path": "/api/exploration/intents",
       "source": "python/artex/server/exploration.py",
-      "line": 68,
+      "line": 78,
       "function": "ExplorationService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3734,7 +3823,7 @@
       "method": "GET",
       "path": "/api/exploration/graph",
       "source": "python/artex/server/exploration.py",
-      "line": 68,
+      "line": 78,
       "function": "ExplorationService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3746,7 +3835,7 @@
       "method": "GET",
       "path": "/api/exploration/nodes",
       "source": "python/artex/server/exploration.py",
-      "line": 68,
+      "line": 78,
       "function": "ExplorationService.register",
       "handler": "lambda request, params, action=action: self._handle(action, request)",
       "public": false,
@@ -3932,6 +4021,102 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/profiles",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm/profiles",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm/profiles/active",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/llm/profiles/{id}",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm/test",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm/models",
+      "source": "python/artex/server/profiles.py",
+      "line": 126,
+      "function": "ProfileService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

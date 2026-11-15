@@ -7,19 +7,26 @@ before reads, and direct inherited stores must be read-only and identify their
 source task. Authentication remains Router's protected default.
 
 Graph/frontier/intent reads preserve source limits and immutable direct-history
-filtering. /nodes deliberately returns 503: paginated node-board persistence,
-neighbour lookup and anchored-asset DTO hydration are not ported. No invented
+filtering. Node-board reads require explicit nodeboard_factory(store) and
+nodeboard_asset_resolver(store, ids) adapters; missing capabilities return 503.
+Only this task participates in board pages; no inherited source merge occurs.
+Resolver failures fail closed instead of Go best-effort empty asset decoration. No invented
 node/edge detail routes, writes, workers, deletion or listener are provided.
 Invalid/duplicate/unknown query parameters fail rather than silently selecting a
 different task. Explicit missing tasks return 404 rather than Go's empty success.
 Inherited paging is bounded to 10000 pages and fails explicitly at that bound.
 JSON payload text is reserialized from the DB object (semantic, not byte parity).
+Board page/size must be positive, size is capped at 200 and the response reports
+that effective size (Go echoes the uncapped request). Neighbour/anchor sets are
+bounded at 10000; excess fails explicitly rather than expanding unbounded reads.
 """
 import json
 import re
 from urllib.parse import parse_qs, urlsplit
 from .core import Router, Request, json_response, error_response
 from ..db.exploration import Node, Edge
+from ..db.nodeboard import NodeFilter, NodeBoardStore
+from collections.abc import Mapping
 
 
 class ExplorationUnavailable(RuntimeError): pass
@@ -54,9 +61,12 @@ def edge_dto(edge):
 
 
 class ExplorationService:
-    def __init__(self, resolve_store=None, *, active_task_id=None):
+    def __init__(self, resolve_store=None, *, active_task_id=None,
+                 nodeboard_factory=None, nodeboard_asset_resolver=None):
         self.resolve_store=resolve_store
         self.active_task_id=active_task_id
+        self.nodeboard_factory=nodeboard_factory
+        self.nodeboard_asset_resolver=nodeboard_asset_resolver
 
     def register(self,router:Router):
         for path,action in (
@@ -119,7 +129,7 @@ class ExplorationService:
             before=_number(q.get('before','0'),'before',minimum=0)
             if 'page' in q: _number(q['page'],'page')
             store=self._store(q)
-            if action=='nodes': raise ExplorationUnavailable('Paginated node board and anchor hydration are not implemented')
+            if action=='nodes': return json_response(200,self._nodeboard(store,q))
             if store is None:
                 return json_response(200, {'nodes':[],'edges':[]} if action=='graph' else {'items':[],'has_more':False} if action=='intents' and ('page' in q or 'before' in q) else [])
             if action=='frontier':
@@ -171,3 +181,72 @@ class ExplorationService:
                 raise ExplorationUnavailable('Nonadvancing inherited cursor')
             cursor=next_cursor
         raise ExplorationUnavailable('Inherited history page budget exceeded')
+
+    def _nodeboard(self,store,q):
+        if not callable(self.nodeboard_factory) or not callable(self.nodeboard_asset_resolver):
+            raise ExplorationUnavailable('Node-board adapters are unavailable')
+        page=_number(q.get('page','1'),'page')
+        size=_number(q.get('size','20'),'size')
+        try: page,size,_=NodeBoardStore.page_bounds(page,size)
+        except ValueError as error: raise _Invalid('Invalid page offset') from error
+        if q.get('order','') not in ('','asc','desc'): raise _Invalid('Invalid node order')
+        def csv(name):
+            result=tuple(value.strip() for value in q.get(name,'').split(',') if value.strip())
+            if len(result)>100 or any('\x00' in value for value in result): raise _Invalid('Invalid node filter')
+            return result
+        filter=NodeFilter(kinds=csv('kind'),states=csv('state'),query=q.get('q',''),asc=q.get('order')=='asc')
+        if '\x00' in filter.query: raise _Invalid('Invalid node search')
+        if store is None:
+            return {'items':[],'total':0,'page':page,'size':size,'edges':[],'refs':{}}
+        board=self.nodeboard_factory(store)
+        self._require(board,'nodes_page','edges_touching','nodes_by_ids','node_assets')
+        if board.exploration_id!=store.exploration_id or board.read_only is not False:
+            raise ExplorationUnavailable('Node-board scope mismatch')
+        nodes,total=board.nodes_page(filter,page,size)
+        if len(nodes)>size or type(total) is not int or total<0: raise ExplorationUnavailable('Invalid node page')
+        ids=[node.id for node in nodes]; on_page=set(ids)
+        if len(on_page)!=len(ids): raise ExplorationUnavailable('Duplicate node page IDs')
+        edges=board.edges_touching(ids)
+        neighbours=set()
+        for edge in edges:
+            if edge.from_id not in on_page and edge.to_id not in on_page:
+                raise ExplorationUnavailable('Unrelated board edge')
+            neighbours.update({edge.from_id,edge.to_id}-on_page)
+        if len(neighbours)+len(ids)>10000: raise ExplorationUnavailable('Node-board neighbourhood too large')
+        adjacent=board.nodes_by_ids(sorted(neighbours))
+        if any(node.id not in neighbours for node in adjacent): raise ExplorationUnavailable('Unrelated neighbour node')
+        refs={str(node.id):node_dto(node) for node in adjacent}
+        selected=ids+sorted(neighbours)
+        anchors=board.node_assets(selected)
+        if not isinstance(anchors,Mapping) or any(key not in selected for key in anchors):
+            raise ExplorationUnavailable('Unrelated node anchors')
+        flat=[]
+        for values in anchors.values():
+            if not isinstance(values,(tuple,list)) or any(type(aid) is not int or not 0<aid<2**63 for aid in values):
+                raise ExplorationUnavailable('Invalid node anchors')
+            flat.extend(values)
+        flat=list(dict.fromkeys(flat))
+        if len(flat)>10000: raise ExplorationUnavailable('Too many anchored assets')
+        assets=self.nodeboard_asset_resolver(store,flat) if flat else {}
+        if (not isinstance(assets,Mapping) or set(assets)!=set(flat)
+                or any(type(key) is not int for key in assets)):
+            raise ExplorationUnavailable('Asset resolver must account for every requested ID')
+        labels={}
+        for aid,asset in assets.items():
+            if asset is None: continue  # deleted asset, as upstream
+            if hasattr(asset,'to_dict'): asset=asset.to_dict()
+            if not isinstance(asset,Mapping) or asset.get('id')!=aid or not isinstance(asset.get('type'),str):
+                raise ExplorationUnavailable('Invalid resolved asset')
+            label='#'+str(aid)
+            if asset.get('url'):
+                label=(asset.get('method','')+' ' if asset.get('method') else '')+asset['url']
+            elif asset.get('domain') or asset.get('ip'):
+                label=asset.get('domain') or asset['ip']
+                if asset.get('port') is not None and asset['port']>0: label+=':'+str(asset['port'])
+            else:
+                label=next((asset[key] for key in ('app_name','bundle_id','service_name','root_domain') if asset.get(key)),label)
+            labels[aid]={'id':str(aid),'type':asset['type'],'label':label}
+        decoration={str(key):[labels[aid] for aid in values if aid in labels] for key,values in anchors.items()}
+        decoration={key:value for key,value in decoration.items() if value}
+        return {'items':[node_dto(node) for node in nodes],'total':total,'page':page,'size':size,
+                'edges':[edge_dto(edge) for edge in edges],'refs':refs,'assets':decoration}

@@ -120,4 +120,77 @@ class ExplorationHTTPTests(unittest.TestCase):
         self.assertEqual(executor.queries[-1].params,(10,100))
         self.assertIn('exploration_id=$1',executor.queries[-1].sql)
 
+    def board(self):
+        from unittest.mock import Mock
+        board=Mock(exploration_id=10,read_only=False)
+        board.nodes_page.return_value=([node(1)],3)
+        board.edges_touching.return_value=[Edge(1,'yields',2)]
+        board.nodes_by_ids.return_value=[node(2,'fact','confirmed')]
+        board.node_assets.return_value={1:[7],2:[8]}
+        self.service.nodeboard_factory=Mock(return_value=board)
+        self.service.nodeboard_asset_resolver=Mock(return_value={7:{'id':7,'type':'endpoint','url':'https://example.test','method':'GET'},8:None})
+        return board
+
+    def test_nodeboard_composition_and_filters(self):
+        board=self.board()
+        response=self.request('nodes?task=1&page=2&size=999&kind=intent,fact&state=done&order=asc&q=%2341')
+        self.assertEqual(response.status,200)
+        data=response.json()
+        self.assertEqual((data['page'],data['size'],data['total']),(2,200,3))
+        self.assertEqual(data['assets'],{'1':[{'id':'7','type':'endpoint','label':'GET https://example.test'}]})
+        self.assertEqual(data['refs']['2']['type'],'fact')
+        filter,page,size=board.nodes_page.call_args.args
+        self.assertEqual((filter.kinds,filter.states,filter.query,filter.asc),(('intent','fact'),('done',),'#41',True))
+        board.edges_touching.assert_called_once_with([1])
+        board.nodes_by_ids.assert_called_once_with([2])
+        board.node_assets.assert_called_once_with([1,2])
+        self.service.nodeboard_asset_resolver.assert_called_once_with(self.store,[7,8])
+        self.assertNotIn(('sources',),self.store.calls)
+
+    def test_nodeboard_scope_and_capabilities_fail_closed(self):
+        board=self.board();board.exploration_id=99
+        self.assertEqual(self.request('nodes?task=1').status,503)
+        board.nodes_page.assert_not_called()
+        board.exploration_id=10;self.service.nodeboard_asset_resolver=None
+        self.assertEqual(self.request('nodes?task=1').status,503)
+        board.nodes_page.assert_not_called()
+
+    def test_nodeboard_invalid_input_no_reads(self):
+        board=self.board()
+        for query in ('page=0','size=0','order=oops','size=-1','page=9223372036854775807&size=200','q=%00'):
+            self.assertEqual(self.request('nodes?task=1&'+query).status,400)
+        board.nodes_page.assert_not_called()
+
+    def test_nodeboard_resolver_cannot_expand_assets(self):
+        self.board();self.service.nodeboard_asset_resolver.return_value={99:{'id':99,'type':'ip'}}
+        self.assertEqual(self.request('nodes?task=1').status,503)
+
+    def test_nodeboard_resolver_requires_complete_explicit_coverage(self):
+        self.board()
+        for result in ({}, {7:None}, {7:None,8:None,9:None}):
+            self.service.nodeboard_asset_resolver.return_value=result
+            self.assertEqual(self.request('nodes?task=1').status,503)
+        self.service.nodeboard_asset_resolver.return_value={7:None,8:None}
+        response=self.request('nodes?task=1')
+        self.assertEqual(response.status,200)
+        self.assertEqual(response.json()['assets'],{})
+
+    def test_nodeboard_bad_edges_or_anchor_scope_rejected(self):
+        board=self.board();board.edges_touching.return_value=[Edge(77,'yields',88)]
+        self.assertEqual(self.request('nodes?task=1').status,503)
+        board.edges_touching.return_value=[];board.nodes_by_ids.return_value=[];board.node_assets.return_value={99:[7]}
+        self.assertEqual(self.request('nodes?task=1').status,503)
+
+    def test_nodeboard_empty_anchors_do_not_lookup_assets(self):
+        board=self.board();board.node_assets.return_value={}
+        response=self.request('nodes?task=1')
+        self.assertEqual(response.status,200);self.assertEqual(response.json()['assets'],{})
+        self.service.nodeboard_asset_resolver.assert_not_called()
+
+    def test_nodeboard_auth_precedes_adapters(self):
+        board=self.board()
+        self.assertEqual(self.request('nodes?task=1',authorized=False).status,401)
+        self.service.nodeboard_factory.assert_not_called()
+        self.service.nodeboard_asset_resolver.assert_not_called()
+
 if __name__=='__main__': unittest.main()
