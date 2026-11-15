@@ -185,6 +185,57 @@ def run(args,workspace,connection):
      rows,total=commands.list('opaque synthetic input')
      assert total==1 and rows[0]['output']=='opaque synthetic output'
     check('actual scoped token and command read projections',read_acceptance)
+    def diagnostic_acceptance():
+     from artex.db.intercept_history import InterceptHistoryStore,InspectionScope
+     from artex.server.intercept_inspection import InterceptInspectionService
+     from artex.server.core import Request,Router
+     from artex.health import Registry,State
+     from artex.db.settings import SettingsStore
+     from artex.server.pool_health import PoolHealthService
+     from artex.guard import Guard
+     from artex.server.audit import AuditService,AuditBinding
+     # Exact TEXT keys deliberately differ only in leading zero. No task FK inference.
+     conv=pool.fetch_one(Query("INSERT INTO conversations(agent_key,title) VALUES('fixture','Inspection fixture') RETURNING id"))[0]
+     ids=[]
+     for key in ('007','7'):
+      ids.append(pool.fetch_one(Query("INSERT INTO intercept_pending(task_id,conversation_id,tool_name,tool_input) VALUES($1,$2,'InertFixture',$3::jsonb) RETURNING id",(key,conv,'{"marker":"synthetic-private"}')))[0])
+     raw=[True]
+     def inspection(executor):
+      store=InterceptHistoryStore(executor,InspectionScope('isolated-fixture','007'),authorize=lambda *a:True,raw_authorize=lambda *a:raw[0],current=lambda *a:True,lifecycle_guard=guard)
+      service=InterceptInspectionService(store,authorize=lambda *a:True)
+      router=Router(lambda request:request.header('Authorization')=='fixture-read')
+      service.register(router)
+      return router
+     request=Request('GET','/api/intercept/history?page=1&size=1',{'Authorization':'fixture-read'})
+     response=inspection(pool).dispatch(request)
+     assert response.status==200
+     payload=response.json()
+     assert payload['total']==1 and payload['items'][0]['id']==ids[0]
+     assert payload['items'][0]['conv_title']=='Inspection fixture'
+     # Delegate real SQL, revoke the raw grant after fetch, before DTO/HTTP return.
+     class RevokeAfterRead:
+      def fetch_all(self,query):
+       rows=pool.fetch_all(query)
+       raw[0]=False
+       return rows
+     response=inspection(RevokeAfterRead()).dispatch(request)
+     assert response.status==403 and b'synthetic-private' not in response.body
+     profile=pool.fetch_one(Query("INSERT INTO llm_profiles(name,format,model) VALUES('Inspection fixture','openai','inert') RETURNING id"))[0]
+     registry=Registry(clock=lambda:100)
+     registry.restore(profile,State(0,1,100.2,'synthetic-private',99.9))
+     health=PoolHealthService(SettingsStore(pool),registry,scope='isolated-fixture',authorize=lambda *a:True,current=lambda *a:True,lifecycle_guard=guard,clock=lambda:100)
+     response=health.handle('status',Request('GET','/api/llm/pool'))
+     assert response.status==200 and b'synthetic-private' not in response.body
+     row=next(row for row in response.json()['chain'] if row['profile_id']==str(profile))
+     assert row['cooldown_secs']==1 and row['last_at']=='1970-01-01T00:01:39Z'
+     audit=Guard()
+     for number in range(2001):audit._record('Read','allow',reason=str(number))
+     audit_service=AuditService(resolve=lambda selector:AuditBinding(1,'fixture',audit),authorize_selection=lambda *a:True,raw_authorize=lambda *a:True,current=lambda *a:True,lifecycle_guard=guard)
+     response=audit_service.handle(Request('GET','/api/audit?task=1'))
+     assert response.status==200
+     entries=response.json()['entries']
+     assert len(entries)==2000 and entries[0]['reason']=='1' and entries[-1]['reason']=='2000'
+    check('actual intercept scoped reads and revocation plus pool and audit diagnostics',diagnostic_acceptance)
     assert pool.close(timeout=3).drained
     if errors:raise RuntimeError('Acceptance fixture failed')
 

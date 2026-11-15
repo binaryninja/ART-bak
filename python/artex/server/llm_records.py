@@ -75,12 +75,12 @@ class LLMRecordService:
     def _allow(self,request,action,selection):
         if not callable(self.authorize):raise RecordUnavailable()
         if self.authorize(request,action,selection) is not True:raise RecordDenied()
-    def _record(self,request,record,selection,*,body):
+    def _record(self,request,record,selection,*,body,check=lambda:None):
         if not isinstance(record,LLMRecord):raise RecordUnavailable()
         scoped=replace(selection,record_id=record.id,record_task=record.task_id,record_session=record.session_id)
         if selection.store_task is not None and record.task_id!=selection.store_task:raise RecordDenied()
         if selection.task is not None and record.task_id!=selection.task:raise RecordDenied()
-        self._allow(request,'record_body' if body else 'record_metadata',scoped)
+        check();self._allow(request,'record_body' if body else 'record_metadata',scoped);check()
         if not callable(self.redact):raise RecordUnavailable()
         original=record.to_dict()
         if not body:
@@ -89,6 +89,7 @@ class LLMRecordService:
         if not isinstance(sanitized,dict) or set(sanitized)-set(original):raise RecordUnavailable()
         for name in ('id','task_id','session_id'):
             if sanitized.get(name)!=original.get(name):raise RecordUnavailable()
+        check();self._allow(request,'record_body' if body else 'record_metadata',scoped);check()
         return deepcopy(sanitized)
     def _delete(self,request):
         if not callable(self.delete_authorize):raise RecordUnavailable()
@@ -135,18 +136,31 @@ class LLMRecordService:
             if not isinstance(store,LLMRecordStore):raise RecordUnavailable()
             scoped=replace(selection,store_task=store.task_id)
             if task is not None and store.task_id is not None and task!=store.task_id:raise RecordDenied()
-            self._allow(request,action,scoped)
+            pins=(store.executor,store.task_id,self.resolve,self.authorize,self.redact)
+            def check():
+                if store.executor is not pins[0] or store.task_id!=pins[1] or any(a is not b for a,b in zip((self.resolve,self.authorize,self.redact),pins[2:])):raise RecordDenied()
+            check();self._allow(request,action,scoped);check()
+            records=[]
             if action=='list':
                 if not callable(self.redact):raise RecordUnavailable()
                 records,total=store.list(model=selection.model,session=selection.session,task=task or '',page=selection.page,size=selection.size)
-                return json_response(200,{'records':[self._record(request,r,scoped,body=False) for r in records],'total':total})
-            if action=='detail':
+                check();self._allow(request,action,scoped);check()
+                result={'records':[self._record(request,r,scoped,body=False,check=check) for r in records],'total':total}
+            elif action=='detail':
                 if not callable(self.redact):raise RecordUnavailable()
                 record=store.get(selection.record_id)
+                check();self._allow(request,action,scoped);check()
                 if record is None:return error_response(404,'Record not found')
-                return json_response(200,self._record(request,record,scoped,body=True))
-            if action=='tasks':return json_response(200,{'tasks':store.tasks()})
-            return json_response(200,{'models':store.token_by_model(task)})
+                records=[record];result=self._record(request,record,scoped,body=True,check=check)
+            elif action=='tasks':result={'tasks':store.tasks()}
+            else:result={'models':store.token_by_model(task)}
+            check();self._allow(request,action,scoped);check()
+            # A later redactor may revoke an earlier row's grant; recheck all rows
+            # after every projection, without rerunning redaction or SQL.
+            for record in records:
+                selected=replace(scoped,record_id=record.id,record_task=record.task_id,record_session=record.session_id)
+                self._allow(request,'record_body' if action=='detail' else 'record_metadata',selected);check()
+            return json_response(200,result)
         except RecordDenied:return error_response(403,'Recording access denied')
         except RecordUnavailable:return error_response(503,'Recording capability unavailable')
         except (ValueError,UnicodeError):return error_response(400,'Invalid recording request')

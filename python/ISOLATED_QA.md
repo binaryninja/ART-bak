@@ -810,3 +810,81 @@ single-profile resets were checked. Retained/cross-thread application callbacks,
 SQL trigger rollback, postcommit coordination uncertainty and reset persistence
 failure were exercised. No provider calls, real keys or default enabling. Reset
 all remains explicitly unavailable in this subset.
+
+## Registry reset-all (stage 64)
+
+Three actual PostgreSQL/Registry integration groups and 39 focused test executions
+(including inherited repeats, not 39 distinct tests) passed on manifest
+`4ece1b21fa4cfb2c707e36a68c84aa86556e3de60a01752bb40f95982e3c130b`.
+Bounded registry inventory includes orphan IDs, immutable full-inventory approval
+precedes atomic memory clear, and revision/callback/authority fences surround
+individual persistence effects. Concurrent additions remain untouched. Partial
+persistence failure stops later callbacks and requires host reconciliation: there
+is no durable recovery journal and no safe automatic retry guarantee. Real settings
+rows were synthetic callback observations, not production persistence wiring.
+
+## Task-local audit (stage 65)
+
+Thirteen reviewed tests and four actual Guard integration groups passed on manifest
+`55d370a8ffac4bcb99d439098bd37ab2d3abd65f7ad86abd993221e72e12415a`.
+Chronological 2000-entry ring eviction, detached snapshots, attribution counters,
+missing-task response, selection/raw permission revocation, binding checks and
+UTF-8/JSON bounds were checked. No tool executed. Entry and attribution snapshots
+are not claimed atomically consistent. Optional application composition was later
+independently reviewed with 19 audit tests; that composition is not part of this
+stage's immutable acceptance manifest.
+
+## Durable intercept inspection (stage 66)
+
+Initial acceptance found disclosure after raw permission was revoked during SQL
+fetch. The unchanged negative-case harness passed after post-fetch and final
+response-time grants were added. Final manifest
+`ff1e07244804c1c6fd91c9b15d873260f484f999eefbd3db81a62e9740b5bdff`
+passed four actual PostgreSQL groups and 21 focused tests. Exact text task keys,
+join/pagination/count snapshot behavior, bounds and raw grant revocation were
+checked. No approval decisions, live waiters or default activation were tested.
+
+## Expanded delivered acceptance runner (stage 67)
+
+On manifest `f1960e525613ac360b0ec4125978afc3bc3decd569f527879aae9d8763bd0aa2`,
+three real PostgreSQL groups passed, the populated-schema rerun refused, and
+three unchanged connection/optimization guard tests passed. The delivered runner
+now adds exact-text intercept inspection and post-query raw-grant revocation,
+Registry timestamp/redaction reads, and Guard chronological eviction. This is not
+visibility mutation, pool reset, approval-decision or production-runtime coverage.
+
+## Command/token disclosure authorization (stage 68)
+
+Manifest `316ce6f9c1605777867e54390ddb71254393809312298d4c85d611831b546b48`
+passed two actual PostgreSQL groups comprising seven cases, plus 24 focused tests.
+The four originally failing command/raw/request and token/store/request revocations
+now deny without data, as does command metadata revocation; two positive controls
+retain valid reads. Exact service interfaces use transaction-bound actual SQL.
+This is scoped evidence, not blanket clearance of all readers. Additional reader
+findings and independent review are documented separately.
+
+## Coverage disclosure fences (stage 69)
+
+Manifest `dc4bb563ea8609e4fb8d2cc00e295f6f1a7a283a823ef07372ef43e30718eb15`
+passed two actual PostgreSQL groups (five cases) and 40 focused test executions.
+Direct-source, HTTP and company-connector grants revoked after actual queries now
+return 403 without aggregate/label disclosure; positive aggregate and graph controls
+remain valid. Final accumulated grants and response serialization sequentially
+reacquire the host guard. No default activation, target testing or tool execution.
+
+## Finite remaining-reader acceptance (stage 70)
+
+Manifest `79861539767e934227e6b07da76f607af5d2b6fd70efdd587ed5823a92effab0`
+passed thirteen actual PostgreSQL/file/Registry cases and 39 focused test executions.
+Task-scope and rule direct/HTTP lists, recording pickers/body, workspace files and
+pool diagnostics deny post-read revocations while positive controls succeed.
+Original read-policy callback identity checks were included in the reviewed
+scope/rule snapshot. No lifecycle, production runtime or blanket-reader guarantee.
+
+## Final callback-pin PostgreSQL rerun (stage 71)
+
+Manifest `53585dde2756079d22ba4ffa99b831218dda3b2586d6cd31b28f81f8f1f8d7cc`
+includes the final command/token/intercept original-callback pins. The unchanged
+stage-68 seven actual PostgreSQL cases and stage-66 four groups all pass, along
+with 47 focused test executions. Each harness used its own fresh disposable
+database. No additional workload or broader safety guarantee is implied.

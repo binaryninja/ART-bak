@@ -26,6 +26,12 @@ class CommandHistoryService:
         router.add('GET','/api/commands',lambda req,params:self.handle('list',req))
         router.add('GET','/api/commands/stats',lambda req,params:self.handle('stats',req))
     def handle(self,op,request):
+        policies=(self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),getattr(self.store,'raw',None),)
+        def check():
+            if any(a is not b for a,b in zip((self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),getattr(self.store,'raw',None),),policies)):raise CommandDenied()
+            self._check()
+            if any(a is not b for a,b in zip((self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),getattr(self.store,'raw',None),),policies)):raise CommandDenied()
+
         try:
             if request.body or op not in ('list','stats'):raise ValueError()
             query=urlsplit(request.target).query
@@ -45,9 +51,9 @@ class CommandHistoryService:
                 page=int(q.get('page','0'));size=int(q.get('size','50'))
             keyword=q.get('q','')
             with self._guard(self._scope):
-                self._check()
+                check()
                 if self.authorize(request,self._scope,op,keyword) is not True:raise CommandDenied()
-                self._check()
+                check()
                 if op=='list':
                     rows,total=self.store.list(keyword,page,size)
                     for row in rows:
@@ -55,7 +61,10 @@ class CommandHistoryService:
                         row['created_at']=row['created_at'].isoformat().replace('+00:00','Z')
                     result={'commands':rows,'total':total}
                 else:result={'stats':self.store.stats(keyword)}
-                self._check();response=json_response(200,result)
+                check()
+                if self.authorize(request,self._scope,op,keyword) is not True:raise CommandDenied()
+                check();self.store.validate_read(op,keyword)
+                check();response=json_response(200,result)
                 if len(response.body)>self.max_bytes:raise CommandUnavailable()
                 return response
         except CommandDenied:return error_response(403,'Command history scope not authorized')

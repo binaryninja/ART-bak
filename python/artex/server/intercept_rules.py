@@ -102,7 +102,14 @@ class InterceptRuleService:
                 enabled=body.get('enabled',False)
             elif op not in ('list','delete') or request.body:raise ValueError('Unsupported operation')
             selection=RuleSelection(op,rid,p,enabled,expected)
+            read_authorizer=self.authorize if op=='list' else None
+            store_read_authorizer=self.store.authorize if op=='list' else None
+            def read_check():
+                self._check()
+                if self.authorize is not read_authorizer or self.store.authorize is not store_read_authorizer:
+                    raise RuleDenied('Rule read policy changed')
             with self._guard(self._scope):
+                if op=='list':read_check()
                 self._check()
                 if self.authorize(request,self._scope,selection) is not True:raise RuleDenied('Request not authorized')
                 self._check()
@@ -120,6 +127,19 @@ class InterceptRuleService:
                     else:result=_dto(row)
                 self._check();response=json_response(200,result)
                 if len(response.body)>self.max_response_bytes:raise RuleUnavailable('Response bound exceeded')
+                if op=='list':
+                    # Store and HTTP grants are independent. Re-evaluate both
+                    # after snapshot/serialization without nesting another guard
+                    # or replaying mutation approval/effects.
+                    self._check()
+                    read_check()
+                    if store_read_authorizer(self._scope,'list') is not True:
+                        raise RuleDenied('Rule read no longer authorized')
+                    self._check()
+                    read_check()
+                    if read_authorizer(request,self._scope,selection) is not True:
+                        raise RuleDenied('Request no longer authorized')
+                    read_check()
                 return response
         except RuleUncertain:return json_response(503,{'error':'Rule state requires reconciliation','committed':None,'needs_reconciliation':True})
         except BaseException as exc:

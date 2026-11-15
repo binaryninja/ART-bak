@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
     def test_coverage_exact_source_shape(self):
         self.make([PARENT,[],[(1,)],[('ip',2,1)]])
         self.assertEqual(self.call().json(),{'enabled':True,'scope_rows':1,'denominator':2,'tested':1,'pct':.5,'by_type':[{'type':'ip','total':2,'tested':1}]})
-        self.assertEqual(self.reads,[(5,9)])
+        self.assertEqual(self.reads,[(5,9)]*4)
     def test_disabled_source_dto_not_fabricated_enabled_results(self):
         self.make([[(5,9,False)],[]]);r=self.call()
         self.assertEqual(r.status,200);self.assertFalse(r.json()['enabled']);self.assertIsNone(r.json()['pct']);self.assertEqual(len(self.queries()),2)
@@ -32,7 +32,7 @@ class Tests(unittest.TestCase):
         self.make([PARENT,SOURCES,[(7,'intent','done',{'text':'source'},6),(8,'finding','confirmed',{'summary':'local'},5)]])
         r=self.call('asset-refs','?asset_id=3');self.assertEqual(r.status,200)
         self.assertEqual(r.json()['intents'],[{'id':7,'kind':'intent','state':'done','summary':'source','source_task_id':'6','inherited':True}]);self.assertEqual(r.json()['facts'],[])
-        self.assertEqual(self.reads,[(5,9),(6,10)])
+        self.assertEqual(self.reads[:2],[(5,9),(6,10)]);self.assertCountEqual(self.reads,[(5,9),(6,10)]*4)
     def test_auth_precedes_resolver_and_policy_precedes_content(self):
         self.make([]);self.assertEqual(self.call(auth='no').status,401);self.assertEqual(self.resolve_calls,[])
         self.allowed=False;self.assertEqual(self.call().status,403);self.assertEqual(self.queries(),[])

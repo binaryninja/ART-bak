@@ -38,9 +38,9 @@ class PoolTests(unittest.TestCase):
         def fail(id):raise RuntimeError('private token')
         self.make([],Registry(forget=fail));self.registry.restore(7,State(1))
         r=self.call('reset',{'id':7});self.assertEqual(r.status,503);self.assertTrue(r.json()['needs_reconciliation']);self.assertEqual(self.registry.get(7).fails,0);self.assertNotIn(b'private',r.body)
-    def test_reset_all_unavailable_not_unbounded_snapshot(self):
-        self.make([]);self.registry.snapshot=lambda:self.fail('snapshot forbidden')
-        self.assertEqual(self.call('reset',{}).status,503)
+    def test_reset_all_empty_not_unbounded_snapshot(self):
+        self.make([[],[],[]]);self.registry.snapshot=lambda:self.fail('snapshot forbidden')
+        self.assertEqual(self.call('reset',{}).status,200)
     def test_retained_apply_cannot_run(self):
         self.make([]);saved=[];self.service.coordinate=lambda change,apply:saved.append(apply) or False
         self.assertEqual(self.call('reset',{'id':7}).status,503)

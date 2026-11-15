@@ -52,10 +52,13 @@ class TaskScopeService:
             identity=(task,binding.exploration_id,binding.revision)
             if type(identity[1]) is not int or not 0<identity[1]<2**63 or type(identity[2]) is not str or not identity[2] or len(identity[2].encode())>256:raise ScopeUnavailable()
             original_store=binding.store
+            read_authorizer=self.authorize if action=='list' else None
             def check():
+                if action=='list' and self.authorize is not read_authorizer:raise ScopeDenied()
                 if binding.task_id!=task or (binding.task_id,binding.exploration_id,binding.revision)!=identity or binding.store is not original_store or original_store.executor is not self._executor or original_store.task_id!=task or original_store.expected_exploration_id!=identity[1]:raise ScopeUnavailable()
                 if self.current(binding) is not True:raise ScopeDenied()
                 if original_store.executor is not self._executor or original_store.task_id!=task or original_store.expected_exploration_id!=identity[1]:raise ScopeUnavailable()
+                if action=='list' and self.authorize is not read_authorizer:raise ScopeDenied()
                 return True
             def policy(callback,*args):
                 if callback is None:raise ScopeUnavailable()
@@ -78,7 +81,8 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1) FOR UPDATE''',iden
                     check()
                     store=TaskScopeStore(tx,task,lifecycle_guard=nullcontext,current=check,
                         approve=lambda entry:policy(self.entry,request,binding,entry),
-                        company_allowed=original_store.company_allowed,expected_exploration_id=identity[1])
+                        company_allowed=original_store.company_allowed,expected_exploration_id=identity[1],
+                        read_authorize=lambda task_id,exp_id:policy(self.authorize,request,'list',binding))
                     if action=='list':output={'scope':store.list_bounded()}
                     elif action=='add':
                         store.add_many((proposal,));output={'id':0,**proposal.to_dict()}
@@ -87,6 +91,10 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1) FOR UPDATE''',iden
                             return error_response(404,'scope row not found')
                         output={'ok':True}
                     check();response=json_response(200,output)
+                if action=='list':
+                    # Recheck the original request grant after fetch, serialization
+                    # and transaction exit, without reacquiring the lifecycle guard.
+                    policy(self.authorize,request,action,binding)
                 return response
         except ScopeDenied:return error_response(403,'Scope access denied')
         except ScopeUnavailable:return error_response(503,'Scope capability unavailable')

@@ -24,6 +24,8 @@ The confirmation must repeat the exact database name. No private connection defa
 - Actual optional bootstrap application, bcrypt/JWT, direct WSGI HTTP task creation and installed manager generation.
 - First explicit step prepares persisted goals but does not mark the task complete; the same outer handle/token continues through planner, intent worker, harmless fixture fact/proof and manager completion.
 - Real scoped token and command-history reads over synthetic rows.
+- Actual PostgreSQL intercept-history joins with exact textual task keys (`007` versus `7`), plus a raw-permission revocation after SQL fetch that must hide the response.
+- Read-only pool diagnostics from a real Registry with synthetic profiles and redacted errors; actual Guard ring eviction with inert audit records. No intercept decisions, live waiters, tool execution, visibility changes or pool resets are exercised.
 - All model responses and policy grants are fixed in-process fixtures. Signing material/passwords are generated and not logged. Transcripts are generated in a temporary directory and removed afterward.
 
 This is not a network-listener/browser test, production configuration, security sandbox, real model run, timed-engine acceptance, autonomous scheduler, full Go parity suite or proof of safe live grants. No default application enabling. A test failure can leave database fixtures; errors are intentionally terse and no automatic retry is attempted. Inspect only your disposable database. The environment used to run this script must itself be isolated; the script does not create an OS/network sandbox.

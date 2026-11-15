@@ -83,7 +83,12 @@ class TaskCoverageStore:
         self._check()
     @contextmanager
     def _context(self):
-        with self.guard(self._scope):
+        callbacks=(self.authorize,self.current,self.guard,self.connector)
+        def policy_pins():
+            if any(a is not b for a,b in zip(callbacks,(self.authorize,self.current,self.guard,self.connector))):
+                raise CoverageDenied('Coverage policy changed')
+        with callbacks[2](self._scope):
+            policy_pins()
             self._check();self._allow(self.scope.task_id,self.scope.exploration_id)
             with self.executor.transaction() as tx:
                 rows=tx.fetch_all(Query('''SELECT id,exploration_id,COALESCE(coverage_enabled,true) FROM tasks
@@ -104,7 +109,13 @@ ORDER BY source.id LIMIT 9 FOR SHARE OF relation,source''',(self.scope.task_id,)
                     self._allow(id,exp)
                     if archived is not None or archiving is not False:raise CoverageUnavailable('Archived source projection unavailable')
                     ids.append(id);exps[exp]=id
-                self._check();yield tx,ids,exps,enabled;self._check()
+                policy_pins();self._check();yield tx,ids,exps,enabled
+                policy_pins()
+                for exp,task in exps.items():self._allow(task,exp)
+                self._check()
+            policy_pins()
+            for exp,task in exps.items():self._allow(task,exp)
+            self._check();policy_pins()
     def _bounded(self,value):
         if len(json.dumps(value,ensure_ascii=False,allow_nan=False).encode('utf-8'))>self.max_bytes:raise CoverageUnavailable('Coverage output exceeds bound')
         return value
@@ -235,4 +246,6 @@ ORDER BY en.id DESC LIMIT $4''',(ids,asset_id,self.scope.task_id,self.max_rows+1
                     host,port=hostport(n)
                     parent=first(services.get((host,port)),service_hosts.get(host),subs.get(host),subs.get(n.get('domain','')),ips.get(host),ips.get(n.get('ip','')),roots.get(n.get('root_domain','')))
                 if parent and parent!=n['key'] and parent in bykey:edges.append(dict(src=n['key'],dst=parent))
+            for root in missing:self._connector('root_domain',root)
+            for company in sorted(companies):self._connector('company',company)
             return self._bounded(dict(nodes=nodes,edges=edges))

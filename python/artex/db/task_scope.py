@@ -93,7 +93,7 @@ def normalize(task_id, kind, value, *, reason='', source='agent'):
 
 
 class TaskScopeStore:
-    def __init__(self,executor,task_id,*,lifecycle_guard,current,approve,company_allowed=None,max_batch=100,expected_exploration_id=None):
+    def __init__(self,executor,task_id,*,lifecycle_guard,current,approve,company_allowed=None,max_batch=100,expected_exploration_id=None,read_authorize=None):
         self.executor=executor;self.task_id=_id(task_id)
         self.expected_exploration_id=None if expected_exploration_id is None else _id(expected_exploration_id)
         if not all(callable(x) for x in (lifecycle_guard,current,approve)):raise ScopeInvalid('Explicit lifecycle and scope approval required')
@@ -101,6 +101,9 @@ class TaskScopeStore:
         if type(max_batch) is not int or not 1<=max_batch<=1000:raise ScopeInvalid('Invalid batch limit')
         self.guard,self.current,self.approve=lifecycle_guard,current,approve
         self.company_allowed=company_allowed;self.max_batch=max_batch
+        if read_authorize is not None and not callable(read_authorize):raise ScopeInvalid('Explicit scope read policy required')
+        self.read_authorize=read_authorize
+        self._read_binding=(executor,self.task_id,self.expected_exploration_id,lifecycle_guard)
 
     def _check(self):
         if self.current() is not True:raise ScopeDenied('Task lifetime/authority changed')
@@ -145,6 +148,33 @@ VALUES ($1,$2,$3,$4,$5::cidr,$6,$7,NULLIF($8,'')) ON CONFLICT DO NOTHING''',
         return self.add_many((normalize(self.task_id,kind,value,reason=reason,source=source),))[0]
 
     def list_bounded(self):
+        """Explicitly granted bounded read; approval for insertion is not a read grant.
+
+        HTTP supplies a transaction-local store and null guard while already
+        holding the original lifecycle guard/parent lock. Direct callers must
+        provide their own exact lifetime/current and read policy. No nested
+        transaction or second external guard is introduced by the HTTP path.
+        """
+        original=self._read_binding
+        read_authorizer=self.read_authorize
+        def binding():
+            if self.read_authorize is not read_authorizer:raise ScopeDenied('Scope read policy changed')
+            if (self.executor is not original[0] or self.task_id!=original[1]
+                or self.expected_exploration_id!=original[2] or self.guard is not original[3]):
+                raise ScopeUnavailable('Scope read binding changed')
+        def grant():
+            binding();self._check();binding()
+            if read_authorizer is None:raise ScopeUnavailable('Scope read authority unavailable')
+            if read_authorizer(self.task_id,self.expected_exploration_id) is not True:
+                raise ScopeDenied('Scope read not authorized')
+            binding();self._check();binding()
+        with original[3]():
+            grant()
+            result=self._list_bounded_snapshot()
+            grant()
+            return result
+
+    def _list_bounded_snapshot(self):
         """Own-task scope only; explicit source inheritance is not assembled here.
 
         Any source relation fails closed, rather than returning an incomplete

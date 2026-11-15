@@ -37,23 +37,35 @@ class TokenUsageStore:
         if any(not callable(v) for v in (authorize,current,lifecycle_guard)):raise ValueError('Explicit usage authority required')
         if type(max_rows) is not int or not 1<=max_rows<=10000 or type(max_bytes) is not int or not 1024<=max_bytes<=16777216:raise ValueError('Invalid usage bounds')
         self.executor,self.scope=executor,scope;self._executor,self._scope=executor,scope
-        self.authorize,self.current,self.guard=authorize,current,lifecycle_guard;self.max_rows,self.max_bytes=max_rows,max_bytes
+        self.authorize,self.current,self.guard=authorize,current,lifecycle_guard;self.max_rows,self.max_bytes=max_rows,max_bytes;self._guard=lifecycle_guard
     def _check(self):
-        if self.executor is not self._executor or self.scope is not self._scope:raise UsageDenied('Usage binding changed')
+        if self.executor is not self._executor or self.scope is not self._scope or self.guard is not self._guard:raise UsageDenied('Usage binding changed')
         if self.current(self._scope) is not True:raise UsageDenied('Usage authority stale')
-        if self.executor is not self._executor or self.scope is not self._scope:raise UsageDenied('Usage binding changed')
+        if self.executor is not self._executor or self.scope is not self._scope or self.guard is not self._guard:raise UsageDenied('Usage binding changed')
+    def _validate_read_locked(self,op):
+        self._check()
+        if self.authorize(self._scope,op) is not True:raise UsageDenied('Usage read denied')
+        self._check()
+    def validate_read(self,op):
+        with self._guard(self._scope):
+            self._validate_read_locked(op)
     @contextmanager
     def _read(self,op):
+        policies=(self.authorize,self.current,)
+        def check():
+            if any(a is not b for a,b in zip((self.authorize,self.current,),policies)):raise UsageDenied()
+            self._check()
+            if any(a is not b for a,b in zip((self.authorize,self.current,),policies)):raise UsageDenied()
         with self.guard(self._scope):
-            self._check()
+            check()
             if self.authorize(self._scope,op) is not True:raise UsageDenied('Usage read denied')
-            self._check()
+            check()
             with self._executor.transaction() as tx:
                 if self._scope.task_id is not None:
                     rows=tx.fetch_all(Query('SELECT id FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=$1) FOR SHARE',(self._scope.task_id,self._scope.exploration_id)))
                     if rows!=[(self._scope.task_id,)]:raise UsageUnavailable('Live usage parent unavailable')
-                self._check();yield tx;self._check()
-            self._check()
+                check();yield tx;self._validate_read_locked(op);check()
+            self._validate_read_locked(op);check()
     def _rows(self,rows):
         if len(rows)>self.max_rows:raise UsageUnavailable('Usage row bound exceeded')
         return rows

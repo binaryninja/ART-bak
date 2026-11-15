@@ -31,26 +31,42 @@ class CommandHistoryStore:
         if type(max_rows) is not int or not 1<=max_rows<=10000 or type(max_bytes) is not int or not 1024<=max_bytes<=16777216:raise ValueError('Invalid history bounds')
         self.executor,self.scope=executor,scope;self._executor,self._scope=executor,scope
         self.authorize,self.current,self.guard,self.raw=authorize,current,lifecycle_guard,raw_authorize
+        self._guard=lifecycle_guard
         self.max_rows,self.max_bytes=max_rows,max_bytes
     def _check(self):
-        if self.executor is not self._executor or self.scope is not self._scope:raise CommandDenied()
+        if self.executor is not self._executor or self.scope is not self._scope or self.guard is not self._guard:raise CommandDenied()
         if self.current(self._scope) is not True:raise CommandDenied()
-        if self.executor is not self._executor or self.scope is not self._scope:raise CommandDenied()
+        if self.executor is not self._executor or self.scope is not self._scope or self.guard is not self._guard:raise CommandDenied()
+    def _validate_read_locked(self,op,q):
+        self._check()
+        if self.authorize(self._scope,op,q) is not True:raise CommandDenied()
+        self._check()
+        if op=='list':
+            if not callable(self.raw) or self.raw(self._scope,q) is not True:raise CommandDenied()
+            self._check()
+    def validate_read(self,op,q):
+        with self._guard(self._scope):
+            self._validate_read_locked(op,q)
     @contextmanager
     def _read(self,op,q):
+        policies=(self.authorize,self.raw,self.current,)
+        def check():
+            if any(a is not b for a,b in zip((self.authorize,self.raw,self.current,),policies)):raise CommandDenied()
+            self._check()
+            if any(a is not b for a,b in zip((self.authorize,self.raw,self.current,),policies)):raise CommandDenied()
         with self.guard(self._scope):
-            self._check()
+            check()
             if self.authorize(self._scope,op,q) is not True:raise CommandDenied()
-            self._check()
+            check()
             if op=='list':
                 if not callable(self.raw) or self.raw(self._scope,q) is not True:raise CommandDenied()
-                self._check()
+                check()
             with self._executor.transaction() as tx:
                 if self._scope.task_id is not None:
                     rows=tx.fetch_all(Query('SELECT id FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=$1) FOR SHARE',(self._scope.task_id,self._scope.exploration_id)))
                     if rows!=[(self._scope.task_id,)]:raise CommandUnavailable('Task history unavailable')
-                self._check();yield tx;self._check()
-            self._check()
+                check();yield tx;self._validate_read_locked(op,q);check()
+            self._validate_read_locked(op,q);check()
     def _base(self,q):
         if not isinstance(q,str) or '\0' in q or len(q.encode('utf-8'))>4096:raise ValueError('Bounded keyword required')
         exp=self._scope.exploration_id

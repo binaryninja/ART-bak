@@ -35,6 +35,7 @@ class WorkspaceService:
         if type(max_download_bytes) is not int or not 2*1024*1024<=max_download_bytes<=32*1024*1024:raise ValueError('Invalid download limit')
         if type(max_entries) is not int or not 1<=max_entries<=2000:raise ValueError('Invalid entry limit')
         self.resolve,self.authorize,self.current,self.guard=resolve,authorize,current,lifecycle_guard
+        self._callbacks=(resolve,authorize,current,lifecycle_guard)
         self.max_bytes,self.max_entries=max_download_bytes,max_entries
     def register(self,router):
         for action in ('list','read','download'):
@@ -49,19 +50,28 @@ class WorkspaceService:
             path=pairs[0][1] if pairs else ''
             if len(path.encode())>4096:raise FilesystemError()
             if any(request.header(h) for h in ('Range','If-Range','If-Modified-Since','If-None-Match')):return error_response(400,'Conditional and range requests unsupported')
+            def resources():
+                if any(a is not b for a,b in zip((self.resolve,self.authorize,self.current,self.guard),self._callbacks)):raise WorkspaceUnavailable()
+            resources()
+            original_path=path
             binding=self.resolve(request)
+            resources()
             if type(binding) is not WorkspaceBinding:raise WorkspaceUnavailable()
             identity=(binding.task_id,binding.root,binding.root_device,binding.root_inode,binding.revision)
             if type(binding.task_id) is not int or not 0<binding.task_id<2**63 or type(binding.revision) is not str or not binding.revision or len(binding.revision.encode())>256:raise WorkspaceUnavailable()
             if any(type(x) is not int or x<0 for x in (binding.root_device,binding.root_inode)):raise WorkspaceUnavailable()
             def check():
+                resources()
                 if (binding.task_id,binding.root,binding.root_device,binding.root_inode,binding.revision)!=identity:raise WorkspaceUnavailable()
                 if self.current(binding) is not True:raise WorkspaceDenied()
+                resources()
                 if (binding.task_id,binding.root,binding.root_device,binding.root_inode,binding.revision)!=identity:raise WorkspaceUnavailable()
-            with self.guard(binding):
+            def allow():
                 check()
-                if self.authorize(request,action,binding,path) is not True:raise WorkspaceDenied()
+                if self.authorize(request,action,binding,original_path) is not True:raise WorkspaceDenied()
                 check()
+            with self._callbacks[3](binding):
+                allow()
                 with ScopedFilesystem(binding.root,max_bytes=self.max_bytes,max_entries=self.max_entries) as fs:
                     info=os.fstat(fs._fd)
                     if (info.st_dev,info.st_ino)!=(binding.root_device,binding.root_inode):raise WorkspaceUnavailable()
@@ -101,7 +111,9 @@ class WorkspaceService:
                                     if not binary:result['content']=content
                                     response=json_response(200,result)
                     check()
-                return response
+                allow()
+            allow()
+            return response
         except WorkspaceDenied:return error_response(403,'Workspace access denied')
         except WorkspaceUnavailable:return error_response(503,'Workspace capability unavailable')
         except WorkspaceLimit:return error_response(413,'Workspace limit exceeded')

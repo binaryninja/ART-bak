@@ -25,6 +25,12 @@ class TokenUsageService:
         for path,op in (('/api/tokens/daily','daily'),('/api/tokens/conversations','conversations'),('/api/exploration/tokens','exploration')):
             router.add('GET',path,lambda req,params,a=op:self.handle(a,req,params))
     def handle(self,op,request,params=None):
+        policies=(self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),)
+        def check():
+            if any(a is not b for a,b in zip((self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),),policies)):raise UsageDenied()
+            self._check()
+            if any(a is not b for a,b in zip((self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),),policies)):raise UsageDenied()
+
         try:
             if request.body:raise ValueError()
             query=urlsplit(request.target).query
@@ -44,11 +50,14 @@ class TokenUsageService:
                 if int(q['task'])!=self._scope.task_id:raise UsageDenied()
             else:raise ValueError()
             with self._guard(self._scope):
-                self._check()
+                check()
                 if self.authorize(request,self._scope,op) is not True:raise UsageDenied()
-                self._check()
+                check()
                 result=self.store.daily(days) if op=='daily' else self.store.conversations() if op=='conversations' else self.store.exploration()
-                self._check();response=json_response(200,result)
+                check()
+                if self.authorize(request,self._scope,op) is not True:raise UsageDenied()
+                check();self.store.validate_read(op)
+                check();response=json_response(200,result)
                 if len(response.body)>self.max_bytes:raise UsageUnavailable()
                 return response
         except UsageDenied:return error_response(403,'Token scope not authorized')

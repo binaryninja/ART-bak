@@ -92,3 +92,15 @@ have zero literal Han. No original Go code was executed and no test assertion
 needed alteration. `db/task_scope.go`, `db/company_scope.go` and schema SQL were
 not edited; the `备案` input matcher remains unchanged. This is not a claim of
 whole-repository English completion.
+
+### Goal/constraint HTTP presentation follow-up
+
+A fresh scan found no literal Han in `web/src` TypeScript/TSX files. The bounded
+fallback translated nine error occurrences in `server/goals_api.go` and seven in
+`server/constraints_api.go` (12 distinct messages). Repository searches found no
+exact localized error-string consumers or test expectations needing adjustment.
+These files now have zero literal Han. Status codes, JSON keys, policies, query
+arguments, SQL and all nonmapped executable tokens/literals remain exact by
+explicit mapping and lexical comparison after official gofmt. Saved original
+copies and hash evidence accompany the mapping. No original Go code was run;
+intercept/CAS flows and the separate database exploration errors were untouched.

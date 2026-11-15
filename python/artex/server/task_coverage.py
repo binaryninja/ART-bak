@@ -29,6 +29,7 @@ class TaskCoverageService:
             router.add('GET','/api/tasks/{id}/'+path,lambda req,params,a=action:self.handle(a,req,params))
     def handle(self,action,request,params):
         try:
+            service_callbacks=(self.resolve,self.authorize,self.current,self.guard)
             if action not in ('coverage','graph','refs') or request.body:raise ValueError()
             task=_id(params['id']);query=urlsplit(request.target).query
             if len(query)>128:raise ValueError()
@@ -46,21 +47,25 @@ class TaskCoverageService:
             identity=(scope.task_id,scope.exploration_id,scope.revision)
             policies=(original.authorize,original.current,original.guard,original.connector)
             def check():
+                if any(a is not b for a,b in zip(service_callbacks,(self.resolve,self.authorize,self.current,self.guard))):raise CoverageDenied('Coverage policy changed')
                 if original.executor is not self._executor or original._executor is not self._executor or original._scope is not scope or original.scope is not scope or (scope.task_id,scope.exploration_id,scope.revision)!=identity or original.guard is not self.guard or (original.authorize,original.current,original.guard,original.connector)!=policies:
                     raise CoverageUnavailable('Coverage binding changed')
             def live(s):
                 check()
                 if self.current(original) is not True or policies[1](s) is not True:raise CoverageDenied()
                 check();return True
+            granted_sources=set();granted_connectors=set()
             def allow(s,t,e):
                 live(s)
                 if self.authorize(request,s,t,e) is not True:raise CoverageDenied()
                 live(s)
                 if policies[0](s,t,e) is not True:raise CoverageDenied()
+                granted_sources.add((t,e))
                 live(s);return True
             def connector(s,k,v):
                 live(s)
                 if policies[3] is None or policies[3](s,k,v) is not True:raise CoverageDenied()
+                granted_connectors.add((k,v))
                 live(s);return True
             check()
             store=TaskCoverageStore(self._executor,scope,authorize=allow,current=live,lifecycle_guard=self.guard,
@@ -73,10 +78,14 @@ class TaskCoverageService:
                 for row in store.asset_refs(asset):
                     if row.get('kind') not in buckets:raise CoverageUnavailable()
                     output[buckets[row['kind']]].append(row)
-            live(scope)
-            response=json_response(200,output)
-            if len(response.body)>self.max_bytes:raise CoverageUnavailable('Coverage response exceeds bound')
-            return response
+            # Sequential reacquisition: store operations have released this guard.
+            with self.guard(scope):
+                for t,e in tuple(granted_sources):allow(scope,t,e)
+                for k,v in tuple(granted_connectors):connector(scope,k,v)
+                live(scope)
+                response=json_response(200,output)
+                if len(response.body)>self.max_bytes:raise CoverageUnavailable('Coverage response exceeds bound')
+                return response
         except CoverageDenied:return error_response(403,'Task coverage read denied')
         except CoverageUnavailable:return error_response(503,'Task coverage capability unavailable')
         except (ValueError,TypeError,UnicodeError):return error_response(400,'Invalid task coverage request')

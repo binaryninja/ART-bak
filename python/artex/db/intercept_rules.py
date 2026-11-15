@@ -58,11 +58,19 @@ class InterceptRuleStore:
         if self.executor is not self._executor or self.scope is not self._scope:raise RuleDenied('Rule scope changed')
         if self.current(self._scope) is not True:raise RuleDenied('Rule authority stale')
         if self.executor is not self._executor or self.scope is not self._scope:raise RuleDenied('Rule scope changed')
+    def _read_grant(self,expected):
+        self._check()
+        if self.authorize is not expected:raise RuleDenied('Rule read policy changed')
+        if expected(self._scope,'list') is not True:raise RuleDenied('Rule read no longer authorized')
+        self._check()
+        if self.authorize is not expected:raise RuleDenied('Rule read policy changed')
     @contextmanager
     def _access_inner(self,op,proposal=None,rule_id=None):
+        read_authorizer=self.authorize if op=='list' else None
         with self.guard(self._scope):
             self._check()
-            if self.authorize(self._scope,op) is not True:raise RuleDenied('Rule read not authorized')
+            if op=='list':self._read_grant(read_authorizer)
+            elif self.authorize(self._scope,op) is not True:raise RuleDenied('Rule read not authorized')
             self._check()
             if op!='list':
                 if not callable(self.mutate) or self.mutate(self._scope,op,rule_id,proposal) is not True:raise RuleDenied('Rule mutation not authorized')
@@ -75,7 +83,12 @@ class InterceptRuleStore:
                     rows=tx.fetch_all(Query('SELECT id FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=$1)'+lifecycle+' FOR UPDATE',(self._scope.task_id,self._scope.exploration_id)))
                     if rows!=[(self._scope.task_id,)]:raise RuleConflict('Task rule parent unavailable')
                 self._check();yield tx;self._check()
-            try:self._check()
+                if op=='list':
+                    self._read_grant(read_authorizer)
+            try:
+                self._check()
+                if op=='list':
+                    self._read_grant(read_authorizer)
             except BaseException:
                 if op!='list':raise RuleUncertain('Rule committed; policy reconciliation required') from None
                 raise

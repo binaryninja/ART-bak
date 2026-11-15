@@ -8,8 +8,9 @@ URLs or headers. Status describes breaker/config state, not provider readiness.
 Writes require independent frozen proposal approval, all-owner idle and an exact
 shared global guard. coordinate(proposal,apply)->literalTrue MUST synchronously
 apply once then invalidate/reapply provider caches and persist/reset health as
-needed by the host. No implicit implementation of those effects. Reset-all (id=0) is unsupported
-until bounded registry ID enumeration exists; explicit single-profile reset only. Missing adapter
+needed by the host. No implicit implementation of those effects. Reset-all (id=0) approves a bounded complete registry-ID inventory, including
+orphan health IDs but excluding never-recorded profiles. Its memory clear is atomic;
+forget callbacks run off-lock and any partial persistence requires reconciliation. Missing adapter
 fails503 before effects. Retained/cross-thread apply closures cannot execute.
 Failures after apply are uncertain and never automatically retried.
 """
@@ -91,7 +92,7 @@ priority,is_default,pool_exclude FROM profiles ORDER BY is_default DESC,priority
             if st.last_at:item['last_at']=_timestamp(st.last_at)
             chain.append(item)
         return dict(enabled=enabled,bind_fallback=fallback,chain=chain)
-    def _write(self,request,change):
+    def _write(self,request,change,inventory=None):
         if any(not callable(v) for v in (self.mutate,self.idle,self.coordinate)):raise PoolUnavailable()
         if self.mutate(request,self.scope,change) is not True:raise PoolDenied()
         self._check()
@@ -105,7 +106,11 @@ priority,is_default,pool_exclude FROM profiles ORDER BY is_default DESC,priority
             self._check()
             if self.idle(self.scope) is not True:raise PoolDenied()
             self._check()
-            if change.operation=='reset':
+            if change.operation=='reset_all':
+                if inventory is None or inventory[1]!=change.ids or self.registry.inventory(self.max_rows)!=inventory:raise PoolUnavailable()
+                self._check()
+                self.registry.reset_inventory(inventory,self.max_rows,current=self._check)
+            elif change.operation=='reset':
                 for id in change.ids:self._check();self.registry.reset(id)
             else:
                 with self._executor.transaction():
@@ -125,6 +130,13 @@ priority,is_default,pool_exclude FROM profiles ORDER BY is_default DESC,priority
             router.add(method,path,lambda req,params,a=op:self.handle(a,req))
     def handle(self,op,request):
         changed=False
+        read_authorize=self.authorize
+        def read_grant():
+            if self.authorize is not read_authorize:raise PoolDenied()
+            self._check()
+            if read_authorize(request,self.scope,op) is not True:raise PoolDenied()
+            if self.authorize is not read_authorize:raise PoolDenied()
+            self._check()
         try:
             from urllib.parse import urlsplit
             if urlsplit(request.target).query:raise ValueError()
@@ -137,16 +149,24 @@ priority,is_default,pool_exclude FROM profiles ORDER BY is_default DESC,priority
                 elif op=='reset':
                     body=request.json_object(4096);id=body.get('id',0)
                     if set(body)-{'id'} or type(id) is not int or not 0<=id<2**63:raise ValueError()
-                    if id==0:raise PoolUnavailable()  # bounded reset-all registry enumeration not yet available
-                    ids=(id,)
+                    try:inventory=self.registry.inventory(self.max_rows) if id==0 else None
+                    except ValueError:raise PoolUnavailable() from None
+                    ids=inventory[1] if inventory is not None else (id,)
                     if len(ids)>self.max_rows or any(type(i) is not int or i<=0 for i in ids):raise PoolUnavailable()
-                    self._write(request,PoolChange('reset',ids=ids));changed=True
+                    self._write(request,PoolChange('reset_all' if id==0 else 'reset',ids=ids),inventory);changed=True
                 elif op=='save':self._write(request,PoolChange('save',policy=_policy(request.json_object(65536))));changed=True
                 else:raise ValueError()
                 result=self._retry() if op in ('retry','save') else self._status()
                 self._check();response=json_response(200,result)
                 if len(response.body)>self.max_bytes:raise PoolUnavailable()
-                return response
+                if op in ('status','retry'):
+                    read_grant()
+                else:
+                    return response
+            # Read grants may be revoked by snapshot or guard cleanup callbacks.
+            # This is not a second mutation approval and creates no nested guard.
+            read_grant()
+            return response
         except _PoolUncertain:return json_response(503,{'error':'Pool changes require reconciliation','committed':None,'needs_reconciliation':True})
         except Exception as exc:
             if changed:return json_response(503,{'error':'Pool changed; reconciliation required','committed':True,'needs_reconciliation':True})

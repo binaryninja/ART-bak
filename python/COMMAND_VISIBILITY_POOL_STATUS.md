@@ -21,8 +21,9 @@ Raw provider diagnostics and secret-bearing profile fields are not exposed.
 Retry-setting and single-profile-reset mutations require immutable approval,
 idle ownership and an exact-once coordinator that completes the actual effect
 and final authority checks. Merely invoking a failed callback cannot report
-success. Partial/uncertain effects do not automatically retry. Reset-all is
-unavailable in this checkpoint; no provider requests or implicit profiles occur.
+success. Partial/uncertain effects do not automatically retry. Reset-all was unavailable in the original checkpoint below. A subsequent opt-in
+subset is described in AUDIT_INTERCEPT_RESET_STATUS.md; no provider requests or
+implicit profiles occur.
 
 Every service is explicit opt-in. Application factories validate retained
 resource identities before startup reads and supply no missing permissions.
