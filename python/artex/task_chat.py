@@ -98,12 +98,14 @@ class TaskChatCore:
         with self.guard(scope):
             self._check(scope,scope.session_id)
             if not isinstance(self.limits,Limits):raise ValueError('Invalid task chat limits')
-            if not scope.model.identity or scope.model.streaming:raise ValueError('Identified nonstream model required')
+            if not scope.model.identity:raise ValueError('Identified model required')
             scope.system.encode('utf-8')
             binding=self.provider_resolver(scope,scope.model)
-            if not isinstance(binding,ChatBinding) or binding.model!=scope.model or not callable(getattr(binding.provider,'complete',None)):
+            if not isinstance(binding,ChatBinding) or binding.model!=scope.model or not callable(getattr(binding.provider,'stream' if scope.model.streaming else 'complete',None)):
                 raise ChatUnavailable('Current task model unavailable')
-            BoundedAgent(binding.provider,gate=self.gate,tools=self.tools,limits=self.limits)
+            from .agent.streaming import StreamingCompletion
+            preflight_provider=StreamingCompletion(binding.provider,check=lambda:None) if scope.model.streaming else binding.provider
+            BoundedAgent(preflight_provider,gate=self.gate,tools=self.tools,limits=self.limits)
             ChatAgent(self.transcript,lambda model:binding,gate=self.gate,tools=self.tools,limits=self.limits,capture=self.capture)
             self._check(scope,scope.session_id)
         return scope

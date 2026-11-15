@@ -7,7 +7,7 @@ planner/worker orchestration, scheduling, full API coverage and SDK/tool
 integration remain incomplete. See [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) for the
 connected WSGI/auth/category slice and optional psycopg/bcrypt adapters. The original Go backend and
 Next.js frontend remain intact. See [MIGRATION.md](MIGRATION.md) for the parity
-inventory and remaining work. See [TASK_CHAT_ARCHIVE_STATUS.md](TASK_CHAT_ARCHIVE_STATUS.md) for the latest task-chat, catalog and archive-primitives checkpoint, and [ISOLATED_QA.md](ISOLATED_QA.md) for scoped real-database evidence.
+inventory and remaining work. See [STREAMING_INSPECTION_STATUS.md](STREAMING_INSPECTION_STATUS.md) for the latest streaming, recording and explicit execution-primitives checkpoint, and [ISOLATED_QA.md](ISOLATED_QA.md) for scoped real-database evidence.
 
 Implemented modules:
 
@@ -25,7 +25,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **1198 tests**; these are authored unit/adapter
+combined suite currently passes **1316 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.

@@ -73,6 +73,29 @@ class Router:
         # Static routes win over parameter routes regardless of registration order.
         self._routes.sort(key=lambda r: r[1].count('{'))
 
+    def mount_protected(self, staged, *, use_parent_authorizer=False):
+        """Atomically mount staged declarations under this router's authorization.
+
+        This does not inherit staged.authorize. Callers must explicitly opt in
+        to the parent policy; service-level scope/body policies remain in handlers.
+        Only protected declarations are accepted, and conflicting parameter names
+        cannot hide the same method/path shape. No partial mount on validation error.
+        """
+        if use_parent_authorizer is not True or not isinstance(staged, Router) or staged is self:
+            raise ValueError('Explicit parent authorization and distinct staging router required')
+        identity = lambda method, path: (method, re.sub(r'\{[^}]+\}', '{}', path))
+        existing = {identity(method, path) for method, path, *_ in self._routes}
+        additions = list(staged._routes)
+        for method, path, _, _, public in additions:
+            if public:
+                raise ValueError('Staged routes must remain protected')
+            key = identity(method, path)
+            if key in existing:
+                raise ValueError('Route already registered')
+            existing.add(key)
+        self._routes.extend(additions)
+        self._routes.sort(key=lambda row: row[1].count('{'))
+
     def dispatch(self, request: Request) -> Response:
         matches = [(m, p, regex.fullmatch(request.path), h, public)
                    for m, p, regex, h, public in self._routes if regex.fullmatch(request.path)]

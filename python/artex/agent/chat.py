@@ -4,7 +4,7 @@ Source: agent/chat.go creates/resumes a session, records human/assistant/tool tu
 captures normalized main requests, and closes the session. This narrower port
 uses BoundedAgent; NEVER source ModeBypass/default shell/web/skills/MCP tools.
 No filesystem, threads, listener, provider transport, compaction, deferred unlock,
-streaming or automatic retry is supplied. No task/goal completion is implied.
+automatic retry is supplied. Streaming profiles use bounded whole-turn assembly. No task/goal completion is implied.
 
 Adapter contract: begin must atomically reserve a running turn and persist its
 user message, returning the full validated history including that user message.
@@ -27,6 +27,7 @@ import re
 from typing import Protocol
 from .runtime import BoundedAgent,Limits,RunResult,RunStopped
 from ..sidequestion import Model
+from .streaming import StreamingCompletion, StreamLimits
 
 
 class ChatBusy(RuntimeError):pass
@@ -110,6 +111,13 @@ class _Provider:
         binding=self.host._binding(self.model)
         context.check()
         self.host._check_turn(self.session,self.turn)
+        if self.model.streaming:
+            def live():
+                self.host._check_turn(self.session,self.turn)
+                self.host._binding(self.model)
+                self.host._check_turn(self.session,self.turn)
+            return StreamingCompletion(binding.provider,check=live,
+                limits=StreamLimits(max_bytes=self.host.limits.max_request_bytes)).complete(context,request)
         return binding.provider.complete(context,request)
 
 
@@ -127,7 +135,7 @@ class ChatAgent:
         try:binding=self.resolver(deepcopy(expected))
         except Exception:raise ChatUnavailable('Current model configuration unavailable') from None
         if (not isinstance(binding,ChatBinding) or not isinstance(binding.model,Model)
-            or binding.model!=expected or not callable(getattr(binding.provider,'complete',None))):
+            or binding.model!=expected or not callable(getattr(binding.provider,'stream' if expected.streaming else 'complete',None))):
             raise ChatUnavailable('Current model configuration changed or unavailable')
         return binding
 
@@ -148,8 +156,8 @@ class ChatAgent:
         if not isinstance(message,str) or not message.strip() or '\x00' in message:raise ValueError('Nonempty chat message required')
         if not isinstance(system,str):raise ValueError('System prompt must be text')
         message.encode('utf-8');system.encode('utf-8')
-        if not isinstance(model,Model) or not model.identity or model.streaming:
-            raise ValueError('Identified nonstreaming model configuration required')
+        if not isinstance(model,Model) or not model.identity:
+            raise ValueError('Identified model configuration required')
         user={'role':'user','content':[{'type':'text','text':message}]}
         token=_Token(token)
         if token.cancelled:raise RunStopped('cancelled')
@@ -159,7 +167,7 @@ class ChatAgent:
         try:
             binding=self._binding(model)  # fail before user persistence when config missing
             # Validate the same immutable tool registry before admitting a user turn.
-            preflight=BoundedAgent(binding.provider,gate=self.gate,tools=self.tools,limits=self.limits)
+            preflight=BoundedAgent(StreamingCompletion(binding.provider,check=lambda:None) if model.streaming else binding.provider,gate=self.gate,tools=self.tools,limits=self.limits)
             if not isinstance(self.limits,Limits) or (self.clock is not None and not callable(self.clock)):
                 raise ValueError('Invalid runtime configuration')
             context=dict(metadata or {})
@@ -175,7 +183,10 @@ class ChatAgent:
                 raise ChatPersistenceError()
             def checked_gate(context,action):
                 self._check_turn(session_id,turn)
+                self._binding(model)
                 grant=self.gate(context,action)
+                self._check_turn(session_id,turn)
+                self._binding(model)
                 self._check_turn(session_id,turn)
                 return grant
             from ..providers import Config, serialize

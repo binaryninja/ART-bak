@@ -1,7 +1,7 @@
 """Source-shaped conversation async admission and activity polling, no invented SSE.
 
 Explicit host-owned dispatcher persists user activity and registers busy/cancel
-before 202. Nonstream ChatAgent runs in its bounded worker; durable transcript
+before 202. ChatAgent runs in its bounded worker; durable transcript
 commit precedes terminal result activity. Original text is retained; attachments
 and mention preparation are rejected rather than silently dropped. Task /api/chat
 is a different main-agent/activity flow registered by TaskChatService only.
@@ -158,15 +158,17 @@ class ChatService:
             # validation is too late for asynchronous admission.
             if not isinstance(resources.limits,Limits) or (resources.clock is not None and not callable(resources.clock)):
                 raise ValueError('Invalid runtime limits or clock')
-            if not isinstance(resources.model,Model) or resources.model.streaming or not resources.model.identity:
-                raise ValueError('Nonstream identified model required')
+            if not isinstance(resources.model,Model) or not resources.model.identity:
+                raise ValueError('Identified model required')
             if not isinstance(resources.system,str):raise ValueError('Invalid system prompt')
             resources.system.encode('utf-8')
             binding=resources.resolver(deepcopy(resources.model))
             from ..agent.chat import ChatBinding
-            if not isinstance(binding,ChatBinding) or binding.model!=resources.model or not callable(getattr(binding.provider,'complete',None)):
+            if not isinstance(binding,ChatBinding) or binding.model!=resources.model or not callable(getattr(binding.provider,'stream' if resources.model.streaming else 'complete',None)):
                 raise ChatUnavailable('Current model unavailable')
-            BoundedAgent(binding.provider,gate=resources.gate,tools=resources.tools,limits=resources.limits)
+            from ..agent.streaming import StreamingCompletion
+            preflight_provider=StreamingCompletion(binding.provider,check=lambda:None) if resources.model.streaming else binding.provider
+            BoundedAgent(preflight_provider,gate=resources.gate,tools=resources.tools,limits=resources.limits)
             # Validate remaining adapter prerequisites before user activity.
             ChatAgent(resources.transcript,resources.resolver,gate=resources.gate,tools=resources.tools,
                       capture=resources.capture,limits=resources.limits,clock=resources.clock)

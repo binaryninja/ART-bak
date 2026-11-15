@@ -11,7 +11,7 @@ import (
 )
 
 // =====================================================================
-// 公司主体层
+// Company entity layer
 // =====================================================================
 
 // Company is a row in the companies table.
@@ -52,8 +52,8 @@ var (
 )
 
 const (
-	// 企业范围不限制规则条数:逐个 IP / 域名录入的范围动辄上千条,封顶只会逼用户
-	// 拆成多个企业。请求体大小(server 侧 maxCompanyMutationBodyBytes)仍然兜底。
+	// No rule-count cap: individual IP/domain scopes often contain thousands of rules;
+	// a cap would force splitting companies. Server maxCompanyMutationBodyBytes still bounds input.
 	//
 	// Raw and normalized textual scope payloads are bounded by Unicode rune
 	// count so multi-byte input is treated consistently by the API and DB layer.
@@ -69,7 +69,7 @@ func (e *CompanyScopeValidationError) Error() string { return e.Message }
 
 // ValidateCompanyScopeInputBounds applies request-wide limits before parsing.
 // Store methods call it again so non-HTTP callers cannot bypass the limits.
-// 只约束单条规则的长度,不限制条数。
+// Limit each rule length, not the number of rules.
 func ValidateCompanyScopeInputBounds(inputs []ScopeInput) error {
 	for i, input := range inputs {
 		if utf8.RuneCountInString(input.Value) > MaxCompanyScopeRawRunes {

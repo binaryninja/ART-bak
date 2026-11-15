@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **110**.
-- python optional service routes: **105**.
-- matched offline contract routes: **110**.
-- go routes without python registration: **151**.
+- python offline contract routes: **116**.
+- python optional service routes: **111**.
+- matched offline contract routes: **116**.
+- go routes without python registration: **145**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -155,11 +155,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/llm/profiles` | `server/server.go:899` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm/profiles/active` | `server/server.go:901` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
-| DELETE | `/api/llm/records` | `server/server.go:796` | Not registered |
-| GET | `/api/llm/records` | `server/server.go:795` | Not registered |
-| GET | `/api/llm/records/by-model` | `server/server.go:798` | Not registered |
-| GET | `/api/llm/records/tasks` | `server/server.go:797` | Not registered |
-| GET | `/api/llm/records/{id}` | `server/server.go:799` | Not registered |
+| DELETE | `/api/llm/records` | `server/server.go:796` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| GET | `/api/llm/records` | `server/server.go:795` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| GET | `/api/llm/records/by-model` | `server/server.go:798` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| GET | `/api/llm/records/tasks` | `server/server.go:797` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
+| GET | `/api/llm/records/{id}` | `server/server.go:799` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
 | GET | `/api/llm/retry-policy` | `server/server.go:902` | Not registered |
 | POST | `/api/llm/retry-policy` | `server/server.go:903` | Not registered |
 | POST | `/api/llm/test` | `server/server.go:739` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -267,7 +267,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/scope/{sid}` | `server/server.go:719` | Not registered |
 | GET | `/api/tokens/conversations` | `server/server.go:781` | Not registered |
 | GET | `/api/tokens/daily` | `server/server.go:780` | Not registered |
-| GET | `/api/tokens/usage` | `server/server.go:782` | Not registered |
+| GET | `/api/tokens/usage` | `server/server.go:782` | Optional registration; adapters required: `python/artex/server/llm_records.py:65` |
 | GET | `/api/tools` | `server/server.go:857` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/custom` | `server/server.go:859` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
 | POST | `/api/tools/custom/test` | `server/server.go:860` | Optional registration; adapters required: `python/artex/server/tool_catalog.py:22` |
@@ -363,6 +363,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `POST /api/exploration/findings/{id}/deepen`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/llm/records`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/tasks`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/by-model`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/llm/records`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tokens/usage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/stream`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.

@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// 内置「删除类接口路径」规则匹配的是整个 tool_input JSON 串，因此用例直接以
-// JSON 形态给出，与 Interceptor 实际拿到的 subject 一致。
+// The builtin delete-endpoint-path rule matches the entire tool_input JSON string, so tests supply
+// JSON directly, matching the subject actually received by Interceptor.
 func TestDeleteEndpointPathPattern(t *testing.T) {
 	re := regexp.MustCompile(deleteEndpointPathPattern)
 
 	hit := []string{
-		`{"command":"curl -s 'http://t.com/api/user/delete?id=1'"}`,    // GET 打删除接口
-		`{"command":"curl -X POST http://t.com/admin/delete -d id=1"}`, // POST 打删除接口
+		`{"command":"curl -s 'http://t.com/api/user/delete?id=1'"}`,    // GET request to a delete endpoint.
+		`{"command":"curl -X POST http://t.com/admin/delete -d id=1"}`, // POST request to a delete endpoint.
 		`{"command":"curl 'http://t.com/api/deleteAll'"}`,
 		`{"command":"curl 'http://t.com/api/delete_user?id=1'"}`,
 		`{"command":"curl 'http://t.com/api/delete-user?id=1'"}`,
@@ -20,7 +20,7 @@ func TestDeleteEndpointPathPattern(t *testing.T) {
 		`{"command":"curl http://t.com/files/unlink/3"}`,
 		`{"command":"curl http://t.com/api/del?id=2"}`,
 		`{"command":"curl -X POST http://t/v1/erase"}`,
-		`{"command":"curl http://t/admin/destroyAll"}`, // v1 的路径规则不允许后缀，这里补上
+		`{"command":"curl http://t/admin/destroyAll"}`, // The v1 path rule disallowed suffixes; cover them here.
 	}
 	for _, s := range hit {
 		if !re.MatchString(s) {
@@ -28,13 +28,13 @@ func TestDeleteEndpointPathPattern(t *testing.T) {
 		}
 	}
 
-	// 动词后必须跟分隔符，避免 /delivery、/details 这类只读路径被误拦。
+	// A separator must follow the verb to avoid blocking read-only paths such as /delivery or /details.
 	miss := []string{
 		`{"command":"curl 'http://t.com/api/delivery?id=1'"}`,
 		`{"command":"curl 'http://t.com/order/details'"}`,
 		`{"command":"curl 'http://t.com/api/delta/sync'"}`,
 		`{"command":"curl 'http://t.com/user/delegate'"}`,
-		`{"command":"curl 'http://delete.example.com/'"}`, // 删除动词出现在域名而非路径
+		`{"command":"curl 'http://delete.example.com/'"}`, // The deletion verb occurs in the domain, not the path.
 		`{"command":"curl 'http://t.com/remote/status'"}`,
 		`{"command":"nmap -p80 10.0.0.1"}`,
 	}

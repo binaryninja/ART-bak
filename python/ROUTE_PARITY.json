@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 110,
-    "python_optional_service_routes": 105,
-    "matched_offline_contract_routes": 110,
-    "go_routes_without_python_registration": 151
+    "python_offline_contract_routes": 116,
+    "python_optional_service_routes": 111,
+    "matched_offline_contract_routes": 116,
+    "go_routes_without_python_registration": 145
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -19,13 +19,15 @@
     "python/artex/server/application.py": "5c332b7113e2320fa682809273f12119d9e0d5b4238ffae4ea8ad53404410cd9",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
-    "python/artex/server/chat.py": "b7e742d8f30ba3e8087db02bc35b6bf3eefc71662506028379a7c2afdeaa77d9",
-    "python/artex/server/chat_setup.py": "fb4be704b445a54042b22cb05a34cb2ee4364f87171b8c07ff90a48f81eca473",
+    "python/artex/server/chat.py": "5b17c3b388d33beab1e563fbd800d7149e97836620d489d2f6755d31fceccda2",
+    "python/artex/server/chat_setup.py": "280c863c66f9c1a906972d4d8e40a7ad0caab33db3bd3f662169223102e4e5dd",
     "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
     "python/artex/server/conversations.py": "2927d9dac2c95472749d709177e56a96c2ff2507fc29ead364bcab9629a71ed1",
-    "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
+    "python/artex/server/core.py": "7c8aa40d13f5e1add576483daf411b628871675ee7a98b87333c2add181ac9c3",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
+    "python/artex/server/inspection_setup.py": "4dad4b0b2682c609423df2799c032ee954ee1bb0fd5a9be8c1699a0d4b60aed9",
+    "python/artex/server/llm_records.py": "a23fc47ce00024f0569fabb1a8c508d68fd3ff215ea6ed955cef3b45c50cc947",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
@@ -2083,8 +2085,19 @@
       "expression": "\"GET /api/tokens/usage\"",
       "method": "GET",
       "path": "/api/tokens/usage",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tokens/usage",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/audit",
@@ -2227,8 +2240,19 @@
       "expression": "\"GET /api/llm/records\"",
       "method": "GET",
       "path": "/api/llm/records",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm/records",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/llm/records",
@@ -2239,8 +2263,19 @@
       "expression": "\"DELETE /api/llm/records\"",
       "method": "DELETE",
       "path": "/api/llm/records",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/llm/records",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/llm/records/tasks",
@@ -2251,8 +2286,19 @@
       "expression": "\"GET /api/llm/records/tasks\"",
       "method": "GET",
       "path": "/api/llm/records/tasks",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm/records/tasks",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/llm/records/by-model",
@@ -2263,8 +2309,19 @@
       "expression": "\"GET /api/llm/records/by-model\"",
       "method": "GET",
       "path": "/api/llm/records/by-model",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm/records/by-model",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/llm/records/{id}",
@@ -2275,8 +2332,19 @@
       "expression": "\"GET /api/llm/records/{id}\"",
       "method": "GET",
       "path": "/api/llm/records/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/llm/records/{id}",
+        "source": "python/artex/server/llm_records.py",
+        "line": 65,
+        "function": "LLMRecordService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/settings",
@@ -5133,6 +5201,78 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/records",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/records/tasks",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/records/by-model",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/records/{id}",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/llm/records",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tokens/usage",
+      "source": "python/artex/server/llm_records.py",
+      "line": 65,
+      "function": "LLMRecordService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

@@ -1,4 +1,8 @@
-# Integration checkpoint
+# Historical early integration checkpoint
+
+Later implementations and live-driver verification are recorded in README.md and
+ISOLATED_QA.md. Assertions below about then-missing adapters/testing describe this
+early checkpoint, not current aggregate coverage.
 
 The Python port remains incomplete and is **not** a drop-in replacement for the
 Go service. The English UI is not yet connected end-to-end to a Python backend.

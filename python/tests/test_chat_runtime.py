@@ -151,9 +151,9 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(result.result.messages[-1]['content'][0]['tool_use_id'],'call1')
         self.assertEqual(self.tx.commits,[])
 
-    def test_bad_adapters_and_unsupported_streaming(self):
+    def test_bad_adapters_and_missing_stream_method(self):
         agent=self.make([])
-        with self.assertRaises(ValueError):agent.run('conversation','client','hello',model=replace(MODEL,streaming=True))
+        with self.assertRaises(ChatUnavailable):agent.run('conversation','client','hello',model=replace(MODEL,streaming=True))
         self.assertEqual(self.tx.history,{})
         with self.assertRaises(ValueError):ChatAgent(self.tx,lambda _:None,gate=None)
         self.tx.begin=lambda *a:TranscriptTurn('id',0,1,[])

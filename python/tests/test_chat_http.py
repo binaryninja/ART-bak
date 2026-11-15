@@ -141,9 +141,11 @@ class ChatHTTPTests(unittest.TestCase):
         from artex.agent.runtime import Tool
         original=self.resources
         for resources in (replace(original,tools=(Tool('bad','',{},None,lambda _:True),)),
-                          replace(original,limits=None),replace(original,model=replace(MODEL,streaming=True))):
+                          replace(original,limits=None)):
             self.resources=resources
             self.assertEqual(self.router.dispatch(self.request()).status,400)
+        self.resources=replace(original,model=replace(MODEL,streaming=True))
+        self.assertEqual(self.router.dispatch(self.request()).status,503)  # provider has no stream method
         self.assertFalse(self.activities.rows);self.assertFalse(self.queue.jobs)
     def test_offline_history_and_stop_need_no_provider(self):
         self.service.resolve=lambda *args:None

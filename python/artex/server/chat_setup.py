@@ -6,7 +6,7 @@ system-prompt resolver. The host registers service routes on its authenticated
 Router. Authorization is checked again on actual model/tool admission. Model
 identity is an opaque per-bundle HMAC of the full private configuration, including
 keys; changed configuration fails rather than silently switching a queued run.
-Only nonstreaming profile execution is supported by the current ChatAgent.
+Streaming profiles use bounded whole-turn assembly before any tool execution.
 
 Dispatcher owns explicit bounded worker threads. Call close(cancel=True) and
 check DrainResult before closing DB/transports or deleting transcripts. A timed
@@ -88,15 +88,15 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
     def model_for(conversation):
         store = profile_runtime.profile_store
         profile = store.get(conversation.llm_profile_id) if conversation.llm_profile_id is not None else store.active()
-        if profile is None or profile.streaming:
-            raise ChatUnavailable('An explicit nonstreaming profile is required')
+        if profile is None:
+            raise ChatUnavailable('An explicit profile is required')
         if conversation.llm_profile_id is None and not profile_runtime.profile_coordinator.snapshot()['configured']:
             raise ChatUnavailable('Active profile runtime unavailable')
         profile_runtime.profile_factory.validate(profile)
         raw = json.dumps(asdict(profile), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
         identity = hmac.new(salt, raw, hashlib.sha256).hexdigest()
         model = Model(profile_id=profile.id, name=profile.name, format=profile.format,
-                      model=profile.model, identity=identity, streaming=False,
+                      model=profile.model, identity=identity, streaming=profile.streaming,
                       window_tokens=max(32, min(1000, profile.context_window_k or 200)) * 1000)
         return model, profile
 
@@ -214,7 +214,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
             raise ChatUnavailable('Profile runtime not initialized')
         profiles = state['profiles']
         profile = profiles.profile_store.get(identifier)
-        if profile is None or profile.streaming:
+        if profile is None:
             return False
         try:
             profiles.profile_factory.validate(profile)

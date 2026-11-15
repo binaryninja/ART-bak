@@ -188,7 +188,7 @@ as part of the port. No PR CI validation pipeline is supplied by that workflow.
 5. Only after the above, test a strictly authorized sandbox target. Preserve the Go
    rollback path and keep this port non-default until real acceptance criteria pass.
 
-## Current reviewed checkpoint
+## Historical profile/node-board checkpoint
 
 The profile/node-board HTTP checkpoint has 624 authored offline tests and 164
 parsed generated SQL statements. Source inventory has 46 route registrations
@@ -207,3 +207,19 @@ older statements that no live driver checks had occurred, not their broader
 remaining-parity warnings. No production deployment or real provider/target calls
 have occurred. Migrations, cross-process concurrency, archive recovery and broad
 service/frontend compatibility remain unproven.
+
+## Latest integrated status
+
+See README.md for the latest frozen test/route counts and current status document.
+The older checkpoint sections and *_STATUS.md files record historical scope, not
+current total coverage. ISOLATED_QA.md is the cumulative evidence ledger and
+supersedes earlier statements that live-driver checks had not occurred.
+
+Current integrated slices include explicit authenticated conversation and task
+chat, scoped durable transcripts/activities, catalogs, provider transport and
+streaming, bounded storage/process/registry primitives, recording setup/inspection,
+and archive bundle/snapshot components. Explicit dependencies remain explicit:
+this is not a full autonomous planner/worker system, default executable catalog,
+production deployment, or distributed/cross-store crash recovery implementation.
+No merge, tag, release workflow, real provider or external target execution is
+part of these checkpoints.

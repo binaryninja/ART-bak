@@ -235,3 +235,44 @@ Tool catalog separately passed six real-PG grouped checks: metadata CRUD/JSONB,
 duplicate409, agent binding validity and actual key-share blocking of concurrent
 agent deletion, builtin schema protection, and injected-trigger rollback. Exec
 metadata was never executed or registered as a runtime tool.
+
+## Recording setup, seeds, ownership and inspection (stages 16–18)
+
+Explicit recording-schema setup passed seven real-PG groups on immutable manifest
+`77dad9679a823d6b91eaf23c124f5a9295f9bf89b71220844cf38cde61102d96`:
+fresh/repeated setup, five-column legacy additive upgrade, incompatible columns/
+defaults/index/RLS refusal, wrong database/read-only refusal, actual SQL rollback
+and independent advisory-lock contention. Catalog validation is a supported-shape
+check, not a complete sequence-ownership/opclass/version audit.
+
+Catalog/ownership checks passed eight groups on manifest
+`dd86f357aff03004013b614f9465dfa68ec0fb4910c429b0c0938bcaeb1d96f0`:
+six builtin/eight-variable metadata, customization preservation, late collision
+rollback, prompt version/pointer behavior, cancellation/trigger rollback, real
+snapshot ownership/shared-host/asset queries and byte limits. Sparse synthetic
+ownership cases do not prove every company/anchor combination or cleanup safety.
+
+Recording-store/scoped HTTP passed six groups on manifest
+`1ffa70cb2432d8e6b0738da7f539c6428368700905f93c126ab250ce716ba848`:
+exact nullable TEXT bodies, body-free pages, detail/missing rows, task/unassigned
+scope, usage/picker, bounds/transaction failure, and HTTP authorization/redaction/
+cross-task denial. No real records, providers, capture enablement or deletion.
+
+## Streaming and process primitives (stage 19 and process harness)
+
+Six connected streaming groups passed on manifest
+`6a717165a86a74d4fb28f4dc9edba286c4fc66c102552eb8655a04cd6a96645f`:
+actual PG/JWT/JSONL/activity path with inert OpenAI and Anthropic SSE, fragmented
+tool buffering, refusal/EOF/cancellation and profile mutation inside transport
+close. That mutation prevented stale tool execution. Response close and clean
+pool/dispatcher drain were observed; arbitrary blocking iterators are not proven
+preemptible. Only an inert memory spy represented tools.
+
+A separate immutable process snapshot, manifest
+`7b0315a6cf92e2bb566352cb868c10ff2253ccfca00b30ab46174b8c3af03a2c`,
+passed seven actual POSIX checks inside the same cleared, externally disconnected
+namespace: printf output/reap, explicit environment (no inherited fixture value),
+denied launch creates no process, output bound, timeout, cancellation/reap and
+exit-code annotation. Commands were fixed harmless printf/exit/sleep fixtures,
+not agent-selected workloads or targets. This is not proof of OS confinement,
+escaped-descendant cleanup, arbitrary spawn/wait bounds or absence of PGID reuse.

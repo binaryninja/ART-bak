@@ -954,3 +954,176 @@ fail before any store write, independently verified. Runtime callback approval,
 registration/reload and revocation/draining are absent deliberately: persisted
 bindings/enabled/schema do not grant execution. A host must not infer that deleting
 a catalog row stops an already-running callback. Reset/test routes remain503.
+
+## Follow-up: archive ownership metadata and recording-schema setup
+
+Compared archive_metadata SQL with Go archiveAssetMetadata/hostsForTaskDeletion/
+taskArchiveAggregates, and recording DDL with db/llm_usage.go and db/commands.go.
+Seven metadata and seven recording-schema tests pass; independent
+`test_archive_metadata_review.py` adds two passing guards and one bound-gap repro.
+
+Metadata preserves source distinctions: exclusive-host candidates consider task_ids
+and graph anchors; exclusive asset candidates also include task links/finding IDs,
+exclude company-owned assets and protect assets shared through other live tasks'
+task_ids/graph anchors. These are source metadata rules, not generalized deletion
+authorization or permission to prune. Usage aggregates retain task OR exploration
+scope; exclusive IDs must be among exported assets. Invalid/ambiguous URL parsing
+fails closed rather than omitting potentially shared hosts. Aggregate JSON byte
+limits reject failures, not substitute counts. Review blocker sent to architecture:
+protected-host query rows have a row-count limit but no byte limit before fetch_all;
+a single2048-byte protected domain succeeds under max_json_bytes=1024. Independent
+repro expects rejection before aggregate reads. Fixed and independently verified:
+all three review tests now pass. SQL wraps the bounded host rows with cumulative
+octet_length window sum, projects NULL sentinels above budget before fetch_all,
+and Python also totals host bytes including snapshot fields. Oversize rows reject
+rather than silently dropping shared-host protection.
+
+Recording setup requires explicit action and expected non-maintenance DB, takes
+the schema advisory lock, verifies identity/version/read-write/string/temp state,
+and sets local public/pg_catalog search path in one transaction. Source SQL is
+unchanged: only absent tables/indexes and five nullable legacy TEXT additions.
+Catalog checks refuse unexpected columns/type/default/nullability, non-table,
+partition/RLS/triggers/constraints and incompatible indexes. Independent extra-
+column test verifies rollback before table DDL. Postchecks cover missing tables/
+indexes. No recording is enabled, no existing data is rewritten/dropped. Adapter
+must supply exclusive schema transaction authority. Sequence checks currently
+validate the nextval expression and expected name, not the actual sequence's
+ownership/configuration; do not call this a complete hostile-catalog audit.
+No live DB, commands, provider or network execution by reviewer.
+
+
+## Follow-up: explicit builtin catalog seed subset
+
+Reviewed catalog_seed.py against Go builtinAgents/seedBuiltins and
+SeedPromptIfEmpty/SavePrompt; all seven authored tests pass. Fixed six keys, roles,
+creation shell/time defaults and eight prompt variables match the source subset.
+English changes affect display prose only. Deliberate divergence is documented:
+ON CONFLICT DO NOTHING preserves customized rows rather than repeatedly overwriting
+display/variable metadata. A conflicting custom row under a builtin key aborts the
+transaction. No shell-default migration, tool/MCP registration, intercept rules,
+profile setup, runtime capability, prompt-body fallback or variable cleanup is
+silently supplied. runtime_ready/default_prompt_bodies_seeded remain false.
+
+Prompt seeding requires an explicit nonempty reviewed template and action. It
+holds the advisory lock plus agent FOR UPDATE, preserves any existing current
+pointer (including an intentionally empty user prompt), inserts the next history
+version and conditionally activates it in one transaction. Pointer failure rolls
+back the inserted version; missing agents distinguish NoRowsError from other
+storage failures. This is offline/lifecycle-barrier metadata initialization, not
+live cache refresh or full startup equivalence. No scoped blocker found.
+
+## Follow-up: bounded streamed assistant-turn assembly
+
+Reviewed agent/streaming.py and ChatAgent/conversation preflight/setup/task-core
+integration. Normalized provider events, not raw SSE, are consumed with explicit
+start/terminal sequence; incomplete EOF fails. Whole turns buffer before tool
+argument validation/authorization, avoiding partial tool execution. Tool indexes,
+IDs, fragment pairing, duplicate keys/nonfinite JSON, event/byte/block/output-token
+budgets and sticky refusal are checked. Usage snapshots take monotonic maxima,
+not fragment sums. No retry or invented nonstream profile fallback is added.
+Optional progress is provisional, and not mounted as frontend durable completion.
+Generation/profile/cancel fences bracket every advance and progress callback.
+A blocking next/close still needs transport deadlines and cooperative cancellation.
+
+Concrete regression in new test_streaming_review.py: a stream generator's finally
+rotates the selected profile during close after message_stop. The last fence ran
+before close, so the completed turn escaped and an inert tool executed under the
+stale profile. Fixed by owner and independently verified: all three review regressions pass.
+The successful return is now after finally/close and a final live/cancel fence.
+ChatAgent also rechecks profile/transcript before and after host approval, covering
+configuration changes during a permission wait. Independent early-EOF and cleanup-
+failure tests pass; cleanup exceptions are
+redacted and cannot return successful model completion. No live provider/tools used.
+
+
+## Follow-up: explicit executable tool registry bridge
+
+Read tools/registry.py; independently ran all16 test_tool_registry*.py tests.
+No new scoped blocker found. Only explicit host Tool callbacks are eligible;
+catalog rows must be enabled and bound to the selected agent, kind builtin with
+empty exec, and structurally match the code schema. Stored shell/command/script/
+HTTP metadata is never interpreted. Defaults are applied before callback validation
+and the exact argument-bearing Action is separately authorized at dispatch.
+Deferred discovery requires explicit unlock, not an execution grant. Exported
+handles carry an epoch; successful reload revokes old ones and resets unlocks.
+Reload checks active calls twice around the lifecycle guard. Dispatch counts an
+owned active call before waiting for the external guard and releases it even on
+BaseException. Approval/cancellation/revision are checked before callback; the
+external guard spans callback effects. Drain pauses new admission and reports
+remaining calls without pretending to preempt them. A successful reload reopens.
+
+These are local capability/lifecycle contracts, not a sandbox, distributed lease,
+automatic catalog adapter or default full application toolset. Host must supply
+real policy/scope revision authority and callback containment. Process callbacks
+retain their own gate and root/environment/termination checks. Parent-reported
+isolated harmless process fixture results are separate evidence; this reviewer
+ran only inert registry fixtures and did not independently run subprocess QA.
+
+## Explicit inspection assembly and working-context compaction review
+
+Independent source/fake review of `server/inspection_setup.py` and
+`agent/compaction.py`: no blocking defect found within their documented opt-in
+contracts. No live provider, database, listener, subprocess, or recording was
+started by this review.
+
+Inspection assembly requires all policy callbacks and exact executor identity for
+tool metadata before runtime creation. Recording store identity is checked on each
+resolution, with existing selection/body authorization and explicit redaction;
+there is no default global resolver or recording enablement. Tool metadata policy
+requires literal True and does not register commands as executable tools. Routes
+are protected. The staged duplicate scan normalizes parameter names before any
+mount; assembly failure cancels/closes its newly created runtime. Returned service
+handles are host-level objects, not independently authenticated APIs. Hosts still
+own callback trust, database shutdown, and checking normal drain receipts.
+
+`test_inspection_setup_review.py` adds two independent regressions: a preexisting
+`/api/llm/records/{other}` collision prevents all mounts and calls close(cancel=True),
+and truthy non-boolean policy results cannot reach the catalog. All nine inspection
+tests pass (seven implementation tests plus two review tests).
+
+Compaction preserves a separate deep copy of raw input and never writes transcripts.
+Provider serialization validates tool-result pairing before summary admission;
+whole API rounds are retained even when the requested recent-message boundary
+would otherwise split a tool pair. Source comparison against pinned Norma v0.4.3
+confirms UTF-8 bytes/4 estimator, 4/3 fallback scaling, reservation cap and threshold
+tiers. Object JSON float spelling remains the explicitly documented approximation;
+exact raw JSON preserves source byte counts. This is an explicit one-shot helper,
+not installed automatic compaction or full Norma history/marker/skill parity.
+
+The exact serialized summary action is approved before the single provider call.
+Cancellation/current-scope fences run after approval, after provider completion,
+and before returning. Hosts must include live model/ownership validity in their
+current callback; the helper cannot infer it. Refusal, partial termination, tools,
+invalid usage, oversized/nonreducing output and final-budget overflow fail without
+publishing a working view or retrying. Summary text is labeled lossy/untrusted,
+not evidence or permission. Required verbatim policies and durable raw history
+remain host responsibilities; summary accuracy is not guaranteed by these checks.
+
+`test_compaction_review.py` independently verifies retention of a complete tool
+round across the tail boundary with raw-copy isolation, and explicit refusal even
+with an otherwise successful stop reason performs exactly one call and leaves raw
+input unchanged. All fifteen compaction tests pass (thirteen implementation tests
+plus two review tests). No implementation files were changed.
+
+## Prompt subset renderer independent review
+
+Reviewed `agent/prompt_render.py` without executing Go/templates/providers. Catalog
+fields match source `agent/prompt.go`; built-in seed candidates reuse the existing
+five English editable bodies. No pentest/reporter/custom default is invented and
+nothing seeds the DB or installs this renderer into runtime builders. Code-owned
+artifact/traffic/constraint tails remain a separate required host operation.
+Parsing validates all conditional arms before emission; inserted values are
+verbatim nonrecursive text, no HTML conversion, functions, methods, pipelines or
+eval. Missing fields fail closed; invalid override syntax falls back wholly to
+reviewed default, and an invalid default raises rather than emitting raw template.
+Template/action/depth/output byte limits are explicit. Host-selected excessive
+limits do not establish an independent process memory/stack sandbox.
+
+`test_prompt_render_review.py` adds independent exact-output comparison of all
+five seed bodies with existing English builders, inactive unsupported-directive
+fallback, and strict malformed-comment rejection. Initial review found four
+malformed comment forms accepted (spaces before opening /* or after closing */,
+and extra spaces around trim markers), contrary to Go lexer `lexLeftDelim` and
+`lexComment`. This can silently accept an override Go would reject instead of
+falling back; it does not execute any directive. Owner notified with four failing
+subcases; fix verification pending.

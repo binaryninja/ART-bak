@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-// 资产拦截规则的匹配/执行层。asset_intercept.go 只负责规则存储，这里负责把
-// 「目标资产」的域名/IP/URL 与启用中的规则做匹配。供 agent 工具（add_intent、
-// insert_assets）在下发意图 / 插入资产前调用，命中则拒绝。
+// Asset-rule matching/enforcement. asset_intercept.go stores rules; this file
+// matches target domain/IP/URL candidates against enabled rules. Agent tools
+// (add_intent/insert_assets) call it before dispatch/insertion and reject hits.
 
-// AssetInterceptKindLabel 返回 kind 的中文标签，用于给 agent 的说明消息。
+// AssetInterceptKindLabel returns the localized kind label for agent explanations.
 func AssetInterceptKindLabel(kind string) string {
 	switch kind {
 	case "exact_domain":
@@ -32,7 +32,7 @@ func AssetInterceptKindLabel(kind string) string {
 	return kind
 }
 
-// Reason 返回一条可读的命中原因，形如：命中资产拦截规则 [域名(模糊): .gov.cn]（备注）。
+// Reason returns a readable rule hit with rule kind, pattern and optional note.
 func (r AssetInterceptRule) Reason() string {
 	s := fmt.Sprintf("命中资产拦截规则 [%s: %s]", AssetInterceptKindLabel(r.Kind), r.Pattern)
 	if note := strings.TrimSpace(r.Note); note != "" {
@@ -41,7 +41,7 @@ func (r AssetInterceptRule) Reason() string {
 	return s
 }
 
-// matchOne 判断单条启用规则是否命中给定的域名/IP/URL 候选串，返回命中的具体值。
+// matchOne checks an enabled rule against domain/IP/URL candidates and returns the matched value.
 func matchOne(r AssetInterceptRule, domains, ips, urls []string) (string, bool) {
 	p := strings.TrimSpace(r.Pattern)
 	if p == "" {
@@ -100,8 +100,8 @@ func matchOne(r AssetInterceptRule, domains, ips, urls []string) (string, bool) 
 	return "", false
 }
 
-// MatchAssetInterceptRules 返回第一条命中给定 域名/IP/URL 候选串的启用规则，及命中的具体值。
-// 供 insert_assets 用原始输入（尚未落库的 assetInputItem）匹配。
+// MatchAssetInterceptRules returns the first matching enabled rule and matched value.
+// insert_assets uses it on raw inputs before persistence.
 func MatchAssetInterceptRules(rules []AssetInterceptRule, domains, ips, urls []string) (AssetInterceptRule, string, bool) {
 	for _, r := range rules {
 		if !r.Enabled {
@@ -114,8 +114,8 @@ func MatchAssetInterceptRules(rules []AssetInterceptRule, domains, ips, urls []s
 	return AssetInterceptRule{}, "", false
 }
 
-// interceptCandidates 提取一个已落库资产用于拦截匹配的 域名/IP/URL 候选串。
-// URL 的 host 会被拆出并归类，使「只带 URL」的服务类资产也能被 域名/IP 规则命中。
+// interceptCandidates extracts domain/IP/URL candidates from a persisted asset.
+// Classify URL hosts too, so URL-only services match domain/IP rules.
 func (a *Asset) interceptCandidates() (domains, ips, urls []string) {
 	add := func(dst *[]string, s string) {
 		if s = strings.TrimSpace(s); s != "" {
@@ -143,7 +143,7 @@ func (a *Asset) interceptCandidates() (domains, ips, urls []string) {
 	return domains, ips, urls
 }
 
-// InterceptLabel 返回资产的简短标识，用于给 agent 的说明消息。
+// InterceptLabel returns a short asset identifier for agent explanations.
 func (a *Asset) InterceptLabel() string {
 	var target string
 	switch {
@@ -159,7 +159,7 @@ func (a *Asset) InterceptLabel() string {
 	return fmt.Sprintf("资产#%d[%s] %s", a.ID, a.Type, target)
 }
 
-// hasEnabledRule 判断规则集里是否存在任一启用规则。
+// hasEnabledRule reports whether any rule is enabled.
 func hasEnabledRule(rules []AssetInterceptRule) bool {
 	for _, r := range rules {
 		if r.Enabled {
@@ -169,19 +169,19 @@ func hasEnabledRule(rules []AssetInterceptRule) bool {
 	return false
 }
 
-// AssetGateDecision 是「先拦截后允许」闸门对一组候选串的判定结果。
+// AssetGateDecision is the block-before-allow decision for candidate strings.
 type AssetGateDecision struct {
 	Allowed bool
-	Reason  string // 被拒原因（不含资产标识）；Allowed=true 时为空
+	Reason  string // Rejection reason without asset identity; empty when Allowed=true.
 }
 
-// EvaluateAssetGate 执行任务级闸门判定：
-//  1. 命中任一启用的 blockRules → 拒绝（拦截原因）。
-//  2. 否则若 allowRules 存在启用项且都不命中 → 拒绝（不在允许范围）。
-//  3. 否则放行。
+// EvaluateAssetGate applies the task gate:
+// 1. Any enabled blockRules match rejects with its reason.
+// 2. Otherwise enabled allowRules with no match reject as outside allowed scope.
+// 3. Otherwise allow.
 //
-// allowRules 为空/无启用项时，允许闸门不生效（即不启用白名单，全部放行），
-// 避免「未配置允许规则」把所有资产挡掉。
+// Empty/no-enabled allowRules disable allowlisting, permitting all candidates
+// so an unconfigured allowlist does not accidentally reject every asset.
 func EvaluateAssetGate(blockRules, allowRules []AssetInterceptRule, domains, ips, urls []string) AssetGateDecision {
 	if rule, _, ok := MatchAssetInterceptRules(blockRules, domains, ips, urls); ok {
 		return AssetGateDecision{Allowed: false, Reason: rule.Reason()}
@@ -194,26 +194,26 @@ func EvaluateAssetGate(blockRules, allowRules []AssetInterceptRule, domains, ips
 	return AssetGateDecision{Allowed: true}
 }
 
-// AssetInterceptHit 描述一个被闸门拒绝的资产（拦截命中 或 不在允许范围）。
+// AssetInterceptHit identifies an asset rejected by a block hit or missing allow match.
 type AssetInterceptHit struct {
 	Asset  *Asset
-	Reason string // 可读原因
+	Reason string // Readable reason
 }
 
-// Describe 返回一条可读的说明：资产信息 + 原因。
+// Describe combines asset identity and reason.
 func (h AssetInterceptHit) Describe() string {
 	return fmt.Sprintf("%s → %s", h.Asset.InterceptLabel(), h.Reason)
 }
 
-// ListAssetInterceptRules 是 *DB 同名方法的透传，让只持有 AssetStore 的调用方
-// （如 agent 工具）也能读取规则。
+// ListAssetInterceptRules delegates to DB so callers holding only AssetStore
+// (such as agent tools) can read rules.
 func (s *AssetStore) ListAssetInterceptRules() ([]AssetInterceptRule, error) {
 	return s.db.ListAssetInterceptRules()
 }
 
-// CheckAssetsIntercept 按 id 载入资产，逐个执行「先拦截后允许」闸门判定，返回所有
-// 被拒的资产。拦截规则 = 全局 ∪ 任务级 block；允许规则 = 任务级 allow（仅本任务）。
-// 无 id 时快速返回。用全局 GetByIDs（不受任务范围过滤）以保证拦截不被 scope 削弱。
+// CheckAssetsIntercept loads IDs and applies block-before-allow to each, returning
+// rejections. Block rules are global union task-block; allow rules are this task only.
+// No IDs returns immediately. Global GetByIDs prevents task scope from weakening the gate.
 func (s *AssetStore) CheckAssetsIntercept(taskID int64, ids []int64) ([]AssetInterceptHit, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -231,7 +231,7 @@ func (s *AssetStore) CheckAssetsIntercept(taskID int64, ids []int64) ([]AssetInt
 		blockRules = append(blockRules, tb...)
 		allowRules = ta
 	}
-	// 既无拦截规则、也无启用的允许规则 → 无需判定，全部放行。
+	// No block or enabled allow rules: all assets pass without evaluation.
 	if len(blockRules) == 0 && !hasEnabledRule(allowRules) {
 		return nil, nil
 	}
