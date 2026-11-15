@@ -1,7 +1,7 @@
 import io
 import json
 import unittest
-from artex.server.application import build_application
+from artex.server.application import build_application, build_persisted_application
 
 
 class Executor:
@@ -67,7 +67,33 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/auth/login', method='POST', data={'username': 'ARTEX', 'password': 'dummy-password'})[0], 200)
         self.assertEqual(self.request('/api/tasks', token=token)[0], 503)
         self.assertEqual(self.request('/api/logs', token=token)[0], 503)
+        self.assertEqual(self.request('/api/assets', token=token)[0], 503)
         self.assertEqual(self.request('/api/logs/history', token=token), (200, {'items': [], 'has_more': False}))
+
+    def test_persisted_factory_loads_without_starting(self):
+        class EmptyTasks(Executor):
+            def fetch_all(self, query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql:
+                    self.calls.append(query)
+                    return []
+                return super().fetch_all(query)
+        self.db = EmptyTasks()
+        self.app = build_persisted_application(self.db, b'x' * 32, TestCodec())
+        self.assertTrue(any('FROM tasks' in q.sql for q in self.db.calls))
+        status, payload = self.request('/api/auth/init', method='POST', data={'password': 'dummy-password'})
+        self.assertEqual(status, 200)
+        token = payload['token']
+        self.assertEqual(self.request('/api/tasks', token=token), (200, {'tasks': [], 'active': ''}))
+        count = len(self.db.calls)
+        self.assertEqual(self.request('/api/tasks', method='POST', data={'description': 'fixture'}, token=token)[0], 503)
+        self.assertEqual(len(self.db.calls), count)
+
+    def test_persisted_factory_does_not_hide_read_failure(self):
+        class Broken(Executor):
+            def fetch_all(self, query):
+                raise RuntimeError('database unavailable')
+        with self.assertRaisesRegex(RuntimeError, 'database unavailable'):
+            build_persisted_application(Broken(), b'x' * 32, TestCodec())
 
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):

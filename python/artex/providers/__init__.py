@@ -267,8 +267,15 @@ def parse_response(config, payload):
         for call in message.get('tool_calls') or []:
             function = call['function']
             blocks.append({'type': 'tool_use', 'id': call['id'], 'name': function['name'], 'input': _input(function.get('arguments'))})
-        stop, usage = _stop(choice.get('finish_reason')), _usage(data.get('usage'))
-    return {'role': 'assistant', 'content': blocks, 'model': data.get('model', config.model)}, stop, usage
+        refusal = message.get('refusal')
+        if refusal is not None and not isinstance(refusal, str):
+            raise ProtocolError('Invalid OpenAI refusal field')
+        stop = 'refusal' if refusal else _stop(choice.get('finish_reason'))
+        usage = _usage(data.get('usage'))
+    result = {'role': 'assistant', 'content': blocks, 'model': data.get('model', config.model)}
+    if config.format == 'openai' and message.get('refusal'):
+        result['refusal'] = message['refusal']
+    return result, stop, usage
 
 
 def _frames(body, context):
@@ -402,6 +409,7 @@ def _openai_events(frames, model):
     started, stopped = False, False
     calls = {}
     usage, reason = _usage(), ''
+    refused = False
     for raw in frames:
         if raw == '[DONE]':
             stopped = True
@@ -418,6 +426,10 @@ def _openai_events(frames, model):
             continue
         choice = choices[0]
         delta = choice.get('delta') or {}
+        if delta.get('refusal'):
+            if not isinstance(delta['refusal'], str):
+                raise ProtocolError('Invalid streamed refusal field')
+            refused = True
         if choice.get('finish_reason'):
             reason = _stop(choice['finish_reason'])
         thinking = next((delta[k] for k in ('reasoning_content', 'reasoning', 'reasoning_text') if delta.get(k)), '')
@@ -449,7 +461,7 @@ def _openai_events(frames, model):
         raise IncompleteStreamError("OpenAI stream ended before DONE")
     if any(not c['started'] for c in calls.values()):
         raise ProtocolError("Incomplete streamed tool-call identity")
-    yield {'type': 'message_delta', 'stop_reason': reason, 'usage': usage}
+    yield {'type': 'message_delta', 'stop_reason': 'refusal' if refused else reason, 'usage': usage}
     yield {'type': 'message_stop'}
 
 

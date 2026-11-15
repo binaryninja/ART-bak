@@ -24,7 +24,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **373 tests**; these are authored unit/adapter
+combined suite currently passes **473 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
@@ -61,3 +61,7 @@ license; source attribution and license notices are preserved.
 See [TASK_RUNTIME_STATUS.md](TASK_RUNTIME_STATUS.md) for task persistence,
 manager/lifecycle, provider serialization and log integration, including strict
 execution and parity limits.
+
+Latest details: [GRAPH_RUNTIME_STATUS.md](GRAPH_RUNTIME_STATUS.md). Optional SQL
+syntax QA: `python tools/check_sql_syntax.py` from this directory after installing
+the separate `qa` extra. This runs authored tests only, not a database.

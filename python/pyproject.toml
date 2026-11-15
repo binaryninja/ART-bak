@@ -12,6 +12,7 @@ license = {text = "AGPL-3.0-only"}
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.2,<4"]
 auth = ["bcrypt>=5.0,<6"]
+qa = ["pglast==8.8"]
 
 [tool.setuptools.packages.find]
 include = ["artex*"]

@@ -241,6 +241,9 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                 elif owner == 'LogService.register':
                     dependencies = ('build_application explicitly registers LogService; authenticated history requires LogStore/executor; '
                                     'snapshot requires explicitly supplied log ring; no SSE/capture wiring')
+                elif owner == 'AssetService.register':
+                    dependencies = ('Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, '
+                                    'company resolver and mutation guard; DELETE is an explicit unsupported 503 handler')
                 routes.append({'method': method.upper(), 'path': path,
                                'source': relative, 'line': node.lineno, 'function': owner,
                                'handler': ast.unparse(node.args[2]), 'public': public,
@@ -293,6 +296,8 @@ def markdown(data: dict) -> str:
              'The application factory explicitly registers category, task and log services.',
              'Category mutations require a live manager; tasks require metrics/runtime adapters;',
              'log snapshots require a capture ring. Missing required adapters return 503.',
+             'Assets require explicit scope/global-read configuration and mutation adapters.',
+             'DELETE /api/assets is registered only to return unsupported 503; it is not a completed operation.',
              'Declarations do not prove execution readiness. Production limitations are in',
              '`artex/server/PORT_STATUS.md`. No route is labeled production-ready.', '',
              '## Counts', '']

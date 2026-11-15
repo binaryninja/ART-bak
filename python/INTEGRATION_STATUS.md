@@ -25,7 +25,7 @@ Go service. The English UI is not yet connected end-to-end to a Python backend.
 
 ## Verification
 
-Combined authored suite: **373 tests passing** at this checkpoint. It includes
+Combined authored suite: **473 tests passing** at this checkpoint. It includes
 fake database execution/transactions, concurrent-init simulation, authenticated
 router dispatch, unavailable-manager behavior and WSGI input/header bounds.
 No live PostgreSQL, network listener, upstream app, provider, scanner or target

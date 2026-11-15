@@ -36,8 +36,12 @@ transports and placeholder credentials only.
 - OpenAI-compatible Chat Completions and Anthropic Messages serialization,
   tools, textual tool results, thinking/signature preservation, stop sequences,
   temperature, output-limit field choice and Anthropic static-prefix caching.
-- OpenAI reasoning aliases, refusal text (never treated as an empty reply or
-  retried to avoid refusal), tool calls and finish-reason normalization.
+- OpenAI reasoning aliases, refusal text and an explicit normalized `refusal`
+  stop reason (also preserved on the completion message). Refusal takes priority
+  over contradictory tool-call finish reasons; it is never retried to avoid it.
+  Stream consumers must buffer the complete turn before considering tool
+  execution: a refusal may arrive after an earlier tool fragment. Tool calls
+  and other finish reasons are normalized.
 - Anthropic cache usage folds cached tokens into total input, matching Norma.
   Streaming input is counted only at message_start, output at message_delta.
 - SSE framing tolerates byte boundaries, CRLF, comments and multiple data lines;

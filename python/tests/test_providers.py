@@ -70,7 +70,7 @@ class ProviderTests(unittest.TestCase):
         message, stop, usage = p.complete({}, request())
         self.assertEqual(message['content'][0]['text'], 'Cannot help')
         self.assertEqual(message['model'], 'returned-model')
-        self.assertEqual(stop, 'end_turn')
+        self.assertEqual(stop, 'refusal')
         self.assertEqual((usage['input_tokens'], usage['cache_read_tokens']), (12, 4))
         self.assertTrue(t.closed)
         self.assertFalse(t.calls[0][-1])
@@ -170,6 +170,13 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(bound.complete(request())[0]['content'][0]['text'], 'Fallback')
         self.assertEqual(len(first.calls), 1)
         self.assertEqual(len(fallback.calls), 1)
+
+    def test_stream_refusal_overrides_later_finish_reason(self):
+        body = sse({'choices': [{'delta': {'refusal': 'Cannot comply'}}]},
+                   {'choices': [{'delta': {}, 'finish_reason': 'tool_calls'}]}, '[DONE]')
+        events = list(Provider(Config('openai', 'fixture'), FakeTransport(body)).stream({}, request()))
+        self.assertEqual(events[-2]['stop_reason'], 'refusal')
+        self.assertEqual(events[1]['text'], 'Cannot comply')
 
     def test_explicit_close_releases_transport(self):
         t = FakeTransport(sse({'choices': [{'delta': {'content': 'one'}}]}, '[DONE]'))

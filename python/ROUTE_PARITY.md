@@ -9,6 +9,8 @@ adapter does not start a listener or prove end-to-end service reachability.
 The application factory explicitly registers category, task and log services.
 Category mutations require a live manager; tasks require metrics/runtime adapters;
 log snapshots require a capture ring. Missing required adapters return 503.
+Assets require explicit scope/global-read configuration and mutation adapters.
+DELETE /api/assets is registered only to return unsupported 503; it is not a completed operation.
 Declarations do not prove execution readiness. Production limitations are in
 `artex/server/PORT_STATUS.md`. No route is labeled production-ready.
 
@@ -17,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **17**.
-- python optional service routes: **12**.
-- matched offline contract routes: **17**.
-- go routes without python registration: **244**.
+- python offline contract routes: **21**.
+- python optional service routes: **16**.
+- matched offline contract routes: **21**.
+- go routes without python registration: **240**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -61,10 +63,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/asset-intercept/rules/{id}` | `server/server.go:919` | Not registered |
 | PUT | `/api/asset-intercept/rules/{id}` | `server/server.go:918` | Not registered |
 | POST | `/api/asset-intercept/rules/{id}/toggle` | `server/server.go:920` | Not registered |
-| DELETE | `/api/assets` | `server/server.go:745` | Not registered |
-| GET | `/api/assets` | `server/server.go:742` | Not registered |
-| POST | `/api/assets` | `server/server.go:744` | Not registered |
-| GET | `/api/assets/counts` | `server/server.go:743` | Not registered |
+| DELETE | `/api/assets` | `server/server.go:745` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
+| GET | `/api/assets` | `server/server.go:742` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
+| POST | `/api/assets` | `server/server.go:744` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
+| GET | `/api/assets/counts` | `server/server.go:743` | Optional registration; adapters required: `python/artex/server/assets.py:209` |
 | GET | `/api/audit` | `server/server.go:784` | Not registered |
 | POST | `/api/auth/change-password` | `server/server.go:658` | Offline contract only: `python/artex/server/auth.py:107` |
 | POST | `/api/auth/init` | `server/server.go:656` | Offline contract only: `python/artex/server/auth.py:107` |
@@ -300,6 +302,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python registration prerequisites
 
+- `GET /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
+- `GET /api/assets/counts`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
+- `POST /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
+- `DELETE /api/assets`: Explicit asset store configuration/global-read opt-in; root-domain/IP upserts require transaction, company resolver and mutation guard; DELETE is an explicit unsupported 503 handler.
 - `GET /api/health`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/auth/status`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
