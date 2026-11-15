@@ -78,6 +78,10 @@ class Router:
                    for m, p, regex, h, public in self._routes if regex.fullmatch(request.path)]
         # Unknown routes remain protected; callers must explicitly mark public routes.
         selected = next((r for r in matches if r[0] == request.method.upper()), None)
+        # Go ServeMux GET patterns also match HEAD, unless an explicit HEAD
+        # registration wins. Keep authorization tied to the selected handler.
+        if selected is None and request.method.upper() == 'HEAD':
+            selected = next((r for r in matches if r[0] == 'GET'), None)
         if selected is None or not selected[4]:
             try:
                 allowed = self.authorize(request)
@@ -89,7 +93,7 @@ class Router:
             return error_response(404, 'Not found')
         if selected is None:
             response = error_response(405, 'Method not allowed')
-            return Response(response.status, response.body, {**response.headers, 'Allow': ', '.join(sorted({r[0] for r in matches}))})
+            return Response(response.status, response.body, {**response.headers, 'Allow': ', '.join(sorted(({r[0] for r in matches} | ({'HEAD'} if any(r[0] == 'GET' for r in matches) else set()))))})
         try:
             return selected[3](request, selected[2].groupdict())
         except Exception:

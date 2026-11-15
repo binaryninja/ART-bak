@@ -62,24 +62,25 @@ restriction. Screenshot/image translations are a separate deliverable.
 
 ## Architecture and parity gates
 
-The following is the integrated checkpoint, verified by 298 offline authored
+The following is the integrated checkpoint, verified by 373 offline authored
 Python tests. Every package remains a partial port; see its README/PORT_STATUS/
 PORT_NOTES file. Passing mocks does not establish Go or production parity.
 
 | Area | Implemented slice | Remaining integration |
 | --- | --- | --- |
 | config / guard / health | DSN configuration and fail-closed redaction; audit/interceptor hooks; circuit-breaker registry | Guard without interceptor remains audit-only; adapters must enforce cancellation/decision; health uses Unix seconds and persistence callback ordering remains untested |
-| db / asset DSL | Bound Postgres query plans, asset scope parenthesization, row decoding, injected task-constraint CRUD | Live driver, migrations, most stores, locks, archive recovery |
-| llmpool / llmrec | Ordered provider chain, ranking/retry/capacity; request/response capture via injected providers and sinks | Norma SDK, production transport, async lifecycle, cancellation and DB wiring |
+| db / asset DSL | Bound Postgres query plans, optional RawCursor executor, settings/category/task CRUD, source/company snapshots and constraints | Live driver/database validation, migrations, remaining stores, cross-process locks, archive recovery |
+| llmpool / llmrec | Ordered provider chain, ranking/retry/capacity, capture and OpenAI/Anthropic completion/SSE adapters over injected transport | Full Norma SDK, production HTTP policy/transport, async lifecycle and DB wiring |
 | intercept | Priority rules/cache, reviewer envelopes, human approval/cancellation adapters | SQL/config/model/trace services; deliberate fail-closed differences need acceptance testing |
 | agent | Deadline/metadata/boundary/trace/replay primitives | Main/goals/planner/workers SDK loop, real tools, graph transitions, scheduling |
-| server | Isolated HTTP router, health/auth contracts, JWT and injected stores/bcrypt | WSGI/auth/category composition and optional DB/bcrypt adapters added; real dependencies, production keys, live manager, most of 261 routes, SSE and frontend integration remain unverified |
+| server | WSGI application, auth/category/task/log contracts, JWT and optional bcrypt | Real dependency verification, production keys, live runner/metrics, 244 remaining routes, SSE and frontend integration |
+| manager | Synchronized task registry, DTOs, admission, cancellation/drain gates and category refresh | Production runner/bootstrap/metrics, FIFO scheduler, timeout monitor, multi-process coordination, startup recovery |
 | mcphttp / skills | Injected-transport RPC/session/SSE parsing; metadata and offline catalog | Real HTTP/TLS, legacy SSE pump, Norma registry, full YAML/ZIP, tool invocation |
 | traffic / evidence | Offline SQLite search/capture/archive and blob/reference/hash/store helpers | MITM proxy/CA, DB/SDK wiring, staged deletion/recovery/retention |
 | notify | Filtering, credential destination guard, signatures/rendering, static SSRF checks | Production transports, digests/retry services, dynamic DNS/connect-time safeguards |
 | report | English Markdown/CSV exports and safe filenames | DB adapters and sanitized UI rendering |
 | sidequestion / enrich | Fake-provider budgets/replay/cache/cancellation; queue/cooldown/DNS records/bounded HTTP adapters | Main hooks, provider API, DB generation enforcement, Norma budgets, DNSX and stores |
-| selfupdate / orchestration | Not ported | Runtime-specific update design; task lifecycle, scheduler and restart recovery |
+| selfupdate / orchestration | Not ported | Runtime-specific update design; complete scheduler and restart recovery |
 | web | English source localization, historical protocol aliases preserved | Full typecheck, build, live/visual QA; historical screenshots remain untranslated |
 
 The orchestration layer depends on `github.com/Autumn-27/norma`, not merely on HTTP
@@ -96,7 +97,7 @@ Python architecture.
 
 ## Authored-test milestone
 
-Combined suite: **298 tests pass** after integrating thirteen additional worker
+Combined suite: **373 tests pass** after integrating thirteen additional worker
 packages and credential-query regression coverage. No upstream application,
 Go test suite, integration database, live provider or target execution was run.
 TypeScript parse checks are syntax checks only, not type/build/runtime checks.

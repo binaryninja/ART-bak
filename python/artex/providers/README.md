@@ -1,0 +1,72 @@
+# Injected provider adapters
+
+Implementation reference: official `Autumn-27/norma` tag `v0.4.3`, fetched
+read-only, especially `llm/{types,provider,openai,anthropic}.go`; ARTEX
+`agent/provider.go` supplies the upstream configuration. No upstream source was
+executed or installed. This is a Python interoperability implementation, not a
+claim of complete SDK parity or validation against live provider services.
+
+## Contracts
+
+- `Provider(Config(...), transport)` implements `complete(context, request)` and
+  `stream(context, request)`, compatible with `llmpool.Pool` and `llmrec.Recorder`.
+- Completion returns `(message, stop_reason, usage)`. Messages and blocks use
+  the shared lower-case dictionary schema. Tool inputs are decoded JSON objects.
+  The message also includes the provider's returned `model`, falling back to the
+  configured model. Usage has input/output/cache-read/cache-write counts.
+- Streaming returns dictionary events with Norma's normalized `type` names.
+  Tool events also include `index` and `tool_id` so interleaved calls remain
+  attributable. An assembler must honor those fields, not concatenate all calls.
+  Only terminal `[DONE]` / `message_stop` marks successful EOF.
+- `ContextBoundProvider` bridges `sidequestion`'s `complete(request)` contract.
+  Pass a context factory carrying the appropriate session/cancellation state.
+- Transport is a required callable `(context, url, headers, json_bytes, stream)`
+  returning `Response(status, body, close_callback)`. Completion bodies are bytes
+  or strings; streaming bodies may be iterables of byte chunks. The transport
+  owns HTTP policy, timeouts, proxy routing and cancellation while blocked.
+
+There is **no built-in network client**, environment credential discovery,
+rate limiter, retry/sleep loop, provider registration, or tools execution. The
+injected transport receives explicit credentials and must protect them, enforce
+its allowed destination policy and reject unsafe redirects. Tests use fake
+transports and placeholder credentials only.
+
+## Supported behavior
+
+- OpenAI-compatible Chat Completions and Anthropic Messages serialization,
+  tools, textual tool results, thinking/signature preservation, stop sequences,
+  temperature, output-limit field choice and Anthropic static-prefix caching.
+- OpenAI reasoning aliases, refusal text (never treated as an empty reply or
+  retried to avoid refusal), tool calls and finish-reason normalization.
+- Anthropic cache usage folds cached tokens into total input, matching Norma.
+  Streaming input is counted only at message_start, output at message_delta.
+- SSE framing tolerates byte boundaries, CRLF, comments and multiple data lines;
+  limits individual lines/events to 8 MiB. Invalid JSON/UTF-8 is surfaced.
+- Non-2xx failures expose an HTTP status, not credentials or response contents.
+  Provider structured errors and protocol failures remain separate. Mid-stream
+  failures propagate; the pool must never retry after any normalized event.
+- Responses close on normal completion, parse failure, HTTP failure and explicit
+  iterator close. A consumer abandoning a generator must close it explicitly.
+
+## Deliberate differences and remaining gaps
+
+- Request history is strictly paired: every tool call must have exactly one
+  result in the next user message, with no duplicate IDs or orphan results.
+  Malformed histories raise `ProtocolError` rather than silently dropping calls,
+  inventing tool output, or inserting fabricated reasoning placeholders.
+- Anthropic replayed thinking is emitted only when thinking is explicitly
+  enabled and its original signature exists. Norma's configuration-only branch
+  considers any nonempty mode enabled, including `disabled`; this port does not
+  preserve that inconsistent behavior.
+- No Responses API, multimodal content, redacted-thinking blocks, or provider
+  extensions beyond documented fields. Unsupported blocks fail explicitly.
+- No same-provider establishment retries, empty-response retries, rate limiting,
+  ARTEX quota-aware routing, or session-header configuration yet. Apply explicit
+  policy in a future transport layer, never automatic replay after emitted data.
+- Raw request/response `llmrec.Capture` is not wired at this layer yet. Recorder's
+  normalized messages and usage work; an injected transport can use its context
+  capture to record raw bytes and each attempt without including auth headers.
+- Fragmented tool arguments and parallel indexed calls are supported. Tool-name
+  fragments arriving after the start event fail rather than mislabel a tool.
+- Live API interoperability, cancellation during blocking transport reads, all
+  provider-specific event variants, and network security policies are unverified.

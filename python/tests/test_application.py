@@ -15,6 +15,8 @@ class Executor:
         if 'FROM settings' in query.sql:
             value = self.values.get(query.params[0])
             return [] if value is None else [(value,)]
+        if 'FROM server_logs' in query.sql:
+            return []
         if 'FROM task_categories' in query.sql:
             return []
         raise AssertionError(query.sql)
@@ -63,7 +65,9 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/task-categories', token=token), (200, {'categories': []}))
         self.assertEqual(self.request('/api/auth/init', method='POST', data={'password': 'other-password'})[0], 403)
         self.assertEqual(self.request('/api/auth/login', method='POST', data={'username': 'ARTEX', 'password': 'dummy-password'})[0], 200)
-        self.assertEqual(self.request('/api/tasks', token=token)[0], 404)
+        self.assertEqual(self.request('/api/tasks', token=token)[0], 503)
+        self.assertEqual(self.request('/api/logs', token=token)[0], 503)
+        self.assertEqual(self.request('/api/logs/history', token=token), (200, {'items': [], 'has_more': False}))
 
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):

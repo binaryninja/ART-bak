@@ -6,9 +6,10 @@ it does not import the application, open a listener, contact a database, or call
 **Registration is not behavioral parity.** The Python matches below are offline
 contracts with injected adapters, not deployed HTTP endpoints. The callable WSGI
 adapter does not start a listener or prove end-to-end service reachability.
-Six category routes require an explicit service registration call; list/create
-need a repository and mutations require a live task manager. Missing adapters
-return 503. Production integration limitations are described in
+The application factory explicitly registers category, task and log services.
+Category mutations require a live manager; tasks require metrics/runtime adapters;
+log snapshots require a capture ring. Missing required adapters return 503.
+Declarations do not prove execution readiness. Production limitations are in
 `artex/server/PORT_STATUS.md`. No route is labeled production-ready.
 
 ## Counts
@@ -16,10 +17,10 @@ return 503. Production integration limitations are described in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **11**.
-- python optional service routes: **6**.
-- matched offline contract routes: **11**.
-- go routes without python registration: **250**.
+- python offline contract routes: **17**.
+- python optional service routes: **12**.
+- matched offline contract routes: **17**.
+- go routes without python registration: **244**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -65,10 +66,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/assets` | `server/server.go:744` | Not registered |
 | GET | `/api/assets/counts` | `server/server.go:743` | Not registered |
 | GET | `/api/audit` | `server/server.go:784` | Not registered |
-| POST | `/api/auth/change-password` | `server/server.go:658` | Offline contract only: `python/artex/server/auth.py:103` |
-| POST | `/api/auth/init` | `server/server.go:656` | Offline contract only: `python/artex/server/auth.py:103` |
-| POST | `/api/auth/login` | `server/server.go:657` | Offline contract only: `python/artex/server/auth.py:103` |
-| GET | `/api/auth/status` | `server/server.go:655` | Offline contract only: `python/artex/server/auth.py:103` |
+| POST | `/api/auth/change-password` | `server/server.go:658` | Offline contract only: `python/artex/server/auth.py:107` |
+| POST | `/api/auth/init` | `server/server.go:656` | Offline contract only: `python/artex/server/auth.py:107` |
+| POST | `/api/auth/login` | `server/server.go:657` | Offline contract only: `python/artex/server/auth.py:107` |
+| GET | `/api/auth/status` | `server/server.go:655` | Offline contract only: `python/artex/server/auth.py:107` |
 | POST | `/api/chat` | `server/server.go:815` | Not registered |
 | GET | `/api/chat/mentions` | `server/server.go:814` | Not registered |
 | POST | `/api/chat/upload` | `server/server.go:816` | Not registered |
@@ -125,7 +126,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/nodes` | `server/server.go:772` | Not registered |
 | GET | `/api/exploration/tokens` | `server/server.go:779` | Not registered |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
-| GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:101` |
+| GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:105` |
 | GET | `/api/intercept/history` | `server/server.go:925` | Not registered |
 | GET | `/api/intercept/history/{id}` | `server/server.go:926` | Not registered |
 | GET | `/api/intercept/history/{id}/execution` | `server/server.go:927` | Not registered |
@@ -160,8 +161,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/llm/retry-policy` | `server/server.go:902` | Not registered |
 | POST | `/api/llm/retry-policy` | `server/server.go:903` | Not registered |
 | POST | `/api/llm/test` | `server/server.go:739` | Not registered |
-| GET | `/api/logs` | `server/server.go:662` | Not registered |
-| GET | `/api/logs/history` | `server/server.go:663` | Not registered |
+| GET | `/api/logs` | `server/server.go:662` | Optional registration; adapters required: `python/artex/server/logs.py:85` |
+| GET | `/api/logs/history` | `server/server.go:663` | Optional registration; adapters required: `python/artex/server/logs.py:86` |
 | GET | `/api/logs/stream` | `server/server.go:664` | Not registered |
 | GET | `/api/mcp` | `server/server.go:866` | Not registered |
 | POST | `/api/mcp` | `server/server.go:867` | Not registered |
@@ -215,13 +216,13 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/task-templates` | `server/server.go:681` | Not registered |
 | DELETE | `/api/task-templates/{id}` | `server/server.go:683` | Not registered |
 | PATCH | `/api/task-templates/{id}` | `server/server.go:682` | Not registered |
-| GET | `/api/tasks` | `server/server.go:673` | Not registered |
-| POST | `/api/tasks` | `server/server.go:674` | Not registered |
+| GET | `/api/tasks` | `server/server.go:673` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
+| POST | `/api/tasks` | `server/server.go:674` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
 | POST | `/api/tasks/archive/batch` | `server/server.go:697` | Not registered |
 | POST | `/api/tasks/category/batch` | `server/server.go:679` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
 | POST | `/api/tasks/control/batch` | `server/server.go:693` | Not registered |
 | DELETE | `/api/tasks/{id}` | `server/server.go:821` | Not registered |
-| GET | `/api/tasks/{id}` | `server/server.go:684` | Not registered |
+| GET | `/api/tasks/{id}` | `server/server.go:684` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
 | PATCH | `/api/tasks/{id}` | `server/server.go:685` | Not registered |
 | POST | `/api/tasks/{id}/archive` | `server/server.go:696` | Not registered |
 | GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Not registered |
@@ -237,7 +238,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/{id}/constraints` | `server/server.go:725` | Not registered |
 | DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Not registered |
 | PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Not registered |
-| POST | `/api/tasks/{id}/control` | `server/server.go:728` | Not registered |
+| POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
 | GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Not registered |
 | GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Not registered |
 | GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Not registered |
@@ -304,12 +305,18 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `DELETE /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/tasks/{id}/category`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/tasks/category/batch`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `GET /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `GET /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks/{id}/control`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 
 ## Non-method mounts
 

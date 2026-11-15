@@ -24,7 +24,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **298 tests**; these are authored unit/adapter
+combined suite currently passes **373 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
@@ -57,3 +57,7 @@ Upstream source is a third-party backup whose provenance against the deleted
 original is not verified. No upstream install/build scripts were executed for
 this migration. The project remains licensed under the repository's AGPL-3.0
 license; source attribution and license notices are preserved.
+
+See [TASK_RUNTIME_STATUS.md](TASK_RUNTIME_STATUS.md) for task persistence,
+manager/lifecycle, provider serialization and log integration, including strict
+execution and parity limits.

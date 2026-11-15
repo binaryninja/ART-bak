@@ -17,7 +17,11 @@ JWT_TTL = 7 * 24 * 60 * 60
 def validate_password(password: str) -> str:
     if len(password) < 8:
         return 'Password must contain at least 8 characters'
-    if len(password.encode('utf-8')) > 72:
+    try:
+        encoded = password.encode('utf-8')
+    except UnicodeError:
+        return 'Password must be valid UTF-8'
+    if len(encoded) > 72:
         return 'Password must not exceed 72 bytes'
     return ''
 

@@ -235,6 +235,12 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                 if owner == 'TaskCategoryService.register':
                     dependencies = ('Explicit TaskCategoryService.register(router) call; injected category repository for list/create; '
                                     'live task manager required for rename/delete/task assignment; missing adapters return 503')
+                elif owner == 'TaskService.register':
+                    dependencies = ('build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; '
+                                    'create/resume also require cooperative runner and graph bootstrap; missing adapters return 503')
+                elif owner == 'LogService.register':
+                    dependencies = ('build_application explicitly registers LogService; authenticated history requires LogStore/executor; '
+                                    'snapshot requires explicitly supplied log ring; no SSE/capture wiring')
                 routes.append({'method': method.upper(), 'path': path,
                                'source': relative, 'line': node.lineno, 'function': owner,
                                'handler': ast.unparse(node.args[2]), 'public': public,
@@ -284,9 +290,10 @@ def markdown(data: dict) -> str:
              '**Registration is not behavioral parity.** The Python matches below are offline',
              'contracts with injected adapters, not deployed HTTP endpoints. The callable WSGI',
              'adapter does not start a listener or prove end-to-end service reachability.',
-             'Six category routes require an explicit service registration call; list/create',
-             'need a repository and mutations require a live task manager. Missing adapters',
-             'return 503. Production integration limitations are described in',
+             'The application factory explicitly registers category, task and log services.',
+             'Category mutations require a live manager; tasks require metrics/runtime adapters;',
+             'log snapshots require a capture ring. Missing required adapters return 503.',
+             'Declarations do not prove execution readiness. Production limitations are in',
              '`artex/server/PORT_STATUS.md`. No route is labeled production-ready.', '',
              '## Counts', '']
     lines += [f'- {name.replace("_", " ")}: **{value}**.' for name, value in summary.items()]
