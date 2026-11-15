@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 116,
-    "python_optional_service_routes": 111,
-    "matched_offline_contract_routes": 116,
-    "go_routes_without_python_registration": 145
+    "python_offline_contract_routes": 137,
+    "python_optional_service_routes": 132,
+    "matched_offline_contract_routes": 137,
+    "go_routes_without_python_registration": 124
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -30,6 +30,7 @@
     "python/artex/server/inspection_setup.py": "4dad4b0b2682c609423df2799c032ee954ee1bb0fd5a9be8c1699a0d4b60aed9",
     "python/artex/server/llm_records.py": "9626d58997d6a7f0655e90429617900d11a743a79a2daa5a819532f457697688",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
+    "python/artex/server/mcp_catalog.py": "4c04081de65c31c7085e960a65202aa46067f4bddba9e34da6e8039999d6cd0e",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
     "python/artex/server/runtime_setup.py": "1cd2dc501a7eda1c93ff319ba49a8b7ae8667c9ec712c918cf758c12b4b3b19f",
@@ -38,10 +39,16 @@
     "python/artex/server/streaming.py": "9fcc2755a12d3f9c2a451566eacd238fb806f5285012f74e2f63c6e04e17f1e2",
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
     "python/artex/server/task_chat.py": "deb3e6e5dc468ed331f9a41956d55dd448092ff4894b69e823fe183b153e521f",
+    "python/artex/server/task_constraints.py": "58af0e1d77142f9ecf5b8d8b5def8af4d5f9ed66a31b530bda0334b099d44bc3",
+    "python/artex/server/task_goals.py": "6dee8e591e90e2c3e7f1cd929ad711bf75fe94a4a9a2dd5fb79e6ec797a33b6c",
     "python/artex/server/task_host.py": "f8e58c51050ee01805e87c7563ce2e0f8e214069fb1d4948b52e8bca1244076f",
+    "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
+    "python/artex/server/task_scope.py": "a615839f470ec4b03d72cd39b1cd9215ea874baea0f3770187ecfe86060dcb01",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
     "python/artex/server/tool_catalog.py": "7cd1af0502dbb15e1043765d673ee2550df8a148cba7402ef81307262670af6a",
+    "python/artex/server/workspace.py": "662b502ac862175085cacc5072486af5a686c0270f4adeb6c545a256fb2f3b4e",
+    "python/artex/server/workspace_write.py": "a0b9a8898ef97e91ce5726f52a52792919be46703f3b9897c421654d4ce75341",
     "python/artex/server/wsgi.py": "3d90db4ab424349fe4922c75b4915b006caf749384d45104f91451efd5167e6d"
   },
   "go_routes": [
@@ -966,8 +973,19 @@
       "expression": "\"GET /api/workspace/list\"",
       "method": "GET",
       "path": "/api/workspace/list",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/workspace/list",
+        "source": "python/artex/server/workspace.py",
+        "line": 41,
+        "function": "WorkspaceService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/workspace/read",
@@ -978,8 +996,19 @@
       "expression": "\"GET /api/workspace/read\"",
       "method": "GET",
       "path": "/api/workspace/read",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/workspace/read",
+        "source": "python/artex/server/workspace.py",
+        "line": 41,
+        "function": "WorkspaceService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/workspace/write",
@@ -990,8 +1019,19 @@
       "expression": "\"POST /api/workspace/write\"",
       "method": "POST",
       "path": "/api/workspace/write",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/workspace/write",
+        "source": "python/artex/server/workspace_write.py",
+        "line": 51,
+        "function": "WorkspaceWriteService.register",
+        "handler": "lambda req, params: self.handle(req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/workspace/mkdir",
@@ -1026,8 +1066,19 @@
       "expression": "\"GET /api/workspace/download\"",
       "method": "GET",
       "path": "/api/workspace/download",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/workspace/download",
+        "source": "python/artex/server/workspace.py",
+        "line": 41,
+        "function": "WorkspaceService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/workspace/upload",
@@ -1050,8 +1101,19 @@
       "expression": "\"GET /api/tasks/{id}/scope\"",
       "method": "GET",
       "path": "/api/tasks/{id}/scope",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/scope",
+        "source": "python/artex/server/task_scope.py",
+        "line": 37,
+        "function": "TaskScopeService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/scope",
@@ -1062,8 +1124,19 @@
       "expression": "\"POST /api/tasks/{id}/scope\"",
       "method": "POST",
       "path": "/api/tasks/{id}/scope",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/scope",
+        "source": "python/artex/server/task_scope.py",
+        "line": 37,
+        "function": "TaskScopeService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/tasks/{id}/scope/{sid}",
@@ -1074,8 +1147,19 @@
       "expression": "\"DELETE /api/tasks/{id}/scope/{sid}\"",
       "method": "DELETE",
       "path": "/api/tasks/{id}/scope/{sid}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/tasks/{id}/scope/{sid}",
+        "source": "python/artex/server/task_scope.py",
+        "line": 37,
+        "function": "TaskScopeService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/goals",
@@ -1086,8 +1170,19 @@
       "expression": "\"GET /api/tasks/{id}/goals\"",
       "method": "GET",
       "path": "/api/tasks/{id}/goals",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/goals",
+        "source": "python/artex/server/task_goals.py",
+        "line": 108,
+        "function": "TaskGoalService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/goals",
@@ -1098,8 +1193,19 @@
       "expression": "\"POST /api/tasks/{id}/goals\"",
       "method": "POST",
       "path": "/api/tasks/{id}/goals",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/goals",
+        "source": "python/artex/server/task_goals.py",
+        "line": 108,
+        "function": "TaskGoalService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/tasks/{id}/goals/{gid}",
@@ -1110,8 +1216,19 @@
       "expression": "\"PATCH /api/tasks/{id}/goals/{gid}\"",
       "method": "PATCH",
       "path": "/api/tasks/{id}/goals/{gid}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/tasks/{id}/goals/{gid}",
+        "source": "python/artex/server/task_goals.py",
+        "line": 108,
+        "function": "TaskGoalService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/tasks/{id}/goals/{gid}",
@@ -1122,8 +1239,19 @@
       "expression": "\"DELETE /api/tasks/{id}/goals/{gid}\"",
       "method": "DELETE",
       "path": "/api/tasks/{id}/goals/{gid}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/tasks/{id}/goals/{gid}",
+        "source": "python/artex/server/task_goals.py",
+        "line": 108,
+        "function": "TaskGoalService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/constraints",
@@ -1134,8 +1262,19 @@
       "expression": "\"GET /api/tasks/{id}/constraints\"",
       "method": "GET",
       "path": "/api/tasks/{id}/constraints",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/constraints",
+        "source": "python/artex/server/task_constraints.py",
+        "line": 97,
+        "function": "TaskConstraintService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/constraints",
@@ -1146,8 +1285,19 @@
       "expression": "\"POST /api/tasks/{id}/constraints\"",
       "method": "POST",
       "path": "/api/tasks/{id}/constraints",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/constraints",
+        "source": "python/artex/server/task_constraints.py",
+        "line": 97,
+        "function": "TaskConstraintService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/tasks/{id}/constraints/{cid}",
@@ -1158,8 +1308,19 @@
       "expression": "\"PATCH /api/tasks/{id}/constraints/{cid}\"",
       "method": "PATCH",
       "path": "/api/tasks/{id}/constraints/{cid}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/tasks/{id}/constraints/{cid}",
+        "source": "python/artex/server/task_constraints.py",
+        "line": 97,
+        "function": "TaskConstraintService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/tasks/{id}/constraints/{cid}",
@@ -1170,8 +1331,19 @@
       "expression": "\"DELETE /api/tasks/{id}/constraints/{cid}\"",
       "method": "DELETE",
       "path": "/api/tasks/{id}/constraints/{cid}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/tasks/{id}/constraints/{cid}",
+        "source": "python/artex/server/task_constraints.py",
+        "line": 97,
+        "function": "TaskConstraintService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/control",
@@ -1205,8 +1377,19 @@
       "expression": "\"PUT /api/tasks/{id}/llm\"",
       "method": "PUT",
       "path": "/api/tasks/{id}/llm",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PUT",
+        "path": "/api/tasks/{id}/llm",
+        "source": "python/artex/server/task_profiles.py",
+        "line": 89,
+        "function": "TaskProfileService.register",
+        "handler": "lambda r, p: self.handle('replace', r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/llm/resolution",
@@ -1217,8 +1400,19 @@
       "expression": "\"GET /api/tasks/{id}/llm/resolution\"",
       "method": "GET",
       "path": "/api/tasks/{id}/llm/resolution",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/llm/resolution",
+        "source": "python/artex/server/task_profiles.py",
+        "line": 90,
+        "function": "TaskProfileService.register",
+        "handler": "lambda r, p: self.handle('resolution', r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/intents/{iid}/control",
@@ -3470,8 +3664,19 @@
       "expression": "\"GET /api/mcp\"",
       "method": "GET",
       "path": "/api/mcp",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/mcp",
+        "source": "python/artex/server/mcp_catalog.py",
+        "line": 58,
+        "function": "MCPCatalogService.register",
+        "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/mcp",
@@ -3482,8 +3687,19 @@
       "expression": "\"POST /api/mcp\"",
       "method": "POST",
       "path": "/api/mcp",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/mcp",
+        "source": "python/artex/server/mcp_catalog.py",
+        "line": 58,
+        "function": "MCPCatalogService.register",
+        "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/mcp/{id}",
@@ -3494,8 +3710,19 @@
       "expression": "\"DELETE /api/mcp/{id}\"",
       "method": "DELETE",
       "path": "/api/mcp/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/mcp/{id}",
+        "source": "python/artex/server/mcp_catalog.py",
+        "line": 58,
+        "function": "MCPCatalogService.register",
+        "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/mcp/{id}/tools",
@@ -3506,8 +3733,19 @@
       "expression": "\"GET /api/mcp/{id}/tools\"",
       "method": "GET",
       "path": "/api/mcp/{id}/tools",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/mcp/{id}/tools",
+        "source": "python/artex/server/mcp_catalog.py",
+        "line": 58,
+        "function": "MCPCatalogService.register",
+        "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/mcp/{id}/refresh",
@@ -5315,6 +5553,54 @@
     },
     {
       "method": "GET",
+      "path": "/api/mcp",
+      "source": "python/artex/server/mcp_catalog.py",
+      "line": 58,
+      "function": "MCPCatalogService.register",
+      "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/mcp",
+      "source": "python/artex/server/mcp_catalog.py",
+      "line": 58,
+      "function": "MCPCatalogService.register",
+      "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/mcp/{id}",
+      "source": "python/artex/server/mcp_catalog.py",
+      "line": 58,
+      "function": "MCPCatalogService.register",
+      "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mcp/{id}/tools",
+      "source": "python/artex/server/mcp_catalog.py",
+      "line": 58,
+      "function": "MCPCatalogService.register",
+      "handler": "lambda r, p, a=action: self.handle(a, r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/llm/profiles",
       "source": "python/artex/server/profiles.py",
       "line": 126,
@@ -5663,6 +5949,162 @@
     },
     {
       "method": "GET",
+      "path": "/api/tasks/{id}/constraints",
+      "source": "python/artex/server/task_constraints.py",
+      "line": 97,
+      "function": "TaskConstraintService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/constraints",
+      "source": "python/artex/server/task_constraints.py",
+      "line": 97,
+      "function": "TaskConstraintService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/tasks/{id}/constraints/{cid}",
+      "source": "python/artex/server/task_constraints.py",
+      "line": 97,
+      "function": "TaskConstraintService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tasks/{id}/constraints/{cid}",
+      "source": "python/artex/server/task_constraints.py",
+      "line": 97,
+      "function": "TaskConstraintService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/goals",
+      "source": "python/artex/server/task_goals.py",
+      "line": 108,
+      "function": "TaskGoalService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/goals",
+      "source": "python/artex/server/task_goals.py",
+      "line": 108,
+      "function": "TaskGoalService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/tasks/{id}/goals/{gid}",
+      "source": "python/artex/server/task_goals.py",
+      "line": 108,
+      "function": "TaskGoalService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tasks/{id}/goals/{gid}",
+      "source": "python/artex/server/task_goals.py",
+      "line": 108,
+      "function": "TaskGoalService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tasks/{id}/llm",
+      "source": "python/artex/server/task_profiles.py",
+      "line": 89,
+      "function": "TaskProfileService.register",
+      "handler": "lambda r, p: self.handle('replace', r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/llm/resolution",
+      "source": "python/artex/server/task_profiles.py",
+      "line": 90,
+      "function": "TaskProfileService.register",
+      "handler": "lambda r, p: self.handle('resolution', r, p)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/scope",
+      "source": "python/artex/server/task_scope.py",
+      "line": 37,
+      "function": "TaskScopeService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/scope",
+      "source": "python/artex/server/task_scope.py",
+      "line": 37,
+      "function": "TaskScopeService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tasks/{id}/scope/{sid}",
+      "source": "python/artex/server/task_scope.py",
+      "line": 37,
+      "function": "TaskScopeService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/task-templates",
       "source": "python/artex/server/task_templates.py",
       "line": 30,
@@ -5860,6 +6302,54 @@
       "line": 22,
       "function": "ToolCatalogService.register",
       "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspace/list",
+      "source": "python/artex/server/workspace.py",
+      "line": 41,
+      "function": "WorkspaceService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspace/read",
+      "source": "python/artex/server/workspace.py",
+      "line": 41,
+      "function": "WorkspaceService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspace/download",
+      "source": "python/artex/server/workspace.py",
+      "line": 41,
+      "function": "WorkspaceService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/workspace/write",
+      "source": "python/artex/server/workspace_write.py",
+      "line": 51,
+      "function": "WorkspaceWriteService.register",
+      "handler": "lambda req, params: self.handle(req)",
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",

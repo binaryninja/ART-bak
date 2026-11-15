@@ -138,6 +138,41 @@ class TaskStore:
     def __init__(self, executor: Executor):
         self.executor = executor
 
+    def replace_llm_profiles_idle(self, task_id, exploration_id, expected_revision, profile_ids, active_profile_id=0):
+        """Reset an explicit chain only behind a host idle/config fence.
+
+        Narrow source ReplaceTaskLLMProfiles port: ordered reset, first-ID default,
+        revision CAS and task-before-profile lock order. Reject running/paused/
+        queued/archived tasks and nonterminal quota-blocked intents: their live
+        reconciliation/reopen side effects are not implemented. Caller must sync
+        runtime caches/audit after commit; this method does not claim readiness.
+        """
+        for value in (task_id,exploration_id):
+            if int64(value,'task identity')<=0:raise TaskInvalid('Positive task identity required')
+        if int64(expected_revision,'chain revision')<0:raise TaskInvalid('Invalid chain revision')
+        if not isinstance(profile_ids,(list,tuple)):raise TaskInvalid('Ordered profile IDs required')
+        ids=_ids(list(profile_ids),'profile ID',maximum=100)
+        if int64(active_profile_id,'active profile ID')<0:raise TaskInvalid('Invalid active profile ID')
+        active=(active_profile_id or ids[0]) if ids else None
+        if ids and active not in ids:raise TaskInvalid('Active profile not in chain')
+        with self.executor.transaction() as tx:
+            rows=tx.fetch_all(Query("SELECT status,paused,queued,llm_chain_revision FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1) FOR UPDATE",(task_id,exploration_id)))
+            if len(rows)!=1:raise TaskInvalid('Task unavailable')
+            status,paused,queued,revision=rows[0]
+            if status not in ('created','done','failed','timeout') or paused is not False or queued is not False or revision!=expected_revision:
+                raise TaskInvalid('Task lifecycle or chain revision changed')
+            if status=='created' and tx.fetch_all(Query("SELECT id FROM exploration_nodes WHERE exploration_id=$1 AND kind='intent' AND state='blocked' AND blocked_reason='llm_quota_exhausted' LIMIT 1",(exploration_id,))):
+                raise TaskInvalid('Quota-blocked intent reconciliation unavailable')
+            if ids:
+                locked=tx.fetch_all(Query("SELECT id FROM llm_profiles WHERE id=ANY($1) AND COALESCE(api_key,'')<>'' ORDER BY id FOR SHARE",(ids,)))
+                if sorted(r[0] for r in locked)!=sorted(ids):raise TaskInvalid('Selected profiles unavailable')
+            tx.execute(Query('DELETE FROM task_llm_profiles WHERE task_id=$1',(task_id,)))
+            for position,profile in enumerate(ids):
+                if tx.execute(Query('INSERT INTO task_llm_profiles(task_id,profile_id,position) VALUES ($1,$2,$3)',(task_id,profile,position)))!=1:raise RuntimeError('Chain insert unconfirmed')
+            changed=tx.fetch_all(Query('UPDATE tasks SET active_llm_profile_id=$2,llm_profile_id=$2,llm_chain_revision=llm_chain_revision+1 WHERE id=$1 AND llm_chain_revision=$3 RETURNING llm_chain_revision',(task_id,active,expected_revision)))
+            if changed!=[(expected_revision+1,)] and changed!=[[expected_revision+1]]:raise RuntimeError('Chain revision update unconfirmed')
+            return expected_revision+1
+
     def _hydrate(self, tasks):
         if not tasks:
             return

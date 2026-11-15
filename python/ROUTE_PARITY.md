@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **116**.
-- python optional service routes: **111**.
-- matched offline contract routes: **116**.
-- go routes without python registration: **145**.
+- python offline contract routes: **137**.
+- python optional service routes: **132**.
+- matched offline contract routes: **137**.
+- go routes without python registration: **124**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -166,11 +166,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/logs` | `server/server.go:662` | Optional registration; adapters required: `python/artex/server/logs.py:205` |
 | GET | `/api/logs/history` | `server/server.go:663` | Optional registration; adapters required: `python/artex/server/logs.py:206` |
 | GET | `/api/logs/stream` | `server/server.go:664` | Optional registration; adapters required: `python/artex/server/logs.py:207` |
-| GET | `/api/mcp` | `server/server.go:866` | Not registered |
-| POST | `/api/mcp` | `server/server.go:867` | Not registered |
-| DELETE | `/api/mcp/{id}` | `server/server.go:868` | Not registered |
+| GET | `/api/mcp` | `server/server.go:866` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
+| POST | `/api/mcp` | `server/server.go:867` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
+| DELETE | `/api/mcp/{id}` | `server/server.go:868` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
 | POST | `/api/mcp/{id}/refresh` | `server/server.go:870` | Not registered |
-| GET | `/api/mcp/{id}/tools` | `server/server.go:869` | Not registered |
+| GET | `/api/mcp/{id}/tools` | `server/server.go:869` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
 | GET | `/api/notify/channels` | `server/server.go:805` | Not registered |
 | POST | `/api/notify/channels` | `server/server.go:806` | Not registered |
 | DELETE | `/api/notify/channels/{id}` | `server/server.go:808` | Not registered |
@@ -236,17 +236,17 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/{id}/chat/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/tasks/{id}/chat/status` | `server/server.go:817` | Optional registration; adapters required: `python/artex/server/task_chat.py:43` |
 | POST | `/api/tasks/{id}/chat/stop` | `server/server.go:818` | Optional registration; adapters required: `python/artex/server/task_chat.py:44` |
-| GET | `/api/tasks/{id}/constraints` | `server/server.go:724` | Not registered |
-| POST | `/api/tasks/{id}/constraints` | `server/server.go:725` | Not registered |
-| DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Not registered |
-| PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Not registered |
+| GET | `/api/tasks/{id}/constraints` | `server/server.go:724` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
+| POST | `/api/tasks/{id}/constraints` | `server/server.go:725` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
+| DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
+| PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
 | POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Not registered |
 | GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Not registered |
-| GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Not registered |
-| POST | `/api/tasks/{id}/goals` | `server/server.go:721` | Not registered |
-| DELETE | `/api/tasks/{id}/goals/{gid}` | `server/server.go:723` | Not registered |
-| PATCH | `/api/tasks/{id}/goals/{gid}` | `server/server.go:722` | Not registered |
+| GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
+| POST | `/api/tasks/{id}/goals` | `server/server.go:721` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
+| DELETE | `/api/tasks/{id}/goals/{gid}` | `server/server.go:723` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
+| PATCH | `/api/tasks/{id}/goals/{gid}` | `server/server.go:722` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | GET | `/api/tasks/{id}/intent-assets` | `server/server.go:707` | Not registered |
 | POST | `/api/tasks/{id}/intents/rerun-blocked` | `server/server.go:734` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/control` | `server/server.go:731` | Not registered |
@@ -260,11 +260,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:691` | Not registered |
 | PUT | `/api/tasks/{id}/intercept-rules/{rid}` | `server/server.go:690` | Not registered |
 | POST | `/api/tasks/{id}/intercept-rules/{rid}/toggle` | `server/server.go:692` | Not registered |
-| PUT | `/api/tasks/{id}/llm` | `server/server.go:729` | Not registered |
-| GET | `/api/tasks/{id}/llm/resolution` | `server/server.go:730` | Not registered |
-| GET | `/api/tasks/{id}/scope` | `server/server.go:717` | Not registered |
-| POST | `/api/tasks/{id}/scope` | `server/server.go:718` | Not registered |
-| DELETE | `/api/tasks/{id}/scope/{sid}` | `server/server.go:719` | Not registered |
+| PUT | `/api/tasks/{id}/llm` | `server/server.go:729` | Optional registration; adapters required: `python/artex/server/task_profiles.py:89` |
+| GET | `/api/tasks/{id}/llm/resolution` | `server/server.go:730` | Optional registration; adapters required: `python/artex/server/task_profiles.py:90` |
+| GET | `/api/tasks/{id}/scope` | `server/server.go:717` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
+| POST | `/api/tasks/{id}/scope` | `server/server.go:718` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
+| DELETE | `/api/tasks/{id}/scope/{sid}` | `server/server.go:719` | Optional registration; adapters required: `python/artex/server/task_scope.py:37` |
 | GET | `/api/tokens/conversations` | `server/server.go:781` | Not registered |
 | GET | `/api/tokens/daily` | `server/server.go:780` | Not registered |
 | GET | `/api/tokens/usage` | `server/server.go:782` | Optional registration; adapters required: `python/artex/server/llm_records.py:74` |
@@ -293,12 +293,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/visibility/toggle` | `server/server.go:893` | Not registered |
 | GET | `/api/visibility/{kind}/{id}` | `server/server.go:892` | Not registered |
 | DELETE | `/api/workspace/delete` | `server/server.go:714` | Not registered |
-| GET | `/api/workspace/download` | `server/server.go:715` | Not registered |
-| GET | `/api/workspace/list` | `server/server.go:710` | Not registered |
+| GET | `/api/workspace/download` | `server/server.go:715` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
+| GET | `/api/workspace/list` | `server/server.go:710` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
 | POST | `/api/workspace/mkdir` | `server/server.go:713` | Not registered |
-| GET | `/api/workspace/read` | `server/server.go:711` | Not registered |
+| GET | `/api/workspace/read` | `server/server.go:711` | Optional registration; adapters required: `python/artex/server/workspace.py:41` |
 | POST | `/api/workspace/upload` | `server/server.go:716` | Not registered |
-| POST | `/api/workspace/write` | `server/server.go:712` | Not registered |
+| POST | `/api/workspace/write` | `server/server.go:712` | Optional registration; adapters required: `python/artex/server/workspace_write.py:51` |
 
 ## Python registration prerequisites
 
@@ -372,6 +372,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/stream`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/mcp/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/mcp/{id}/tools`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -401,6 +405,19 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/chat`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/chat/status`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tasks/{id}/chat/stop`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/constraints`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/constraints`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tasks/{id}/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/llm/resolution`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/scope/{sid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PATCH /api/task-templates/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -418,6 +435,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `DELETE /api/tools/custom/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tools/custom/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tools/{key}/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/list`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/read`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/download`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/write`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 
 ## Non-method mounts
 

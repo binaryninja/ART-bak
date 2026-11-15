@@ -19,9 +19,8 @@ class SharedDB(hosted_fixtures.DB):
 
 class EngineRunnerReview(unittest.TestCase):
     def setUp(self):
-        self.f=fixtures.EngineTests();self.f.setUp();self.addCleanup(self.f.doCleanups)
-        self.db=SharedDB();row=list(self.db.row);row[7]='created';row[8]=False;self.db.row=tuple(row)
-        self.f.db=self.db;self.f.graph.executor=self.db;self.f.worker.store.executor=self.db
+        self.f=fixtures.EngineTests();self.f.database_factory=SharedDB;self.f.setUp();self.addCleanup(self.f.doCleanups)
+        self.db=self.f.db;row=list(self.db.row);row[7]='created';row[8]=False;self.db.row=tuple(row)
         self.repository=TaskStore(self.db)
         def factory(task,token,scope):
             self.f.token=token

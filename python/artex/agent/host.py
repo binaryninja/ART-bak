@@ -67,6 +67,12 @@ class DrainResult:
         return self.workers_drained and self.settlement.all_settled
 
 
+@dataclass(frozen=True)
+class OwnedWorkResult:
+    busy: bool
+    value: object = None
+
+
 class AgentHost:
     def __init__(self, manager: TaskManager, runner: LifecycleRunner):
         if not isinstance(manager, TaskManager) or manager.runner is not runner:
@@ -78,6 +84,7 @@ class AgentHost:
         self._mutations = 0
         self._draining = False
         self._settling = False
+        self._working = False
         claim=getattr(runner,'claim_host',None)
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
@@ -115,6 +122,8 @@ class AgentHost:
         with self._condition:
             if self._settling:
                 raise TaskConflict('Lifecycle mutation cannot reenter completion settlement')
+            if admission and self._working:
+                raise TaskConflict('Admission is suspended during an owned engine step')
             if admission and self._draining:
                 raise TaskConflict('Admission is suspended during cooperative drain')
             self._mutations += 1
@@ -149,6 +158,30 @@ class AgentHost:
         if action != 'resume':
             raise ValueError('action must be pause|resume')
         return self._invoke(lambda: self.manager.control_task(task_id, action), admission=True)
+
+    def advance_owned(self, callback):
+        """Reserve one step over already admitted handles, never admit or settle.
+
+        Reject overlap with admission, settlement or drain without waiting. Pause
+        remains responsive while callback runs. Callback must return only after
+        all work it owns has ceased; it must not create detached work. New
+        admissions are rejected during this reservation, not silently queued.
+        """
+        if not callable(callback):raise ValueError('Owned work callback required')
+        self._identity()
+        with self._condition:
+            if self._mutations or self._settling or self._draining or self._working:
+                return OwnedWorkResult(True)
+            self._working=True;self._mutations+=1
+        try:
+            self._identity()
+            try:value=callback()
+            finally:self._identity()
+            return OwnedWorkResult(False,value)
+        finally:
+            with self._condition:
+                self._working=False;self._mutations-=1
+                self._condition.notify_all()
 
     def poll(self):
         """Non-background settlement pass. Busy is not evidence of no live work."""

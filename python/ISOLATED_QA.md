@@ -390,3 +390,170 @@ adoption failed, and unsupported creation returned 503 without task writes.
 The initial resume fixture was unpaused and correctly rejected; its persisted
 state was corrected, not the product. No automatic ticking, default enabling,
 external providers or production data were involved.
+
+## Goal decomposition and explicit constraints (stages 29, 31, 33)
+
+Goal-only decomposition passed six real-PG groups on manifest
+`b3bd4124a6223c28ed6099bdd5702dea52bc08e452ca24e272fb221cf9aaff63`:
+FK/cancellation rollback, invalid/denied/prose rejection, durable replay and
+committed-SQL/failed-JSONL uncertainty without duplicate effects. This is not full
+bootstrap or automatic user-scope extraction.
+
+Standalone constraint tools passed six groups on manifest
+`9fa635f2b09c8903581fce35bbbe8f90bf9c46817e2459fe2ddae218d0798075`.
+Exact frozen allow and deny proposals needed independent host approval; SQL or
+cancellation rolled back a whole batch. Foreign, paused, stale and changed
+executor bindings failed. Model extraction is never treated as user permission.
+
+Explicit GoalPlanner/ConstraintTools composition passed six groups on manifest
+`103023201eec9fb2b66b232d49496e47c607a8e1e7542f46ee777fba373356de`.
+The source English goals prompt and explicit catalog produced approved rows;
+changed catalog/defaults or removed adapter conflicted with durable replay.
+Denied proposals and SQL errors stopped the turn without later goals. Atomicity
+is per tool batch, not across the conversation. No full bootstrap is claimed.
+
+## Task-scope metadata (stage 32)
+
+Six real-PG groups on manifest
+`103023201eec9fb2b66b232d49496e47c607a8e1e7542f46ee777fba373356de`
+verified normalized exact approval, duplicate preservation, batch rollback,
+archive/deletion fences and actual company KEY SHARE blocking another connection's
+delete. No hostname-to-root or CIDR broadening is inferred. Paused/status/run
+policy remains the explicit host current/guard responsibility. The native tool
+adapter has separate later review; this stage tested the metadata store only.
+
+## Explicit pump (stage 34)
+
+Five real-PG groups on manifest
+`e2cafbe4cb231f2dabc8f2ee607916083364b88b8941bc5bb0bd1d78ba8d4d25`
+verified actual proof completion, stop timeout without implicit task cancellation,
+pre-install admission fences and uncertain terminal SQL without replay. Pausing a
+blocked planner stopped the thread after release and persisted pause, but the
+fixture's execution-current callback denied cancelled transcript finalization.
+That correctly retained an unresolved handle; host drain was NOT all-settled.
+Do not describe this snapshot as universal clean cancellation. A separate explicit
+persistence-authority adapter requires its own later verification.
+
+## Pure deadline and wrap-up policy (stage 35)
+
+Source comparison plus 13 authored and four independent isolated regressions passed
+on manifest `e58154c60950b47d7247832f63774efd1118248ca6a7962d90c2a92f7848ace0`.
+Deadline floor/own-budget ordering, reason-specific prompts, override behavior
+and code-owned tool exclusions were checked. No provider, timer, extra budget or
+actual task deadline settlement was enabled.
+
+## Optional constraint HTTP (stage 36)
+
+Five real-PG groups on manifest
+`b2b91b9969c016768949c1ed873a2a46fe46d279430d662f5a4572b8d32109e5`
+verified source-shaped CRUD, explicit deletion policy, idle/revision/foreign-node
+fences and stale-write rollback. Captured SQL outputs confirmed row, per-item,
+origin and aggregate-byte overflow return sentinels before payload transfer;
+HTTP returns unavailable rather than silently omitting policy. Only explicitly
+registered fixture handlers and synthetic records were used.
+
+## Native task-scope tool (stage 37)
+
+Five refreshed real-PG groups on manifest
+`991ef10989a554abfc3df8605850f00fdf0b32229f1c411bc28096dc631a27b0`
+verified pinned store/executor and expected exploration in the same parent lock.
+Foreign exploration and executor redirects failed before foreign connection.
+Source-shaped per-entry partial results preserve earlier committed entries on
+later cancellation/SQL failure; no false whole-batch rollback or automatic retry
+is claimed. Normalized scope still needs independent host approval.
+
+## Optional bounded goal HTTP (stage 38)
+
+Five real-PG groups on manifest
+`b81033c5552d4ca1fd0967aa939044b0fcf39384e8e2575df455c53f8428b827`
+verified text/class edits preserve met state/proof/lineage, goal-only deletion and
+its edge cascade, stale-delete cascade rollback, actual edge-insert rollback,
+idle/foreign-scope rejection and SQL byte sentinels. Mutations no longer fetch
+unbounded old node payloads. Oversized response origin rolls back the mutation.
+No automatic revival, planner notification or task completion is supplied.
+
+## Explicit planner cancellation persistence (stage 39)
+
+Four actual PG/thread/JSONL groups on manifest
+`73c0756e31e0b2a61eef3f7c197e2f92bef89b931ec63cf9c9898ad1c7a18492`
+verified optional strict same-generation persistence authority can finalize the
+cancelled planner's own receipt without executing returned tools or claiming a
+graph observation. Pause/drain then completed cleanly for that fixture. Missing or
+stale persistence authority still quarantines and retains ownership. Resource
+rebinding failed before foreign connection. This narrowly resolves the stage34
+fixture gap when explicitly configured; execution permission is not relaxed and
+universal cancellation cleanliness/default enabling is not claimed.
+
+## Task profile HTTP and ordered binding (stage 40)
+
+Five real-PG groups on manifest
+`579d2d2f6e8995bcdd46709848669f25ca16a17ea98ba9c022b512299531c0dd`
+verified ordered chain/active profile/revision CAS, quota/idle restrictions,
+secret-free static resolution and actual profile FOR SHARE blocking independent
+updates. Post-commit coordination failure reports committed changes requiring
+reconciliation; retained and cross-thread write callbacks cannot mutate. This
+is configuration availability, not provider reachability or automatic enabling.
+
+## Optional local scope HTTP (stage 41)
+
+Four real-PG groups and five native-adapter regression groups passed on manifest
+`1176fdf4467ff716266d668edbd9f590049bd34d3da03e7c9cd74a46ce1d7213`.
+Local DTO/manual provenance, exact independently approved entry/deletion, idle/
+revision/parent fences and SQL byte/row sentinels were checked. Any inherited
+source relation makes this narrow GET unavailable instead of silently omitting
+inherited scope; inherited deletion is not supported. Metadata does not itself
+grant testing authority. Only explicitly registered synthetic fixtures were used.
+
+## Read-only workspace HTTP (stage 42)
+
+Ten authored and five independent disposable-tree checks passed on manifest
+`f8b858c4f9dc719cafe1ab85966c4e9c66df7a039a0744d33655e04d1f95a1da`.
+Root replacement, FIFO/symlink ancestor/hardlink/traversal, stale reads, header
+encoding and oversized inputs were checked. The UNIX-socket fixture was blocked
+by runtime permissions and was NOT RUN. Buffering is bounded but response limits
+are not peak-memory guarantees: listing limits apply after serialization and a
+growing inline file can consume the configured download cap. Host-exclusive root
+rename/mount/writer coordination remains required. No real user files were read.
+
+## Conservative MCP metadata (stage 43)
+
+Four real-PG groups on manifest
+`f1b9512b1e12a52e1b9ab8465b78d9b423fd3f16ebd6e4936b35ab19c58a23cd`
+verified metadata CRUD, cached-tool/visibility cleanup, missing-row behavior,
+immutable policy inputs, idle/executor fences and reconciliation after committed
+sync failure. Command, arguments, environment/header keys and values, URL and
+cached tool text are opaque in public DTOs; placeholders cannot be persisted.
+Actual delete failure rolled back visibility changes. Only synthetic metadata
+was used: no process, connection, refresh or discovery occurred.
+
+## Explicit workspace write (stage 44)
+
+Eleven authored and five independent disposable-tree checks passed on manifest
+`2d0a591556042d787c9627393890076d80fe6ae77af4b44ff4135d4e3b1dac3a`.
+Frozen proposals, root replacement, FIFO/xattr refusal, permission preservation,
+precommit failure cleanup, post-rename uncertainty and closed retained contexts
+were verified. No real user files were touched. ACL/ownership edge cases were
+source-reviewed but not dynamically tested; exclusive host writer coordination
+remains required. Outcomes after entering the primitive may conservatively be
+unknown, with retry explicitly false rather than claiming rollback.
+
+## Explicit constraints/scope/goals composition (stage 46)
+
+Five actual PG groups passed on manifest
+`b91fd6a5f8617a2ed777e7f4a0a50337dbcdda580e923a8685e3bcb11ca874ac`.
+Explicit English source goals/scope-tail prompts and native catalogs composed
+actual approved constraints, exact-host scope and goals. Catalog defaults did
+not bypass normalized-entry approval; changed catalogs and foreign runs failed.
+Later JSONL failure retained prior per-tool SQL commits and blocked retry.
+No conversation-wide transaction, hostname promotion, complete bootstrap or
+creation-to-engine default enabling is implied by this composition.
+
+## Explicit MCP-native bridge (stage 47)
+
+Twelve authored and five independent inert-transport checks passed on manifest
+`e6fe27fb10bca8f7a61ad81e72133dc8c50cca54a74ca0332bff294414f52733`.
+Actual Client.rpc and ToolRegistry code enforced fresh grants, exact client/server/
+URL/headers/session/transport and runtime-scope bindings, schema/result limits,
+remote error versus uncertain outcome handling, and no automatic retry/raw error
+exposure. Unsupported audio/resources/extra text fields failed closed. No socket,
+discovery, process, external MCP server or default registration was used.

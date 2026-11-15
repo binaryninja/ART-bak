@@ -79,9 +79,13 @@ class IntentWorker:
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,registry_factory,authorize)):raise ValueError('Explicit worker authority and adapters required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','check_scoped','current','commit')):raise ValueError('Durable scoped transcript required')
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
+        self._store,self._executor=store,store.executor
         self.provider,self.registry_factory,self.authorize=provider_resolver,registry_factory,authorize
         self.limits=limits;self._lock=RLock();self._active={}
+    def _binding(self):
+        if self.store is not self._store or self.store.executor is not self._executor:raise WorkerConflict('Worker owning resource changed')
     def check(self,scope,phase,*,claimed=False):
+        self._binding()
         if not isinstance(scope,WorkerScope):raise ValueError('WorkerScope required')
         for id in (scope.task_id,scope.exploration_id,scope.run_id,scope.intent_id):
             if int64(id,'worker identity')<=0:raise ValueError('Positive identity required')
@@ -89,6 +93,8 @@ class IntentWorker:
         if (scope.task_id,scope.exploration_id)!=(self.store.task_id,self.store.exploration_id):raise WorkerConflict('Worker scope mismatch')
         if not isinstance(scope.owner,str) or not scope.owner or len(scope.owner)>128 or not isinstance(scope.revision,str) or not scope.revision or not isinstance(scope.model,Model) or not isinstance(scope.system,str):raise ValueError('Explicit worker configuration required')
         if self.current(scope,phase) is not True:raise RunStopped('stale_worker_generation')
+        self._binding()
+        if (scope.task_id,scope.exploration_id)!=(self.store.task_id,self.store.exploration_id):raise WorkerConflict('Worker scope mismatch')
         record=self.store.get(scope.intent_id)
         if record is None:raise WorkerConflict('Intent missing')
         expected=scope.expected_version+(1 if claimed else 0)
@@ -114,6 +120,7 @@ class IntentWorker:
             registry=self.registry_factory(scope,record)
             if not isinstance(registry,ToolRegistry) or registry.agent_key!='worker':raise ChatUnavailable('Worker registry unavailable')
             binding=self.provider(scope,scope.model)
+            self._binding()
             from .chat import ChatBinding
             if not scope.model.identity or not isinstance(self.limits,Limits):raise ValueError('Identified model and runtime limits required')
             method='stream' if scope.model.streaming else 'complete'
@@ -136,7 +143,11 @@ class IntentWorker:
                 claimed=True
             def provider(model):
                 token.check()
-                with self.guard(scope):self.check(scope,'run',claimed=True);return self.provider(scope,model)
+                with self.guard(scope):
+                    self.check(scope,'run',claimed=True)
+                    binding=self.provider(scope,model)
+                    self.check(scope,'run',claimed=True)
+                    return binding
             def gate(context,action):
                 with self.guard(scope):
                     self.check(scope,'run',claimed=True)

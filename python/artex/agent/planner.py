@@ -18,6 +18,15 @@ validated by the same permission-gated scoped registry. add_intent is reserved,
 custom executable specs remain unsupported, and defaults expose no extra tools.
 Supplying a callback does not seed a catalog, unlock deferred tools or grant it.
 Construction starts nothing. Providers/tools in tests are inert, never defaults.
+
+Optional persist_current(scope) is explicit SAME-generation finalization authority,
+used only for transcript commit under the shared guard. It must independently
+reject deleted/replaced task/run/transcript/profile/policy state, while optionally
+allowing a cancelled current generation to record its terminal receipt. It never
+authorizes admission, model calls, tools or graph observation. Without it, current
+remains required for commit. Authority changes require a host revision bump.
+Cancelled durable outcomes have observed=False and None graph fields, never a
+false empty frontier or successful goal observation.
 """
 from copy import deepcopy
 from dataclasses import dataclass,replace,asdict
@@ -55,14 +64,15 @@ class PlannerWake:
 @dataclass(frozen=True)
 class PlannerResult:
     outcome:object
-    active_intents:bool
-    goals_met:bool
-    stalled:bool
+    active_intents:bool|None
+    goals_met:bool|None
+    stalled:bool|None
+    observed:bool=True
 
 _INTENT_SCHEMA={'type':'object','properties':{'summary':{'type':'string'},'priority':{'type':'integer'},'asset_ids':{'type':'array','items':{'type':'integer'}},'parent_ids':{'type':'array','items':{'type':'integer'}},'intents':{'type':'array','items':{'type':'object'}}},'additionalProperties':False}
 
 class _FreshTranscript:
-    def __init__(self,owner,scope):self.owner,self.scope=owner,scope;self.original=None
+    def __init__(self,owner,scope):self.owner,self.scope=owner,scope;self.original=None;self.executor=owner.store.executor
     def begin(self,session,client,user):
         with self.owner.guard(self.scope):
             self.owner.check(self.scope)
@@ -75,18 +85,21 @@ class _FreshTranscript:
             return self.owner.transcript.current(session,self.original)
     def commit(self,session,turn,result):
         with self.owner.guard(self.scope):
-            self.owner.check(self.scope)
+            self.owner.check_persistence(self.scope,self.executor)
             if not result.messages or result.messages[0]!=turn.messages[0]:raise ChatUnavailable('Planner rewrote wake')
             joined=replace(result,messages=deepcopy(self.original.messages[:-1])+deepcopy(result.messages))
             return self.owner.transcript.commit(session,self.original,joined)
 
 class PlannerCycle:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=()):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=(),persist_current=None):
         if not isinstance(store,ExplorationStore) or store.read_only:raise ValueError('Writable scoped ExplorationStore required')
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,authorize,asset_authorize)):raise ValueError('Explicit planner authority required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','current','commit','finalized_result')):raise ValueError('Durable scoped transcript required')
+        if persist_current is not None and not callable(persist_current):raise ValueError('Explicit persistence authority must be callable')
         if type(max_nodes) is not int or not 1<=max_nodes<=10000:raise ValueError('Invalid graph bound')
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
+        self._store,self._executor=store,store.executor
+        self.persist_current=persist_current
         self.provider,self.authorize,self.asset_authorize=provider_resolver,authorize,asset_authorize
         supplied=tuple(additional_tools);catalog=tuple(additional_catalog)
         if len(supplied)>1000 or len(catalog)>1000:raise ValueError('Additional planner tool bound exceeded')
@@ -106,13 +119,27 @@ class PlannerCycle:
                      'catalog':[asdict(row) for row in sorted(self._additional_catalog,key=lambda r:r.key)]}
         self._tool_catalog_digest=hashlib.sha256(json.dumps(declaration,sort_keys=True,allow_nan=False,separators=(',',':')).encode('utf-8')).hexdigest()
         self.limits,self.max_nodes=limits,max_nodes;self._lock=RLock();self._active={}
-    def check(self,scope):
+    def _validate_scope(self,scope):
+        if self.store is not self._store or self.store.executor is not self._executor:raise ChatUnavailable('Planner owning resource changed')
         if not isinstance(scope,PlannerScope):raise ValueError('Planner scope required')
         for id in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(id,'scope ID')<=0:raise ValueError('Positive scope identity required')
         if not isinstance(scope.model,Model) or not isinstance(scope.revision,str) or len(scope.revision)>256:raise ValueError('Explicit model and revision required')
         if scope.exploration_id!=self.store.exploration_id or not scope.revision or not isinstance(scope.system,str):raise ChatUnavailable('Planner scope mismatch')
+        if self.store.read_only:raise ChatUnavailable('Planner store binding changed')
+    def check(self,scope):
+        self._validate_scope(scope)
         if self.current(scope) is not True:raise RunStopped('stale_planner')
+        self._validate_scope(scope)
+    def check_persistence(self,scope,executor):
+        # ONLY transcript finalization may use this separate authority. A pause
+        # can revoke execution without revoking persistence of its own receipt.
+        self._validate_scope(scope)
+        if self.store.executor is not executor:raise ChatUnavailable('Planner persistence store changed')
+        callback=self.persist_current if self.persist_current is not None else self.current
+        if callback(scope) is not True:raise RunStopped('stale_planner_persistence')
+        self._validate_scope(scope)
+        if self.store.executor is not executor:raise ChatUnavailable('Planner persistence store changed')
     def _nodes(self):
         nodes=self.store.nodes(self.max_nodes+1)
         if len(nodes)>self.max_nodes:raise ChatUnavailable('Planner graph exceeds bounded cycle')
@@ -197,7 +224,11 @@ class PlannerCycle:
             fresh=_FreshTranscript(self,scope)
             def resolver(model):
                 token.check()
-                with self.guard(scope):self.check(scope);return self.provider(scope,model)
+                with self.guard(scope):
+                    self.check(scope)
+                    binding=self.provider(scope,model)
+                    self.check(scope)
+                    return binding
             agent=ChatAgent(fresh,resolver,gate=self.authorize,tools=registry.tools(),limits=self.limits)
             outcome=agent.run(scope.session_id,wake.cycle_id,wake.message,model=scope.model,system=scope.system,metadata=scope.identity(),token=token)
             if not outcome.persisted or outcome.stale:raise ChatUnavailable('Planner transcript persistence unconfirmed')
@@ -207,8 +238,22 @@ class PlannerCycle:
                     durable=self.transcript.finalized_result(scope.session_id,fresh.original)
                     if durable is None:raise ChatUnavailable('Planner durable result unavailable')
                     outcome=replace(outcome,result=replace(durable,messages=deepcopy(durable.messages[len(fresh.original.messages)-1:])))
+            if token.cancelled or (outcome.result is not None and outcome.result.reason=='cancelled'):
+                # A committed cancelled turn is not graph completion evidence.
+                # Do not re-enter execution authority merely to observe nodes.
+                return PlannerResult(outcome,None,None,None,observed=False)
             with self.guard(scope):
-                self.check(scope);nodes=self._nodes()
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                try:self.check(scope)
+                except RunStopped:
+                    # Cancellation may win between the first check and the
+                    # execution-current callback. Commit already confirmed its
+                    # own authority; returning no observation grants nothing.
+                    if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                    raise
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                nodes=self._nodes()
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
                 goals=[n for n in nodes if n.kind=='goal'];met=bool(goals) and all(n.state=='met' for n in goals)
                 active=any(n.kind=='intent' and n.state in ('open','running') for n in nodes)
             return PlannerResult(outcome,active,met,not active and not met)

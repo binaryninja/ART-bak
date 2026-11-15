@@ -28,6 +28,10 @@ class GraphInvalid(ValueError):
     pass
 
 
+class GraphViewOverflow(RuntimeError):
+    pass
+
+
 class GraphNotFound(LookupError):
     pass
 
@@ -235,6 +239,73 @@ ON CONFLICT (exploration_id, src_id, rel, dst_id) DO NOTHING''', (self.explorati
         _kind(kind)
         return [self._node(row) for row in self.executor.fetch_all(Query(f'SELECT {NODE_COLS} FROM exploration_nodes WHERE exploration_id=$1 AND kind=$2 ORDER BY id DESC LIMIT $3', (self.exploration_id, kind, _limit(limit, 500))))]
 
+    def get_goal_bounded(self, node_id, *, max_payload_bytes=65536, max_origin_bytes=128):
+        """Scoped goal DTO only; oversized fields become SQL NULL sentinels.
+
+        Unused node metadata is never transferred. This optional HTTP read leaves
+        generic graph reads unchanged and returns None only for a missing goal.
+        """
+        node_id=_id(node_id)
+        for value,cap in ((max_payload_bytes,1048576),(max_origin_bytes,65536)):
+            if type(value) is not int or not 0<value<=cap:
+                raise GraphInvalid('Positive bounded goal read limits required')
+        rows=self.executor.fetch_all(Query("""SELECT id,'goal',
+CASE WHEN octet_length(payload::text)<=$3 THEN payload ELSE NULL END,0,
+CASE WHEN octet_length(state)<=32 THEN state ELSE NULL END,
+CASE WHEN octet_length(COALESCE(origin,''))<=$4 THEN COALESCE(origin,'') ELSE NULL END,
+'','','',created_at FROM exploration_nodes
+WHERE id=$1 AND exploration_id=$2 AND kind='goal' /* bounded_goal */""",
+            (node_id,self.exploration_id,max_payload_bytes,max_origin_bytes)))
+        if not rows:return None
+        if len(rows)!=1 or len(rows[0])!=10:raise GraphViewOverflow('Invalid goal view')
+        row=rows[0]
+        if row[0]!=node_id or row[1]!='goal' or row[2] is None or not isinstance(row[4],str) or not isinstance(row[5],str):
+            raise GraphViewOverflow('Goal view exceeds bounds')
+        payload=row[2] if isinstance(row[2],str) else json.dumps(row[2],ensure_ascii=False,allow_nan=False)
+        if len(payload.encode('utf-8'))>max_payload_bytes or len(row[4].encode('utf-8'))>32 or len(row[5].encode('utf-8'))>max_origin_bytes:
+            raise GraphViewOverflow('Goal view exceeds bounds')
+        return self._node(row)
+
+    def list_goals_bounded(self, *, max_rows=10000, max_payload_bytes=65536,
+                           max_origin_bytes=128, max_total_bytes=1048576):
+        """Complete goal DTO inputs with server-side byte/row overflow sentinels.
+
+        Existing generic reads are unchanged. Extra node fields not used by the
+        goal DTO are not fetched. Window totals precede LIMIT in one snapshot;
+        no oversized JSON/text is transferred before the HTTP response bound.
+        """
+        for value, cap in ((max_rows,10000),(max_payload_bytes,1048576),
+                           (max_origin_bytes,65536),(max_total_bytes,16777216)):
+            if type(value) is not int or not 0<value<=cap:
+                raise GraphInvalid('Positive bounded goal read limits required')
+        rows=self.executor.fetch_all(Query("""SELECT id,'goal',
+CASE WHEN total_count<=$3 AND total_bytes<=$6 AND octet_length(payload::text)<=$4
+          AND octet_length(origin)<=$5 AND octet_length(state)<=32 THEN payload ELSE NULL END,
+0,
+CASE WHEN octet_length(state)<=32 THEN state ELSE NULL END,
+CASE WHEN total_count<=$3 AND total_bytes<=$6 AND octet_length(origin)<=$5 THEN origin ELSE NULL END,
+'','','',created_at,total_count
+FROM (SELECT id,payload,state,COALESCE(origin,'') AS origin,created_at,
+COUNT(*) OVER () AS total_count,
+SUM(octet_length(payload::text)+octet_length(COALESCE(origin,''))+octet_length(state)) OVER () AS total_bytes
+FROM exploration_nodes WHERE exploration_id=$1 AND kind='goal'
+ORDER BY id DESC LIMIT $2) AS bounded_goals
+ORDER BY id DESC""",(self.exploration_id,max_rows+1,max_rows,max_payload_bytes,max_origin_bytes,max_total_bytes)))
+        if len(rows)>max_rows:raise GraphViewOverflow('Goal view exceeds bounds')
+        result=[];size=0
+        for row in rows:
+            if len(row)!=11 or type(row[10]) is not int or row[10]!=len(rows) or row[10]>max_rows:
+                raise GraphViewOverflow('Incomplete goal view')
+            if row[2] is None or not isinstance(row[4],str) or not isinstance(row[5],str):
+                raise GraphViewOverflow('Goal view exceeds bounds')
+            payload=row[2] if isinstance(row[2],str) else json.dumps(row[2],ensure_ascii=False,allow_nan=False)
+            payload_size=len(payload.encode('utf-8'));origin_size=len(row[5].encode('utf-8'));state_size=len(row[4].encode('utf-8'))
+            size+=payload_size+origin_size+state_size
+            if payload_size>max_payload_bytes or origin_size>max_origin_bytes or state_size>32 or size>max_total_bytes:
+                raise GraphViewOverflow('Goal view exceeds bounds')
+            result.append(self._node(row[:10]))
+        return result
+
     def list_by_kind_page(self, kind, before=0, limit=300):
         _kind(kind)
         limit = _limit(limit, 300)
@@ -305,6 +376,21 @@ WHERE id=$2 AND exploration_id=$3 AND kind='intent' AND state=$4''',
 
     def stats(self):
         return dict(self.executor.fetch_all(Query('SELECT kind, count(*) FROM exploration_nodes WHERE exploration_id=$1 GROUP BY kind', (self.exploration_id,))))
+
+    def delete_goal(self, node_id):
+        """Source goal-only deletion; caller owns idle/lifetime and delete authority.
+
+        Schema cascades remove this goal's edges/anchors, not their other nodes.
+        Generic graph/worker deletion remains unavailable through delete_node.
+        """
+        self._write()
+        affected = self.executor.execute(Query(
+            "DELETE FROM exploration_nodes WHERE id=$1 AND exploration_id=$2 AND kind='goal'",
+            (_id(node_id), self.exploration_id)))
+        if type(affected) is not int or affected not in (0, 1):
+            raise GraphInvalid('goal deletion count not confirmed')
+        if affected == 0:
+            raise GraphNotFound('goal does not exist in this exploration')
 
     def delete_node(self, node_id):
         self._write()

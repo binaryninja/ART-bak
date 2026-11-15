@@ -45,7 +45,7 @@ class DB(fixture.GraphDB):
 class EngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.db=DB();self.graph=ExplorationStore(self.db,9);self.lock=RLock();self.valid=True
+        self.db=getattr(self,'database_factory',DB)();self.graph=ExplorationStore(self.db,9);self.lock=RLock();self.valid=True
         @contextmanager
         def guard(*args):
             with self.lock:yield

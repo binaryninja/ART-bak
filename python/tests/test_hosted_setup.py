@@ -30,9 +30,8 @@ class DB(test_engine.DB):
 
 class HostedSetupTests(unittest.TestCase):
     def setUp(self):
-        self.fixture=test_engine.EngineTests();self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
-        self.db=DB()
-        self.fixture.db=self.db;self.fixture.graph.executor=self.db;self.fixture.worker.store.executor=self.db
+        self.fixture=test_engine.EngineTests();self.fixture.database_factory=DB;self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
+        self.db=self.fixture.db
         self.factory_calls=[];self.capacity=[];self.bundle=None
         def factory(task,token,scope):
             self.factory_calls.append(task)
