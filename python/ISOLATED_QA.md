@@ -557,3 +557,50 @@ URL/headers/session/transport and runtime-scope bindings, schema/result limits,
 remote error versus uncertain outcome handling, and no automatic retry/raw error
 exposure. Unsupported audio/resources/extra text fields failed closed. No socket,
 discovery, process, external MCP server or default registration was used.
+
+## Explicit standalone bootstrap journal (stage 45)
+
+Six disposable PostgreSQL groups passed on manifest
+`1118e84f6821e8b21b9c43278b1cca8cd7368282f4950e88fc46fbd003e14aa2`.
+Fresh-only authorized journal installation, database identity, DDL rollback and
+advisory lock contention were checked. Actual GoalPlanner/TaskStore/JSONL paths
+produced validated goals and sequence-allocated run IDs without starting an engine.
+Prepared replay checked text/configuration/lineage; retained planner authority was
+revoked. Competing ownership and SQL/JSONL failures preserved unresolved effects
+without takeover or false rollback. Prepared means initialization, not completion.
+This evidence is for standalone bootstrap, not the later admitted runner bridge.
+
+## Exact installed-generation authority (stage 48)
+
+Eight owner and three independent race/fence checks passed on manifest
+`7f43230b5f14b2720707984379d7b6be4cff240990cd5310dd7fde11d7582779`.
+Exact installed token/handle and lifecycle state are required for execution;
+cleanup-only authority cannot become execution authority. Pause and completion
+races retire capabilities correctly in these bounded fixtures. The helper invokes
+no repository/provider callbacks while holding its lock. This process-local check
+is neither a durable lease nor a replacement for guarded SQL/host lifetime checks.
+No real provider, database or bootstrap integration ran in this stage.
+
+## Actual HTTP creation through owned bootstrap and completion (stage 49)
+
+Four fresh-PostgreSQL groups passed on manifest
+`559170faed5665fe1cd77d3736af7fa0af77336209d50fb4d21168fb1ce9a41d`.
+Authenticated HTTP create installed an inert BootstrapHandle. The first owned
+advance allocated the journal run and prepared real goals, without completion.
+The same outer handle/token then retained an actual engine child; planner/worker
+fact and proof processing followed by host polling persisted manager completion.
+Pre-tick pause drained without journal/provider effects. JSONL uncertainty after
+committed goal SQL retained unresolved ownership with no child engine or replay.
+Capacity denial prevented task creation. Explicit isolated fake-provider fixtures
+only; this does not enable production defaults or prove all source task options.
+
+## Scoped coverage and asset references (stage 50)
+
+Four actual PostgreSQL groups passed on manifest
+`6ee4b61e48e1458c78b5ee3322c5d7aa6193b60a768b70c7e7d069a3c808f7bc`.
+Direct-source aggregation, terminal inherited references, graph/coverage DTOs,
+archive denial, disabled coverage and explicit source authorization were checked.
+SQL byte-limit sentinels prevented oversized text/JSON transfer to the driver.
+An initial fixture used `created` rather than native intent state `open`; the
+fixture was corrected without changing source. No external effects, targets or
+default route enabling were exercised.

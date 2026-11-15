@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **137**.
-- python optional service routes: **132**.
-- matched offline contract routes: **137**.
-- go routes without python registration: **124**.
+- python offline contract routes: **140**.
+- python optional service routes: **135**.
+- matched offline contract routes: **140**.
+- go routes without python registration: **121**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -227,7 +227,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/tasks/{id}` | `server/server.go:684` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | PATCH | `/api/tasks/{id}` | `server/server.go:685` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | POST | `/api/tasks/{id}/archive` | `server/server.go:696` | Not registered |
-| GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Not registered |
+| GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
 | POST | `/api/tasks/{id}/assets` | `server/server.go:705` | Not registered |
 | DELETE | `/api/tasks/{id}/assets/{assetID}` | `server/server.go:706` | Not registered |
 | PATCH | `/api/tasks/{id}/category` | `server/server.go:686` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
@@ -241,8 +241,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
 | PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
 | POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
-| GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Not registered |
-| GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Not registered |
+| GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
+| GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
 | GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | POST | `/api/tasks/{id}/goals` | `server/server.go:721` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | DELETE | `/api/tasks/{id}/goals/{gid}` | `server/server.go:723` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
@@ -409,6 +409,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/tasks/{id}/constraints`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PATCH /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage-graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/asset-refs`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PATCH /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.

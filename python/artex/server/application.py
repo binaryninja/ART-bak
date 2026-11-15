@@ -21,6 +21,12 @@ from .companies import CompanyService
 from .stats import StatsService
 from .sidequestions import SideQuestionHTTPService
 from .exploration import ExplorationService
+from .task_coverage import TaskCoverageService
+
+
+def _validate_coverage_service(executor, service):
+    if service is not None and (type(service) is not TaskCoverageService or service._executor is not executor):
+        raise ValueError("Coverage service requires the exact application executor")
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
@@ -35,7 +41,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -53,8 +59,12 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     construction never starts dispatch workers or performs provider calls. Conversation
     metadata uses explicit agent/profile/running resolvers, never inferred idle state
     or provider readiness. Conversation store construction performs no reads.
+    Optional coverage_service installs only the three source read routes. It must
+    use this exact executor and retain explicit task/source/connector policy. No
+    coverage service is created by default; archived contexts remain unsupported.
     This is not the full server.
     """
+    _validate_coverage_service(executor, coverage_service)
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
     TaskCategoryService(TaskCategoryStore(executor), category_manager).register(router)
@@ -78,6 +88,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                             dispatcher=side_dispatcher, prepare_question=side_prepare_question,
                             cancel_request=side_cancel_request, clear_history=side_clear_history,
                             wait=side_wait).register(router)
+    if coverage_service is not None:
+        coverage_service.register(router)
     return WSGIApplication(router, max_body_bytes=max_body_bytes)
 
 
@@ -93,7 +105,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -114,6 +126,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     transport are caller-owned. Exploration resolver/active selection callbacks
     are forwarded unchanged, never inferred or invoked during construction.
     """
+    _validate_coverage_service(executor, coverage_service)
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
@@ -158,4 +171,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_dispatcher=side_dispatcher, side_prepare_question=side_prepare_question,
                              side_cancel_request=side_cancel_request, side_clear_history=side_clear_history,
                              side_wait=side_wait,
+                             coverage_service=coverage_service,
                              version=version, max_body_bytes=max_body_bytes)

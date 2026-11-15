@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 137,
-    "python_optional_service_routes": 132,
-    "matched_offline_contract_routes": 137,
-    "go_routes_without_python_registration": 124
+    "python_offline_contract_routes": 140,
+    "python_optional_service_routes": 135,
+    "matched_offline_contract_routes": 140,
+    "go_routes_without_python_registration": 121
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -16,7 +16,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agents.py": "4bf7c4176bdb1e33c146a36f0b987a3d4b73833f383effcf69afea2e9bbbf8c7",
-    "python/artex/server/application.py": "5c332b7113e2320fa682809273f12119d9e0d5b4238ffae4ea8ad53404410cd9",
+    "python/artex/server/application.py": "064917464d245e8a653e581cc85f971f4d554e18c44017c66c906db7074638f7",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/chat.py": "75978f25b2a9f3d8a9ee1e781b025643dffdebecdc00b90dc80ed3adb56fa63f",
@@ -40,6 +40,7 @@
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
     "python/artex/server/task_chat.py": "deb3e6e5dc468ed331f9a41956d55dd448092ff4894b69e823fe183b153e521f",
     "python/artex/server/task_constraints.py": "58af0e1d77142f9ecf5b8d8b5def8af4d5f9ed66a31b530bda0334b099d44bc3",
+    "python/artex/server/task_coverage.py": "9168596c6c5baa20c7dd145d11542a2fd081c575cc587877a9ef6e39577736b4",
     "python/artex/server/task_goals.py": "6dee8e591e90e2c3e7f1cd929ad711bf75fe94a4a9a2dd5fb79e6ec797a33b6c",
     "python/artex/server/task_host.py": "f8e58c51050ee01805e87c7563ce2e0f8e214069fb1d4948b52e8bca1244076f",
     "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
@@ -901,8 +902,19 @@
       "expression": "\"GET /api/tasks/{id}/coverage\"",
       "method": "GET",
       "path": "/api/tasks/{id}/coverage",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/coverage",
+        "source": "python/artex/server/task_coverage.py",
+        "line": 29,
+        "function": "TaskCoverageService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/coverage-graph",
@@ -913,8 +925,19 @@
       "expression": "\"GET /api/tasks/{id}/coverage-graph\"",
       "method": "GET",
       "path": "/api/tasks/{id}/coverage-graph",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/coverage-graph",
+        "source": "python/artex/server/task_coverage.py",
+        "line": 29,
+        "function": "TaskCoverageService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}/asset-refs",
@@ -925,8 +948,19 @@
       "expression": "\"GET /api/tasks/{id}/asset-refs\"",
       "method": "GET",
       "path": "/api/tasks/{id}/asset-refs",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/tasks/{id}/asset-refs",
+        "source": "python/artex/server/task_coverage.py",
+        "line": 29,
+        "function": "TaskCoverageService.register",
+        "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/assets",
@@ -5989,6 +6023,42 @@
       "source": "python/artex/server/task_constraints.py",
       "line": 97,
       "function": "TaskConstraintService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/coverage",
+      "source": "python/artex/server/task_coverage.py",
+      "line": 29,
+      "function": "TaskCoverageService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/coverage-graph",
+      "source": "python/artex/server/task_coverage.py",
+      "line": 29,
+      "function": "TaskCoverageService.register",
+      "handler": "lambda req, params, a=action: self.handle(a, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/asset-refs",
+      "source": "python/artex/server/task_coverage.py",
+      "line": 29,
+      "function": "TaskCoverageService.register",
       "handler": "lambda req, params, a=action: self.handle(a, req, params)",
       "public": false,
       "registration_mode": "optional explicit service registration",

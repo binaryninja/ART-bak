@@ -193,6 +193,39 @@ class TaskManager:
             key, row = self._require(task_id)
             return self._status(key, row)
 
+    def owns_generation(self, task_id, token, handle, *, allow_cancelled=False):
+        """Read-only process-local installed-generation capability.
+
+        Execution requires an installed, started, uncancelled run and the exact
+        running/unpaused/unqueued registry row. Explicit allow_cancelled=True
+        only establishes ownership for cleanup/receipt settlement: it permits
+        cancelled, paused or terminal lifecycle states, NEVER new execution.
+        Both modes reject absent/retired/foreign handles, uncertain runs and
+        deleted/archived rows. The row is the local registry, not a DB lease;
+        callers still need shared lifetime guards and authoritative SQL checks.
+        No repository, provider, handle or host callbacks run under this lock.
+        """
+        if type(task_id) not in (str,int) or type(allow_cancelled) is not bool:
+            return False
+        if type(token) is not CancellationToken or handle is None:
+            return False
+        try:key=_id(task_id)
+        except TaskNotFound:return False
+        with self._lock:
+            row=self._tasks.get(key);run=self._runs.get(key)
+            if type(row) is not dict or type(run) is not _Run:
+                return False
+            if (row.get('id')!=key or row.get('status') not in {'created','running','done','failed','timeout'}
+                    or type(row.get('paused')) is not bool or type(row.get('queued')) is not bool
+                    or row.get('deleted_at') is not None or row.get('archived_at') is not None
+                    or run.token is not token or run.handle is not handle or run.uncertain is not False):
+                return False
+            if allow_cancelled:
+                return True
+            return (run.started is True and row['status']=='running'
+                    and row['paused'] is False and row['queued'] is False
+                    and not token._event.is_set())
+
     def lifecycle_snapshot(self, task_id):
         with self._lock:
             _, row = self._require(task_id)

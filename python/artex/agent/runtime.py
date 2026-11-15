@@ -54,6 +54,31 @@ class Limits:
 
 
 @dataclass(frozen=True)
+class SettlementBudget:
+    """Explicit reserves inside Limits, never additional execution authority.
+
+    Narrower than Norma settlement: only clean between-turn exhaustion qualifies.
+    Interrupted callbacks, cancellations and failures cannot enter this phase.
+    Task deadlines and automatic engine final rounds are not implemented here.
+    """
+    policy: object
+    max_seconds: float
+    max_tokens: int
+    max_tool_calls: int
+
+    def __post_init__(self):
+        from .wrapup import SettlementPolicy
+        if not isinstance(self.policy,SettlementPolicy):raise ValueError('Explicit settlement policy required')
+        if not isinstance(self.policy.prompt,str) or not self.policy.prompt.strip() or len(self.policy.prompt.encode('utf-8'))>1048576:
+            raise ValueError('Bounded settlement prompt required')
+        if type(self.policy.max_turns) is not int or self.policy.max_turns<=0:raise ValueError('Positive settlement turns required')
+        if not isinstance(self.policy.disabled_tools,tuple) or any(not isinstance(n,str) or not n for n in self.policy.disabled_tools):raise ValueError('Immutable tool exclusions required')
+        if self.policy.prompt_by_reason:raise ValueError('Task/reason overrides not supported by this bounded subset')
+        if type(self.max_tokens) is not int or self.max_tokens<=0 or type(self.max_tool_calls) is not int or self.max_tool_calls<0:raise ValueError('Invalid settlement reserve')
+        if isinstance(self.max_seconds,bool) or not isinstance(self.max_seconds,(int,float)) or not math.isfinite(self.max_seconds) or self.max_seconds<=0:raise ValueError('Finite settlement seconds required')
+
+
+@dataclass(frozen=True)
 class Action:
     kind: str  # model or tool
     name: str
@@ -185,9 +210,15 @@ def _result(call_id, text, error=True):
 
 
 class BoundedAgent:
-    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic):
+    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic, settlement=None):
         if not callable(getattr(provider, 'complete', None)):
             raise ValueError('An injected completion provider is required')
+        if settlement is not None:
+            if not isinstance(settlement,SettlementBudget):raise ValueError('Explicit settlement budget required')
+            if (settlement.policy.max_turns>=limits.max_turns or settlement.max_seconds>=limits.max_seconds
+                or settlement.max_tokens>=limits.max_tokens or settlement.max_tool_calls>=limits.max_tool_calls):
+                raise ValueError('Settlement reserves must fit strictly within total limits')
+        self.settlement=settlement
         self.provider, self.gate, self.limits, self.clock = provider, gate, limits, clock
         self.tools = {}
         for tool in tools:
@@ -216,6 +247,13 @@ class BoundedAgent:
         messages, events = [], []
         usage = dict(input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_write_tokens=0)
         context = RuntimeContext(metadata, token, self.clock() + limits.max_seconds, self.clock,usage=usage,max_tokens=limits.max_tokens)
+        settlement=self.settlement
+        original_reason=None
+        soft_turns=limits.max_turns-(settlement.policy.max_turns if settlement else 0)
+        soft_deadline=context.deadline-(settlement.max_seconds if settlement else 0)
+        token_ceiling=limits.max_tokens-(settlement.max_tokens if settlement else 0)
+        tool_ceiling=limits.max_tool_calls-(settlement.max_tool_calls if settlement else 0)
+        context._max_tokens=token_ceiling
         turns = tool_calls = 0
         reason = 'max_turns'
         seen = set()
@@ -242,7 +280,21 @@ class BoundedAgent:
                 raise RunStopped('invalid_protocol')
             for _ in range(limits.max_turns):
                 context.check()
-                remaining = limits.max_tokens - usage['input_tokens'] - usage['output_tokens']
+                if settlement is not None and original_reason is None and turns>0:
+                    now=self.clock()
+                    if isinstance(now,bool) or not isinstance(now,(int,float)) or not math.isfinite(now):raise RunStopped('invalid_clock')
+                    if turns>=soft_turns or now>=soft_deadline:
+                        original_reason='timeout' if now>=soft_deadline else 'max_turns'
+                        token_ceiling=min(limits.max_tokens,usage['input_tokens']+usage['output_tokens']+settlement.max_tokens)
+                        tool_ceiling=min(limits.max_tool_calls,tool_calls+settlement.max_tool_calls)
+                        context._max_tokens=token_ceiling
+                        context.deadline=min(context.deadline,now+settlement.max_seconds)
+                        base['tools']=[t for t in base['tools'] if t['name'] not in settlement.policy.disabled_tools]
+                        messages.append({'role':'user','content':[{'type':'text','text':settlement.policy.prompt}]})
+                        events.append({'type':'settlement_started','reason':original_reason})
+                        settlement_last_turn=turns+settlement.policy.max_turns
+                if original_reason is not None and turns>=settlement_last_turn:raise RunStopped('max_turns')
+                remaining = token_ceiling - usage['input_tokens'] - usage['output_tokens']
                 if remaining <= 0:
                     raise RunStopped('token_budget')
                 payload = {**deepcopy(base), 'messages': deepcopy(messages), 'max_tokens': min(requested_cap or remaining, remaining)}
@@ -303,7 +355,7 @@ class BoundedAgent:
                 terminal = None
                 try:
                     context.check()
-                    if usage['input_tokens'] + usage['output_tokens'] >= limits.max_tokens:
+                    if usage['input_tokens'] + usage['output_tokens'] >= token_ceiling:
                         raise RunStopped('token_budget')
                     if stop in ('refusal', 'content_filter', 'refused'):
                         raise RunStopped('refused')
@@ -320,8 +372,10 @@ class BoundedAgent:
                         continue
                     try:
                         context.check()
-                        if tool_calls >= limits.max_tool_calls:
+                        if tool_calls >= tool_ceiling:
                             raise RunStopped('tool_budget')
+                        if original_reason is not None and use['name'] in settlement.policy.disabled_tools:
+                            raise RunStopped('settlement_tool_disabled')
                         tool = self.tools.get(use['name'])
                         if tool is None:
                             raise RunStopped('unknown_tool')
@@ -378,4 +432,7 @@ class BoundedAgent:
             reason = exc.reason
         finally:
             context._ledger_active=False
+        if original_reason is not None:
+            events.append({'type':'settlement_finished','reason':reason,'completed':reason=='completed','original_reason':original_reason})
+            reason=original_reason
         return RunResult(reason, messages, usage, turns, tool_calls, events)
