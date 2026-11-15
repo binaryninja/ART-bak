@@ -19,3 +19,58 @@ Earlier UI, prompt, documentation, helper and schema translations have separate
 regression coverage. The reference schema retains legacy persisted values with
 Unicode escapes; escaping is compatibility preservation, not prose translation.
 Use tools/translation_inventory.py for an audit, not automatic replacement.
+
+## Bounded server presentation translations
+
+The following source error text is now English. JSON keys, routes, IDs, persisted
+values, status codes, formatting placeholders and control flow were preserved.
+These are deliberate presentation changes, not claims of byte-identical errors:
+
+- `server/workspace.go`: 18 error-message occurrences (10 distinct messages),
+  plus one directory-ordering comment. No literal Han remains in this file.
+- `server/task_categories.go`: seven error-message occurrences.
+- `server/task_metadata.go`: four error-message occurrences.
+- `server/task_templates.go`: six error-message occurrences.
+- `server/task_categories_test.go`: the one existing substring assertion for the
+  task ID batch-count error now expects its English counterpart. No other test
+  fixtures or assertions were changed in this pass.
+
+The three task production files contain no remaining literal Han. Exact-string
+consumer searches found the category test assertion above; no matching frontend
+error-text logic was found. Formatting verbs (`%s`, `%d`), limits and field labels
+remain intact. This does not assert that external consumers never inspect errors.
+
+Validation: original snapshots plus explicit translation maps were compared with
+formatted output using the authored Go lexer. Every executable token and every
+literal matches after applying only the allowlisted presentation translations;
+workspace's one comment is excluded from executable-token comparison. Official
+`gofmt`, whitespace checks and original 0644 file modes pass. No original Go code
+was executed for this pass; Go runtime tests remain the isolated QA step.
+
+Untouched exceptions: other server runtime prose, model prompt literals, legacy
+wire/persisted values, unrelated test fixtures, third-party code, licenses and
+historical evidence remain outside this bounded pass. In particular, unrelated
+skill-upload localized-error assertions were not rewritten. Documentation link
+paths retain their actual target spelling. This is not whole-repository English
+completion, nor a claim that escaping a compatibility literal translates it.
+
+### Worker intervention presentation and additional comments
+
+`server/intent_intervention.go` now has its 11 user-facing error messages in
+English, with no literal Han remaining. Worker/task lifecycle restrictions,
+request ID character/length rules, HTTP codes and field names are unchanged.
+Exact-string searches found no consumers in server tests or the frontend; no
+test fixture needed modification. The explicit translation map, saved original
+and post-gofmt lexer comparison prove every other executable token/literal is
+unchanged. File mode remains 0644. No original Go execution was performed.
+
+A separate comments-only worker completed these seven production files:
+`server/assembly.go`, `server/llmpool.go`, `server/constraints_api.go`,
+`server/goals_api.go`, `server/task_control.go`, `server/task_intercept.go` and
+`server/task_archive_package.go`. The worker reports exact token/literal equality
+against saved originals after official gofmt, with hashes and proof retained in
+the shared QA evidence. Existing interactive-shell and LLM-rotation documentation
+links retain their actual Chinese filename targets. Runtime strings in that
+comments-only slice were not translated. `mcpdiscover.go` and `logsink.go` were
+inspected but unchanged. These bounded passes do not establish whole-server
+English completion.

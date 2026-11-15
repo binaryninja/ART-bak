@@ -604,3 +604,45 @@ SQL byte-limit sentinels prevented oversized text/JSON transfer to the driver.
 An initial fixture used `created` rather than native intent state `open`; the
 fixture was corrected without changing source. No external effects, targets or
 default route enabling were exercised.
+
+## Explicit assembly and bounded settlement (stage 51)
+
+Four actual PostgreSQL assembly groups and all thirteen focused settlement tests
+passed in isolation on manifest
+`6460f7623563376063880807373143f9d62eb9c5d0baed6d8261148551675b50`.
+The actual build_bootstrap_application helper was used for authenticated creation,
+preparation, engine proof and completion, plus pause, uncertain persistence and
+real AdmissionController capacity denial. Runtime settlement tests used inert
+providers and enforced existing budgets, cancellation/refusal/uncertain-effect
+exclusions and paired tool outcomes. No default enabling or external calls.
+
+## Prepared-owner deadline receipt (stage 52)
+
+Four real PostgreSQL groups passed on manifest
+`a736afca6b1dc6c58543236401c97cd0b67140d1eb262e555ddb2478d9feda2c`.
+Exact prepared ownership, stamp-once/unchanged repeat, configuration/generation
+rejection, SQL rollback and postcommit uncertainty were checked. A DDL setup
+fixture error was corrected without changing source. These fixtures verify the
+prepared-only **zero-timeout** path, not nonzero engine timeouts or first-goal-call
+support. Source Go starts the task clock at planner/worker operation, not bootstrap
+goal decomposition; no changed timing behavior is implied by this helper.
+
+## Translated Go workspace presentation
+
+Six top-level Go tests, including five authored snapshot-only English-error
+subcases, passed with zero failures/skips on source manifest
+`ccfb14d33f4ec3fb2a8a6ea5229358f3eb3582c40ecd7cb8ed9646ef5c156021`.
+Existing tests cover owned-file deletion/staging/rollback; no direct handler tests
+existed, so isolated error regressions supplemented them. Offline cached Go in a
+credential-free network namespace used only temporary files, no database. Formatting
+was clean. This is not the full server suite, authenticated middleware coverage,
+all translated branches, or a Python-parity claim.
+
+## Translated Go task-management presentation
+
+Six narrowly selected Go tests passed with zero failures/skips on manifest
+`253bedd958f50d0505b413ecac1da6ec0fc52b4bb79832cf66af95402c42e6e9`.
+Existing category, metadata and template HTTP tests and four snapshot-only English
+validation checks covered category/Worker messages. The full server package
+compiled; targeted formatting was clean. This is not a whole-server test-suite
+claim. Execution used the approved disposable credential-free environment.

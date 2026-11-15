@@ -71,6 +71,20 @@ class BootstrapHandle:
                 or self._receipt is not None or self._unresolved or self._completed):
                 raise BootstrapConflict('Bootstrap construction is no longer inert')
         return True
+    def validate_prepared_receipt(self,receipt):
+        """Match retained preparation and pinned config; not execution authority.
+
+        Callers still require installed generation and the exact coordinator
+        lifetime guard. No SQL, provider calls or receipt adoption occurs here.
+        """
+        with self._condition:
+            self._binding()
+            from .bootstrap import Receipt
+            if (type(receipt) is not Receipt or self._receipt is None or receipt!=self._receipt
+                or self._phase not in ('prepared','engine') or self._unresolved or self._completed
+                or (self._child is not None and self._child.unresolved)):
+                raise BootstrapConflict('Exact retained prepared receipt required')
+        return True
     def _owned(self,*,allow_cancelled=False):
         self._binding()
         if self.manager.owns_generation(self.task_id,self.token,self,allow_cancelled=allow_cancelled) is not True:raise BootstrapConflict('Bootstrap generation not installed')

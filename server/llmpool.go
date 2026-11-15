@@ -10,11 +10,11 @@ import (
 	"github.com/Autumn-27/norma/llm"
 )
 
-// LLM 轮询(故障转移)的服务端接线。设计见 docs/LLM轮询设计.md：
-//   - 全局激活配置这条路径(agent 未绑定、任务未 pin)才轮询;
-//   - 绑定/pin 的路径默认独占该配置,失败即失败(可由 llm_pool_bind_fallback 打开兜底);
-//   - 链序 = 激活配置 → 其余按 priority DESC,排除 pool_exclude 的;
-//   - 熔断状态进程级共享(s.llmHealth),重建 pool 不清空。
+// Server wiring for LLM rotation (failover). Design: docs/LLM轮询设计.md.
+//   - Only the global active-profile path rotates (no agent binding or task pin).
+//   - Bound/pinned paths use that profile exclusively and fail without fallback by default; llm_pool_bind_fallback enables fallback.
+//   - Chain order: active profile, then others by priority DESC, excluding pool_exclude profiles.
+//   - Circuit-breaker state is shared process-wide (s.llmHealth); rebuilding a pool does not clear it.
 
 // newLLMHealthRegistry builds the process-wide circuit-breaker registry, mirroring
 // state into PG so a cooling-off window survives a restart. Writes are async and
