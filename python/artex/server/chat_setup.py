@@ -159,7 +159,8 @@ def build_chat_application(executor, signing_key, password_codec, *,
                            transport_factory, health, transcript_root,
                            authorize, gate, tools, agent_available, system_prompt,
                            single_process, workers=1, capacity=4, max_receipts=10000,
-                           capture=None, limits=Limits(), application_options=None):
+                           capture=None, limits=Limits(), application_options=None,
+                           catalog_store=None, catalog_prompt=None, catalog_detail_defaults=None):
     """Opt-in complete configuration/conversation WSGI wiring, without listening.
 
     agent_available(key)->literal True defines the host's supported agent set;
@@ -168,7 +169,14 @@ def build_chat_application(executor, signing_key, password_codec, *,
     All routes share the profile application's JWT authentication. Profile and
     task-state startup reads are explicit; no inference or provider call occurs.
     Metadata callbacks are late-bound but construction never invokes them.
-    Main-task POST /api/chat remains 503; this is conversation execution only.
+    Main-task POST /api/chat is unregistered (404) until TaskChatService is
+    explicitly mounted; this factory provides conversation execution only.
+    Optional catalog_store must share executor; catalog_prompt(agent,stored_text,
+    conversation,host_system) is mandatory for explicit rendering. Catalog
+    enabled alone grants nothing: host agent_available and assistant role still
+    gate execution. Bound-profile/web-search/interactive-shell agents fail closed
+    until their runtime semantics are integrated, never silently ignored.
+    Catalog reads do not require a provider. No builtins are seeded.
     On assembly failure any newly created dispatcher is cancelled and drained.
     """
     from .runtime_setup import build_profile_runtime_application
@@ -181,8 +189,19 @@ def build_chat_application(executor, signing_key, password_codec, *,
     if reserved & options.keys():
         raise ValueError('Conversation adapters are owned by this assembly')
     state = {}
+    catalog = None
+    if catalog_store is not None:
+        from .agents import AgentService
+        if getattr(catalog_store,'executor',None) is not executor or not callable(catalog_prompt):
+            raise ValueError('Catalog requires same database and explicit prompt renderer')
+        # Never reinterpret stored profile bindings or tool flags as authority.
+        def ready(agent):
+            return (agent.llm_profile_id is None and not agent.web_search
+                    and not agent.interactive_shell and agent_available(agent.key) is True)
+        catalog = AgentService(catalog_store,readiness=ready,detail_defaults=catalog_detail_defaults)
 
     def supported(key):
+        if catalog is not None:return catalog.execution_ready(key)
         return key != 'retester' and agent_available(key) is True
 
     def running(identifier):
@@ -206,7 +225,16 @@ def build_chat_application(executor, signing_key, password_codec, *,
     def prompt(conversation):
         if not supported(conversation.agent_key):
             raise ChatUnavailable('Agent runtime unavailable')
-        return system_prompt(conversation)
+        base = system_prompt(conversation)
+        if catalog is None:return base
+        agent = catalog_store.get(conversation.agent_key)
+        detail = catalog_store.detail(agent)
+        # Rendering is explicit: no Go-template text is silently passed as a
+        # literal system prompt or replaced with a guessed default.
+        rendered = catalog_prompt(deepcopy(agent),detail['prompt'],deepcopy(conversation),base)
+        if not isinstance(rendered,str) or not rendered.strip():
+            raise ChatUnavailable('Catalog prompt rendering unavailable')
+        return rendered
 
     profiles = build_profile_runtime_application(executor, signing_key, password_codec,
         transport_factory=transport_factory, health=health,
@@ -221,6 +249,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
             capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits)
         state['chat'] = chat
         chat.service.register(profiles.application.router)
+        if catalog is not None:catalog.register(profiles.application.router)
         return ChatApplicationBundle(profiles.application, profiles, chat)
     except BaseException:
         if chat is not None:

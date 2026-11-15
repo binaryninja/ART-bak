@@ -191,5 +191,43 @@ class PostgresTests(unittest.TestCase):
             self.assertTrue(conn.closed)
 
 
+class ArchiveSnapshotTransactionTests(unittest.TestCase):
+    def test_exact_control_allows_negative_rowcount_without_weakening_dml(self):
+        conn=Connection();conn.rowcount=-1;db=PostgresExecutor(conn,cursor_factory=Cursor)
+        with db.archive_snapshot_transaction() as tx:
+            self.assertIs(tx,db);self.assertEqual(tx.fetch_one(Query('SELECT 1')),(1,))
+            with self.assertRaises(RuntimeError):tx.execute(Query('UPDATE example SET x=1'))
+        controls=[event for event in conn.events if isinstance(event,tuple)]
+        self.assertEqual(controls[0],('execute','SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY',()))
+        self.assertEqual(conn.events.count('begin'),1);self.assertEqual(conn.events[-1],'commit')
+    def test_nested_and_nonidle_rejected_without_control(self):
+        conn=Connection();db=PostgresExecutor(conn,cursor_factory=Cursor)
+        with db.transaction():
+            with self.assertRaises(RuntimeError):
+                with db.archive_snapshot_transaction():pass
+        self.assertFalse(any(isinstance(e,tuple) for e in conn.events))
+        conn.info.transaction_status=2
+        with self.assertRaises(RuntimeError):
+            with db.archive_snapshot_transaction():pass
+    def test_pool_pins_snapshot_and_rejects_nested_upgrade(self):
+        from artex.db.pool import ExecutorPool
+        conn=Connection();db=PostgresExecutor(conn,cursor_factory=Cursor)
+        pool=ExecutorPool(lambda:db,max_size=1)
+        try:
+            with pool.archive_snapshot_transaction() as tx:
+                self.assertIs(tx,pool);self.assertEqual(pool.state().leased,1)
+                self.assertEqual(tx.fetch_one(Query('SELECT 1')),(1,))
+                with self.assertRaises(RuntimeError):
+                    with pool.archive_snapshot_transaction():pass
+            self.assertEqual(pool.state().idle,1)
+        finally:self.assertTrue(pool.close().drained)
+    def test_control_failure_rolls_back_and_pool_retires(self):
+        from artex.db.pool import ExecutorPool
+        conn=Connection();conn.execute_error=RuntimeError('fixture');db=PostgresExecutor(conn,cursor_factory=Cursor)
+        pool=ExecutorPool(lambda:db,max_size=1)
+        with self.assertRaises(RuntimeError):
+            with pool.archive_snapshot_transaction():pass
+        self.assertIn('rollback',conn.events);self.assertEqual(pool.state().total,0);pool.close()
+
 if __name__ == '__main__':
     unittest.main()

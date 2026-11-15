@@ -42,9 +42,9 @@ class SchemaTests(unittest.TestCase):
         source=Path(__file__).resolve().parents[2]/'db'/'schema.sql'
         if source.exists():
             # Decode the four simple Unicode literals; no SQL execution.
-            decoded=re.sub(r"U&'([^']*)'",lambda m:"'"+re.sub(r'\\([0-9a-f]{4})',lambda n:chr(int(n[1],16)),m[1])+"'",sql)
+            decode=lambda value:re.sub(r"U&'([^']*)'",lambda m:"'"+re.sub(r'\\([0-9a-f]{4})',lambda n:chr(int(n[1],16)),m[1])+"'",value)
             strip=lambda text:'\n'.join(line.split('--',1)[0].rstrip() for line in text.splitlines())
-            self.assertEqual(strip(source.read_text()),strip(decoded))
+            self.assertEqual(strip(decode(source.read_text())),strip(decode(sql)))
 
     def test_opt_in_and_maintenance_rejected_before_any_db_operation(self):
         for kwargs in ({'expected_database':'fixture'}, {'expected_database':'fixture','allow_schema_creation':1},

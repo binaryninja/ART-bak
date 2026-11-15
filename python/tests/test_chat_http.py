@@ -75,6 +75,18 @@ class ChatHTTPTests(unittest.TestCase):
         path='/api/conversations/'+id+('/stop' if stop else '/messages')+query
         return Request(method,path,{'Authorization':'fixture' if auth else '', 'Idempotency-Key':client},
                        json.dumps(body if body is not None else {'message':'hello'}).encode())
+    def test_task_service_composes_without_placeholder_collision(self):
+        from types import SimpleNamespace
+        from artex.server.task_chat import TaskChatService
+        request=Request('GET','/api/tasks/1/chat/status',{'Authorization':'fixture'})
+        self.assertEqual(self.router.dispatch(request).status,404)
+        dispatcher=SimpleNamespace(prepare=lambda *a,**kw:None,submit=lambda *a:None,
+                                   running=lambda task:False,cancel=lambda task:False)
+        TaskChatService(resolve_task=lambda task:1,authorize=lambda req,task:True,
+                        dispatcher=dispatcher).register(self.router)
+        self.assertEqual(self.router.dispatch(request).json(),{'running':False})
+        self.assertEqual(self.router.dispatch(replace(request,headers={})).status,401)
+
     def test_202_registers_busy_and_user_before_model_execution(self):
         self.assertEqual(self.router.dispatch(self.request(auth=False)).status,401)
         response=self.router.dispatch(self.request());self.assertEqual(response.status,202)
@@ -99,7 +111,7 @@ class ChatHTTPTests(unittest.TestCase):
         self.assertEqual(self.router.dispatch(req).json(),{'detail':'detail1'})
     def test_task_route_does_not_misroute(self):
         response=self.router.dispatch(Request('POST','/api/chat',{'Authorization':'fixture'},b'{"message":"hello"}'))
-        self.assertEqual(response.status,503);self.assertFalse(self.provider.calls)
+        self.assertEqual(response.status,404);self.assertFalse(self.provider.calls)
     def test_unsupported_inputs_fail_before_admission(self):
         for body in ({'message':'hello','attachments':[{'path':'file'}]}, {'message':'@[Finding#3 name]'},
                      {'message':'hello','seg':2},{'message':'hello','session_id':'other'}):

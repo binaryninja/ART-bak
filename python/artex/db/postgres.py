@@ -98,6 +98,22 @@ class PostgresExecutor:
                     self._depth -= 1
 
     @contextmanager
+    def archive_snapshot_transaction(self):
+        """Fresh read-only repeatable-read snapshot; never upgrade a nested scope.
+
+        Exact transaction-control SQL intentionally bypasses DML rowcount checks.
+        No arbitrary control command API or automatic read-write fallback exists.
+        """
+        with self._lock:
+            self._check_open()
+            if self._depth or self._connection.info.transaction_status != 0:
+                raise RuntimeError('Archive snapshot requires an idle connection and no transaction')
+            with self.transaction():
+                with self._cursor_factory(self._connection) as cursor:
+                    cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY', ())
+                yield self
+
+    @contextmanager
     def _operation(self):
         with self._lock:
             self._check_open()

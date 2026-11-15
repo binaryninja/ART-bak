@@ -156,6 +156,23 @@ class ExecutorPool:
             del self._local.lease
             self._release(executor,lease.healthy)
 
+    @contextmanager
+    def archive_snapshot_transaction(self):
+        """Pin one fresh executor snapshot through commit; nested upgrades rejected."""
+        if getattr(self._local,'lease',None) is not None:
+            raise RuntimeError('Archive snapshot requires no existing pool transaction')
+        executor=self._acquire();lease=_Lease(executor);self._local.lease=lease
+        try:
+            try:
+                capability=getattr(executor,'archive_snapshot_transaction',None)
+                if not callable(capability):raise PoolFactoryError('Executor lacks archive snapshot capability')
+                with capability():yield self
+            except BaseException:
+                lease.healthy=False;raise
+        finally:
+            del self._local.lease
+            self._release(executor,lease.healthy)
+
     def _operation(self,name,query):
         lease=getattr(self._local,'lease',None)
         if lease is not None:

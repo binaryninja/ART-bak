@@ -4,7 +4,7 @@ Explicit host-owned dispatcher persists user activity and registers busy/cancel
 before 202. Nonstream ChatAgent runs in its bounded worker; durable transcript
 commit precedes terminal result activity. Original text is retained; attachments
 and mention preparation are rejected rather than silently dropped. Task /api/chat
-is a different main-agent/activity flow and remains unavailable.
+is a different main-agent/activity flow registered by TaskChatService only.
 
 No inferred roots, tools, providers, dispatcher or activity storage. A supplied
 Idempotency-Key enables process-local receipt deduplication; absent keys get a
@@ -72,7 +72,6 @@ class ChatService:
         self.dispatcher,self.activities=dispatcher,activities
 
     def register(self,router):
-        router.add('POST','/api/chat',lambda request,params:error_response(503,'Task chat runtime is not configured'))
         router.add('POST','/api/conversations/{id}/messages',lambda request,params:self.handle(request,params['id']))
         router.add('POST','/api/conversations/{id}/stop',lambda request,params:self.handle(request,params['id'],stop=True))
         router.add('GET','/api/conversations/{id}/messages',lambda request,params:self.read(request,params['id']))

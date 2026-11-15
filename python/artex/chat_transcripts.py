@@ -29,6 +29,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime,timezone
 import hashlib
+import json
 import re
 import time
 import uuid
@@ -44,6 +45,22 @@ _CLIENT=re.compile(r'[A-Za-z0-9_.:-]{1,128}\Z')
 def _clone(value):return _decode(_encode(value))
 def _digest(value):return hashlib.sha256(_encode(value)).hexdigest()
 def _integer(value,minimum=0):return type(value) is int and minimum<=value<2**63
+
+def _scope_identity(value):
+    if not isinstance(value,dict) or not value:raise TranscriptError('Nonempty scope identity required')
+    def check(v):
+        if isinstance(v,dict):
+            if any(not isinstance(k,str) for k in v):raise ValueError()
+            for child in v.values():check(child)
+        elif isinstance(v,list):
+            for child in v:check(child)
+        elif v is not None and type(v) not in (str,int,float,bool):raise ValueError()
+    try:
+        check(value)
+        raw=json.dumps(value,ensure_ascii=False,allow_nan=False).encode('utf-8')
+        if len(raw)>65536:raise ValueError()
+        return json.loads(raw)
+    except (ValueError,TypeError,UnicodeError,RecursionError):raise TranscriptError('Invalid scope identity') from None
 
 
 def _history(records):
@@ -96,6 +113,10 @@ class ChatTranscriptAdapter:
                 or record['message'].get('role')!='user'):
                 raise TranscriptError('Invalid chat admission metadata')
             keys={'schema','version','phase','turn_id','client_id','run_id','user_digest','prefix_digest'}
+            if 'scope_identity' in meta:
+                keys|={'scope_identity','scope_digest'}
+                if meta.get('scope_digest')!=_digest(_scope_identity(meta['scope_identity'])):
+                    raise TranscriptError('Scope identity digest mismatch')
             if meta['phase']=='finalized':keys|={'result','result_digest','generated_count'}
             if set(meta)!=keys:raise TranscriptError('Unknown or missing chat metadata fields')
             last_run=meta['run_id'];clients.add(meta['client_id'])
@@ -136,6 +157,36 @@ class ChatTranscriptAdapter:
             deepcopy(prefix),created=created,finalized=meta['phase']=='finalized')
 
     def begin(self,session_id,client_id,user_message):
+        return self._begin(session_id,client_id,user_message,None)
+
+    def begin_scoped(self,session_id,client_id,user_message,scope_identity):
+        """Persist opaque, nonsecret host scope identity; reject cross-scope reuse.
+
+        Scope is never sent to the model. Existing unscoped admissions cannot be
+        retroactively treated as scoped. Digests detect corruption, not an attacker
+        able to rewrite the entire trusted transcript store.
+        """
+        return self._begin(session_id,client_id,user_message,_scope_identity(scope_identity))
+
+    def check_scoped(self,session_id,client_id,user_message,scope_identity):
+        """Read-only preflight; begin_scoped must still recheck atomically."""
+        identity=_scope_identity(scope_identity)
+        if not isinstance(client_id,str) or not _CLIENT.fullmatch(client_id):raise ValueError('Invalid client request id')
+        user=_clone(user_message)
+        if not isinstance(user,dict) or user.get('role')!='user':raise ValueError('User message required')
+        with self.store._locked(session_id,self.agent_id) as (directory,name):
+            _,records=self.store._load(directory,name)
+            turns=self._validate(session_id,records)
+            if client_id in turns:
+                index,meta,_=turns[client_id]
+                if meta.get('scope_identity')!=identity or records[index]['message']!=user:
+                    raise TranscriptConflict('Client request id reused for different scope or input')
+                if meta['phase']=='running':raise ChatBusy('Prior turn is unresolved')
+            elif any(meta['phase']=='running' for _,meta,_ in turns.values()):
+                raise ChatBusy('Prior turn is unresolved')
+        return None
+
+    def _begin(self,session_id,client_id,user_message,scope_identity):
         if not isinstance(client_id,str) or not _CLIENT.fullmatch(client_id):raise ValueError('Invalid client request id')
         user=_clone(user_message)
         if not isinstance(user,dict) or user.get('role')!='user':raise ValueError('User message required')
@@ -144,6 +195,7 @@ class ChatTranscriptAdapter:
             turns=self._validate(session_id,records)
             if client_id in turns:
                 index,meta,prefix=turns[client_id]
+                if meta.get('scope_identity')!=scope_identity:raise TranscriptConflict('Client request id reused for different scope')
                 if records[index]['message']!=user:raise TranscriptConflict('Client request id reused for changed input')
                 if meta['phase']=='running':raise ChatBusy('Prior turn is unresolved; reconcile instead of re-executing')
                 return self._turn(records,index,meta,prefix,created=False)
@@ -155,6 +207,8 @@ class ChatTranscriptAdapter:
             turn_id=uuid.uuid4().hex
             meta={'schema':1,'version':1,'phase':'running','turn_id':turn_id,'client_id':client_id,
                   'run_id':run_id,'user_digest':_digest(user),'prefix_digest':_digest(history)}
+            if scope_identity is not None:
+                meta.update(scope_identity=scope_identity,scope_digest=_digest(scope_identity))
             record=self._record(session_id,turn_id,records[-1].get('uuid','') if records else '')
             record.update(type='message',message=user);record[META]=meta
             updated=records+[record]

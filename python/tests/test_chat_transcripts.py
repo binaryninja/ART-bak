@@ -193,3 +193,33 @@ class ChatTranscriptTests(unittest.TestCase):
         self.assertTrue(self.adapter.begin('s','client',USER).finalized)
 
 if __name__=='__main__':unittest.main()
+
+class ScopedTranscriptTests(ChatTranscriptTests):
+    def test_scope_is_durable_and_mismatch_rejected_after_reload(self):
+        scope={'task_id':1,'revision':'a','model':{'identity':'fixture'}}
+        turn=self.adapter.begin_scoped('s','client',USER,scope)
+        self.assertTrue(self.adapter.commit('s',turn,self.result(turn)))
+        reloaded=ChatTranscriptAdapter(self.store)
+        duplicate=reloaded.begin_scoped('s','client',USER,scope)
+        self.assertTrue(duplicate.finalized);self.assertFalse(duplicate.created)
+        self.assertEqual(reloaded.finalized_result('s',duplicate).text,'done')
+        with self.assertRaises(TranscriptConflict):reloaded.begin_scoped('s','client',USER,dict(scope,revision='b'))
+        with self.assertRaises(TranscriptConflict):reloaded.begin('s','client',USER)
+        self.assertEqual(len(self.store.read('s')),2)
+    def test_unscoped_cannot_be_promoted_and_bad_identity_not_saved(self):
+        turn=self.adapter.begin('s','client',USER);self.adapter.commit('s',turn,self.result(turn))
+        with self.assertRaises(TranscriptConflict):self.adapter.begin_scoped('s','client',USER,{'scope':'x'})
+        for scope in ({},{'x':float('nan')},{1:'x'},{'x':object()}):
+            with self.assertRaises(TranscriptError):self.adapter.begin_scoped('other','client',USER,scope)
+        self.assertEqual(self.store.read('other'),[])
+
+    def test_scoped_preflight_is_nonmutating_and_rejects_changed_identity(self):
+        scope={'scope':'a'}
+        self.adapter.check_scoped('s','client',USER,scope)
+        self.assertEqual(self.store.read('s'),[])
+        turn=self.adapter.begin_scoped('s','client',USER,scope)
+        self.adapter.commit('s',turn,self.result(turn))
+        before=self.store.read('s')
+        self.assertIsNone(self.adapter.check_scoped('s','client',USER,scope))
+        with self.assertRaises(TranscriptConflict):self.adapter.check_scoped('s','client',USER,{'scope':'b'})
+        self.assertEqual(self.store.read('s'),before)

@@ -863,3 +863,94 @@ verified drain under the real host lifecycle barrier.
 `FRONTEND_INTEGRATION_GAPS.md` refreshed: optional runtime/profile assembly and
 202/polling message/history/detail/stop service now described as implemented;
 agent catalog, uploads/mentions, task-main HTTP and default deployment remain gaps.
+
+## Follow-up: persisted agent catalog
+
+Source review compared `db/agents.py` and `server/agents.py` with Go
+`db/config.go:AgentBindingCounts/CreateAgent`, `server/dto.go:AgentDTO`,
+`server/server_mgmt.go:pgCreateAgent/pgGetAgent`, `agent/promptcatalog.go` and
+`agent/wrapup.go`. Seven store and eight HTTP tests pass with inert adapters.
+New independent `test_agent_catalog_review.py` covers missing-key reads,
+transaction rollback when current-prompt activation fails, and the real driver's
+missing-row exception on conflicting creation.
+
+Concrete blocker found: `create` uses ON CONFLICT DO NOTHING RETURNING but originally
+handled only a None return. PostgresExecutor raises NoRowsError, so a duplicate
+becomes HTTP500 instead of409. The independent regression reproduced this. The
+catalog owner has now added the narrow NoRowsError-to-AgentConflict mapping; all
+three independent tests pass on the fix. No implementation changes made by reviewer.
+
+Other reviewed contracts: source DTO string agent ID, nullable numeric profile ID,
+configuration counts and detail prompt/version fields are preserved. Binding-count
+queries match source; failed reads propagate rather than inventing zero counts.
+Zero counts for absent grouped keys reflect actual query results. Custom creation
+and English starter prompt activation are one transaction, stronger than source
+best-effort seeding. Starter translation preserves concise accurate assistance,
+available-tool use only as needed, user-request scope and no invented facts.
+Current prompt ID is persisted but is not part of source AgentDTO. Public profile
+choices select no credential columns. Worker/planner/mainagent code-owned defaults
+require explicit resolver rather than invented defaults. Execution readiness is
+separate, requires enabled assistant role plus literal-True host readiness, and
+explicitly rejects retester; normal builtin task roles are not assistant roles.
+Configuration and stored prompt alone do not register executable tools/agents.
+This review does not include app wiring, real PostgreSQL or provider execution.
+
+## Follow-up: offline archive bundle and readonly snapshot exporter
+
+Reviewed `archive_bundle.py` / `archive_snapshot.py` against source package layout,
+format versions and SnapshotTaskArchive query scope. No extraction/restore/prune or
+lifecycle publication is implemented. Optional preinstalled zstandard is required;
+this is not a standard-library-only codec. Snapshot requires an explicit host-held
+quiescence barrier plus same-transaction ownership/aggregate callback. All 22 table
+selectors are task/exploration-bound, with source usage OR semantics and direct
+source-task relations. Repeatable-read readonly transaction starts before schema
+advisory lock and table reads. Row counts/serialized row bytes/total bytes are
+bounded; serialization work inside PostgreSQL is not avoided. Metadata callback
+is trusted host code, not independent proof of exclusive ownership. Parent tables
+must match selected IDs; exported data is not a relational restore-safety audit.
+
+Bundle validates compressed SHA256, expansion/member bounds, traversal, backslash,
+absolute/colon paths, duplicates, file-parent collisions, regular-file-only types,
+owner task/transcript prefixes, evidence hashes/lengths and streamed record count.
+Unknown compatible fields are retained. Publication walks existing POSIX directory
+components without following symlinks, writes/fsyncs an exclusive0600 temp and
+hardlinks create-only; explicit directory trust remains necessary. Independent
+post-link directory-fsync failure test confirms the final bytes can exist despite
+an exception, temp cleanup succeeds, and retry cannot overwrite the destination.
+Callers must reconcile uncertainty, never infer absence from failure.
+
+Review issues sent to owner: real missing-task NoRowsError escaped SnapshotUnavailable;
+malformed streamed data_counts=[] escaped BundleInvalid as AttributeError; decoder
+stream read capped output bytes but lacked explicit max_window_size allocation cap.
+New test_archive_review.py reproduces the first two using inert fixtures and tests
+publication uncertainty in a disposable directory. Owner fixes independently verified:
+all three regressions pass. Decoder now supplies explicit max_window_size; malformed
+JSON recursion and count shapes normalize to BundleInvalid. Export requires explicit
+archive_snapshot_transaction capability rather than arbitrary generic transaction.
+PostgresExecutor rejects nested/nonidle use, starts its transaction, and issues the
+fixed readonly repeatable-read SET directly on a cursor before yielding; DML rowcount
+checks are unchanged. Pool pins one lease, rejects nested upgrade and retires on
+failure. Advisory-lock SELECT uses fetch_one, not execute rowcount. NoRowsError on
+missing parent normalizes to SnapshotUnavailable; updated independent test reaches
+the parent lookup after a successful lock result. Live DB evidence remains QA-owned.
+
+## Follow-up: tool catalog metadata
+
+Reviewed new db/tool_catalog.py and server/tool_catalog.py against db/tools.go,
+server/customtool.go and pgUpdateTool. Eight store/five HTTP tests and three new
+independent test_tool_catalog_review.py regressions pass. No implementation blocker
+identified; exec was treated only as opaque JSON throughout, never executed.
+
+Actual source columns and DTO match, including calls aggregated from tool_usage,
+not an invented approval column. Missing reads use fetch_all, duplicate INSERT
+NoRowsError maps to conflict, unrelated storage errors remain redacted failures.
+Writes transact; updates lock the tool before sorted referenced-agent key-share
+locks. Missing bindings fail before UPDATE; the independent test verifies rollback.
+Builtin schema shape permits description/default annotations but retains property
+names even when a parameter is itself named description: changing its type fails
+before write. Custom update/delete cannot mutate system tools; generic metadata
+updates do not write kind/exec/deferred. Nested duplicate JSON and nonboolean flags
+fail before any store write, independently verified. Runtime callback approval,
+registration/reload and revocation/draining are absent deliberately: persisted
+bindings/enabled/schema do not grant execution. A host must not infer that deleting
+a catalog row stops an already-running callback. Reset/test routes remain503.

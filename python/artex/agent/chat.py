@@ -184,7 +184,7 @@ class ChatAgent:
             options={'gate':checked_gate,'tools':tuple(preflight.tools.values()),'limits':self.limits}
             if self.clock is not None:options['clock']=self.clock
             runner=BoundedAgent(_Provider(self,session_id,turn,model),**options)
-            request={'messages':deepcopy(turn.messages),'system':system}
+            request={'messages':deepcopy(turn.messages),'system':[system] if system else []}
             context.update(session_id=session_id,chat_turn_id=turn.id)
             result=runner.run(request,token=token,metadata=context)
             # Full history and all tool pairs travel in one atomic adapter call.

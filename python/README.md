@@ -7,7 +7,7 @@ planner/worker orchestration, scheduling, full API coverage and SDK/tool
 integration remain incomplete. See [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) for the
 connected WSGI/auth/category slice and optional psycopg/bcrypt adapters. The original Go backend and
 Next.js frontend remain intact. See [MIGRATION.md](MIGRATION.md) for the parity
-inventory and remaining work. See [CONVERSATION_RUNTIME_STATUS.md](CONVERSATION_RUNTIME_STATUS.md) for the latest explicit conversation runtime checkpoint, and [ISOLATED_QA.md](ISOLATED_QA.md) for scoped real-database evidence.
+inventory and remaining work. See [TASK_CHAT_ARCHIVE_STATUS.md](TASK_CHAT_ARCHIVE_STATUS.md) for the latest task-chat, catalog and archive-primitives checkpoint, and [ISOLATED_QA.md](ISOLATED_QA.md) for scoped real-database evidence.
 
 Implemented modules:
 
@@ -25,7 +25,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **1080 tests**; these are authored unit/adapter
+combined suite currently passes **1198 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
@@ -40,7 +40,9 @@ Requires Python 3.11 or newer. From this directory:
 PYTHONPATH=. python -m unittest discover -s tests -v
 ```
 
-These tests execute only the new Python modules and standard library. They do
+Core tests execute only the new Python modules and standard library. Archive
+codec tests require the optional `archive` extra (zstandard 0.25); without it,
+those tests are explicitly skipped rather than installed automatically. They do
 not execute upstream build/install scripts, send traffic to targets, call model
 providers, or run the original Go test suite. Passing unit tests does **not**
 prove backend feature parity or production readiness.

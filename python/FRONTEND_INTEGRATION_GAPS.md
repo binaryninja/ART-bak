@@ -104,9 +104,10 @@ remain separate commits: crash recovery and cross-process authority are not solv
 profile configuration and conversation execution on one JWT-authenticated WSGI
 application. Agent support, authorization, grants, tools, prompt resolver, profile
 transport, transcript root and single-process ownership must all be supplied.
-There is no default deployment or listener. GET /api/agents, attachments and
-mentions remain missing, so this assembly alone does not make the complete chat
-screen usable. Independent mocked JWT assembly tests exercise configure/send/poll
+There is no default deployment or listener. Optional catalog_store and explicit
+catalog prompt/readiness adapters now mount GET/POST /api/agents and metadata
+routes. Attachments and mentions remain unavailable, so this assembly alone does
+not make the complete chat screen usable. Independent mocked JWT assembly tests exercise configure/send/poll
 and cancellation/drain, not browser or live-provider QA.
 
 `agent/chat.py`, `transcripts.py` and `chat_transcripts.py` now form a real durable
@@ -114,11 +115,13 @@ conversation bridge used by this optional service, not just disconnected storage
 primitives. No default shell/web/MCP tools are inherited. Persisted-but-uncertain
 turns retain ownership instead of claiming clean completion.
 
-Main-task POST /api/chat still returns unsupported 503 in this assembly; main-task
-status/stop/history/segments, /api/chat/mentions and /api/chat/upload are not supplied
-by it. `task_chat.py` now executes a bounded task-main turn with explicit lifecycle,
-revision and durable-transcript adapters, but is not an HTTP service or a default
-AgentHost adapter. No task-main readiness follows from the conversation assembly.
+Main-task POST /api/chat and task status/stop have a separate TaskChatService,
+TaskChatDispatcher and scoped transactional activity sink. They are unregistered
+(404) until explicitly composed with host lifecycle/revision/authorization adapters;
+the conversation service does not own a conflicting task placeholder route.
+Main history/segments, mentions and uploads remain unfinished. The bounded task
+turn does not imply a complete autonomous planner/worker loop or default AgentHost
+adapter. No task-main readiness follows from the conversation assembly.
 
 Side-question routes ARE registered (three parent families plus events/cancel),
 but all parent/request authorization, model availability, preparation, coordinator,

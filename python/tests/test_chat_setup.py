@@ -169,7 +169,7 @@ class OneApplicationTests(unittest.TestCase):
         self.assertEqual(status,200)
         self.assertEqual([a['kind'] for a in history['items']],['user','result'])
         self.assertFalse(history['running']);self.assertEqual(len(self.calls),1)
-        self.assertEqual(self.request('/api/chat','POST',{'message':'task'},token)[0],503)
+        self.assertEqual(self.request('/api/chat','POST',{'message':'task'},token)[0],404)
     def test_register_failure_cancels_and_drains_threads(self):
         from unittest.mock import patch
         from artex.server.chat import ChatService
@@ -181,3 +181,43 @@ class OneApplicationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):build_chat_application(self.db,b'x'*32,TestCodec(),**self.kwargs)
         self.assertEqual(len(drained),1);self.assertTrue(drained[0].drained)
         self.assertEqual(self.calls,[])
+
+class CatalogApplicationTests(OneApplicationTests):
+    def test_catalog_create_conversation_and_rendered_prompt(self):
+        from artex.db.agents import AgentStore
+        from test_agents import ROW
+        self.bundle.close(cancel=True,timeout=3)
+        original_all=self.db.fetch_all;original_one=self.db.fetch_one;original_execute=self.db.execute
+        catalog=[];prompts=[]
+        def all_rows(q):
+            if ' FROM agents' in q.sql and not q.sql.startswith('SELECT p.template_text'):return list(catalog)
+            if 'GROUP BY' in q.sql and any(t in q.sql for t in ('agent_visibility','agent_skill_visibility','tools')):return []
+            if 'SELECT p.template_text' in q.sql:return [(prompts[0],)] if prompts else []
+            if any(t in q.sql for t in ('FROM agent_prompt_vars','FROM agent_prompts','FROM agent_visibility','FROM agent_skill_visibility')):return []
+            if q.sql=='SELECT id,name,model,is_default FROM llm_profiles ORDER BY id':return []
+            return original_all(q)
+        def one(q):
+            if q.sql.startswith('INSERT INTO agents('):
+                row=list(ROW);row[1:4]=q.params;catalog.append(tuple(row));return tuple(row)
+            if q.sql.startswith('INSERT INTO agent_prompts('):prompts.append(q.params[1]);return (7,)
+            return original_one(q)
+        def execute(q):
+            if q.sql.startswith('UPDATE agents SET current_prompt_id'):return 1
+            return original_execute(q)
+        self.db.fetch_all=all_rows;self.db.fetch_one=one;self.db.execute=execute
+        kwargs=dict(self.kwargs,agent_available=lambda key:key=='custom',catalog_store=AgentStore(self.db),
+                    catalog_prompt=lambda agent,stored,conv,base:base+'\n'+stored)
+        self.bundle=build_chat_application(self.db,b'x'*32,TestCodec(),**kwargs)
+        self.assertEqual(self.request('/api/agents')[0],401)
+        token=self.request('/api/auth/init','POST',{'password':'dummy-password'})[1]['token']
+        self.assertEqual(self.request('/api/agents',token=token),(200,{'agents':[]}))
+        self.assertEqual(self.request('/api/agents','POST',{'key':'custom','name':'Custom'},token)[0],200)
+        self.assertEqual(self.request('/api/agents',token=token)[1]['agents'][0]['key'],'custom')
+        self.assertEqual(self.request('/api/conversations','POST',{'agent_key':'custom'},token)[0],200)
+        self.assertEqual(self.request('/api/llm/profiles','POST',{'name':'fixture','model':'dummy','api_key':'dummy-key','streaming':False},token)[0],200)
+        self.assertEqual(self.request('/api/llm/profiles/active','POST',{'id':1},token)[0],200)
+        self.assertEqual(self.request('/api/conversations/1/messages','POST',{'message':'hello'},token)[0],202)
+        self.assertTrue(self.db.activity_done.wait(3));self.assertTrue(self.bundle.close(timeout=3).drained)
+        sent=json.loads(self.calls[0][3])
+        self.assertIn(prompts[0],sent['messages'][0]['content'])
+        self.assertEqual(len(catalog),1)  # explicit create only, no builtins
