@@ -5,19 +5,20 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 46,
-    "python_optional_service_routes": 41,
-    "matched_offline_contract_routes": 46,
-    "go_routes_without_python_registration": 215
+    "python_offline_contract_routes": 52,
+    "python_optional_service_routes": 47,
+    "matched_offline_contract_routes": 52,
+    "go_routes_without_python_registration": 209
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "c470d9deeec4442ee52e85cdef12396d3b65dbbdf29439e0977d80c673d71f9c",
+    "python/artex/server/application.py": "ec99ba407e2f2892194b79b8a3211d29f5f9687924d01a8a2453b4634a1b0895",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
+    "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
@@ -1346,8 +1347,19 @@
       "expression": "\"GET /api/companies\"",
       "method": "GET",
       "path": "/api/companies",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/companies",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/companies",
@@ -1358,8 +1370,19 @@
       "expression": "\"POST /api/companies\"",
       "method": "POST",
       "path": "/api/companies",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/companies",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/companies/{id}",
@@ -1370,8 +1393,19 @@
       "expression": "\"GET /api/companies/{id}\"",
       "method": "GET",
       "path": "/api/companies/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/companies/{id}",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/companies/{id}",
@@ -1382,8 +1416,19 @@
       "expression": "\"DELETE /api/companies/{id}\"",
       "method": "DELETE",
       "path": "/api/companies/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/companies/{id}",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/companies/{id}/scope",
@@ -1394,8 +1439,19 @@
       "expression": "\"POST /api/companies/{id}/scope\"",
       "method": "POST",
       "path": "/api/companies/{id}/scope",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/companies/{id}/scope",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/companies/reattribute",
@@ -1406,8 +1462,19 @@
       "expression": "\"POST /api/companies/reattribute\"",
       "method": "POST",
       "path": "/api/companies/reattribute",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/companies/reattribute",
+        "source": "python/artex/server/companies.py",
+        "line": 86,
+        "function": "CompanyService.register",
+        "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/exploration/frontier",
@@ -3794,6 +3861,78 @@
       "registration_mode": "auth router factory",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/companies/{id}",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/companies/{id}",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/{id}/scope",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/companies/reattribute",
+      "source": "python/artex/server/companies.py",
+      "line": 86,
+      "function": "CompanyService.register",
+      "handler": "lambda req, params, action=action: self._handle(action, req, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "method": "GET",

@@ -252,3 +252,128 @@ Resolver priority and ties remain root-domain, longest CIDR, then normalized ICP
 with lowest company ID ties. Scope-rule changes and deletion fail explicitly
 rather than silently skipping global attribution recomputation. No concrete new
 issue was established; no live SQL or company/network lookup was performed.
+
+## Follow-up: profile factory and runtime coordinator
+
+Reviewed `providers/factory.py`; all 10 inert factory/coordinator tests pass. No
+new concrete defect established. Validation precedes transport construction and
+store mutation; unsupported proxy/rate/session/retry behavior is rejected instead
+of silently ignored. Existing-key preservation constructs a validation candidate
+with the private stored key while saving the original blank-key request through
+ProfileStore's preserve-key SQL. Maximum-token caps and streaming-disabled behavior
+remain explicit; unsupported Anthropic thinking configuration fails before I/O.
+
+Coordinator mutation/reload is serialized within one instance. After persistence,
+reapplication failure clears published runtime and cache rather than presenting
+the old profile as newly applied. Injecting server.ProfileApplyPending is required
+for the HTTP persisted-versus-applied response; that exact injection is covered by
+the tests. Defaults deliberately do not import server code, discover credentials,
+choose allowed network origins, or construct a runtime coordinator automatically.
+Public snapshots exclude keys and redact URLs. Private factory cache/configuration
+remains trusted host state, not a public DTO or a general secret-redaction layer.
+Existing external provider references survive invalidation and must be separately
+drained for credential revocation, as documented. Tests use construction-only fake
+transports and no network calls.
+
+The earlier skill terminology correction is now verified: api-recon uses
+'Application shell', not 'Shell access', for frontend rendering completion.
+
+## Follow-up: parent-bound side-question persistence
+
+Reviewed `db/sidequestions.py`, its 13 inert contract tests, corresponding
+`db/side_questions.go`, and the session/request schema. Independently reran all
+13 tests successfully. No new concrete port defect found in this pass.
+
+- Parent shapes reject ambiguous conversation/task identities and non-integer IDs.
+  Task-main and task-worker snapshots/starts lock the live, non-archived task with
+  its exact exploration; workers additionally require a same-exploration intent
+  that is not stopped. Parent locks precede the session lock.
+- Snapshot replacement compares `(run_id, version)` lexicographically, not version
+  alone. Snapshot reads also validate the embedded parent against the bound store.
+  `start` deliberately uses the supplied valid snapshot rather than requiring it
+  to equal the newest persisted snapshot, matching Go; capture freshness remains
+  a runtime caller responsibility, not a persistence guarantee.
+- Start serializes on the session row, scopes idempotency by current generation
+  and client ID, rejects changing a repeated question, and checks the one-running
+  constraint before insertion. The schema independently enforces uniqueness.
+- Update includes request ID, bound parent key, caller generation, current-session
+  generation, running status and strictly increasing sequence. Terminal results
+  cannot be overwritten by later callbacks through this API. Memory writes also
+  require a currently running request in the current generation.
+- Clear increments generation/resets memory and deletes only the bound parent's
+  requests in one transaction. It does not recreate request rows, and update is
+  UPDATE-only. Session locking orders start against clear; fake rollback tests
+  verify transaction shape, not live PostgreSQL scheduling. Clear is permanent
+  deletion implementation only: no real data was deleted and hosts still need
+  the required user authorization before invoking it.
+- History is bounded to 1..100, replay to 20, and paged replay binds generation,
+  after-cursor and the current exchange's ordinal ceiling. Request lookup is
+  parent-scoped (stronger than original Go's ID-only lookup).
+
+Remaining integration boundaries, not newfound regressions: reads/history and
+clear do not independently reject archived parents, matching the source; a future
+HTTP/runtime adapter must establish parent access and lifecycle authorization.
+There is no capture/provider/cancel orchestration or archive restore here. Fake
+SQL tests cannot prove concurrent clear/update behavior or database constraints
+under load; that belongs to the separately authorized PostgreSQL QA stage.
+
+## Follow-up: company HTTP and application wiring
+
+Reviewed `server/companies.py`, matching company handlers in `server/assets.go`,
+its 13 fake tests, and the newly added application wiring. All 13 company HTTP
+and 14 application tests pass independently. No concrete new defect identified.
+
+Six routes remain authenticated, including unsupported mutation routes. Missing
+storage returns 503; scope mutation, deletion and reattribution return 503 before
+any store write. Nonempty initial scope is rejected before company creation,
+including empty-string rule entries; metadata-only creation uses transactional
+`create`, not metadata upsert. Conflict is 409 and unexpected errors use fixed
+redacted messages. Unsupported fields/query parameters, duplicate JSON keys,
+invalid IDs and oversized payloads fail explicitly. Exact positive int return
+validation prevents a malformed creation adapter result from being serialized.
+List/detail preserve source envelope, numeric IDs, nullable empty list and array
+scope. Existing scoped CompanyStore remains scoped when explicitly supplied;
+scoped creation stays unavailable with no transaction.
+
+`build_application(company_store=...)` forwards the supplied repository without
+startup calls; missing injection produces 503. `build_persisted_application`
+explicitly constructs the documented authenticated-administrator/global company
+repository, not task-inferred ownership. New application tests cover auth,
+unavailable routes, empty list, fake creation and no company startup queries.
+The common WSGI factory default body cap remains 1 MiB, stricter than this service's
+2 MiB/upstream cap; callers must raise it if matching the full source body limit
+is needed. No real company changes or external registry requests occurred.
+
+## Follow-up: persisted worker-intent boundary
+
+Reviewed `db/workers.py`, all 12 inert tests, the exploration node/version and
+archive schema, Python ExplorationStore writers, and Go ClaimIntent/session-key
+references. Independently reran 12 worker tests successfully. No concrete new
+blocking defect found in this persistence-only boundary.
+
+There is no invented workers table: identities are intent nodes, scoped by exact
+exploration and a live task/exploration row. The explicit lifetime guard wraps the
+transaction; parent task locks precede node update/append locks. All archive rows,
+including failed archive attempts, conservatively block operations. Absent guards
+or transcript adapters fail closed. Reads do not resolve inherited sources.
+
+Claims and transitions bind intent ID, exploration, expected state and version;
+version increments fence prior worker generations. Terminal reopening is explicitly
+unsupported. Append locks the node and requires running state plus exact content
+version before invoking its injected backend. IDs cannot become transcript path
+components except as positive integers; session keys match source expN-worker-iM.
+Backend exceptions propagate and roll back the SQL transaction, while guard context
+exit remains structural. Unsupported archive/delete cannot accidentally perform
+partial cleanup.
+
+Integration cautions: this is not a lease or worker execution engine. Existing
+`ExplorationStore.claim_intent` remains the source-compatible state-only claim;
+callers must not mix it into an execution host expecting every admission to bump
+this facade's generation. Existing graph mutation methods likewise do not use this
+facade's lifetime guard. Transcript read takes the shared parent lock but no explicit
+node lock (unlike append), so the module's broad statement that calls hold a node
+lock should not be read as a consistent read snapshot against arbitrary graph
+writers. The transcript backend must enforce generation/idempotency/path safety;
+no backend is supplied here. A backend append can survive a later PostgreSQL commit
+failure, so retry requires reconciliation, exactly as the module documents. No real
+transcript, DB, provider, network or cleanup operation was executed in this review.

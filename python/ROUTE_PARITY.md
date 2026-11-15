@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **46**.
-- python optional service routes: **41**.
-- matched offline contract routes: **46**.
-- go routes without python registration: **215**.
+- python offline contract routes: **52**.
+- python optional service routes: **47**.
+- matched offline contract routes: **52**.
+- go routes without python registration: **209**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -77,12 +77,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/chat/upload` | `server/server.go:816` | Not registered |
 | GET | `/api/commands` | `server/server.go:793` | Not registered |
 | GET | `/api/commands/stats` | `server/server.go:794` | Not registered |
-| GET | `/api/companies` | `server/server.go:748` | Not registered |
-| POST | `/api/companies` | `server/server.go:749` | Not registered |
-| POST | `/api/companies/reattribute` | `server/server.go:753` | Not registered |
-| DELETE | `/api/companies/{id}` | `server/server.go:751` | Not registered |
-| GET | `/api/companies/{id}` | `server/server.go:750` | Not registered |
-| POST | `/api/companies/{id}/scope` | `server/server.go:752` | Not registered |
+| GET | `/api/companies` | `server/server.go:748` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
+| POST | `/api/companies` | `server/server.go:749` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
+| POST | `/api/companies/reattribute` | `server/server.go:753` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
+| DELETE | `/api/companies/{id}` | `server/server.go:751` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
+| GET | `/api/companies/{id}` | `server/server.go:750` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
+| POST | `/api/companies/{id}/scope` | `server/server.go:752` | Optional registration; adapters required: `python/artex/server/companies.py:86` |
 | GET | `/api/conversations` | `server/server.go:824` | Not registered |
 | POST | `/api/conversations` | `server/server.go:825` | Not registered |
 | POST | `/api/conversations/delete/batch` | `server/server.go:826` | Not registered |
@@ -311,6 +311,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies/reattribute`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/frontier`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/intents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.

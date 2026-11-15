@@ -15,12 +15,13 @@ from .tasks import TaskService
 from .assets import AssetService
 from .findings import FindingService
 from .profiles import ProfileService
+from .companies import CompanyService
 from .exploration import ExplorationService
 
 
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
-                      finding_store=None, finding_asset_resolver=None,
+                      finding_store=None, finding_asset_resolver=None, company_store=None,
                       profile_store=None, profile_coordinator=None, runtime_snapshot=None,
                       exploration_store_resolver=None, active_task_id=None,
                       exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
@@ -28,7 +29,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
-    Registers health/auth, category, task, asset, finding, profile and log snapshot/history
+    Registers health/auth, category, task, asset, finding, company, profile and log snapshot/history
     slices. Missing stores/managers/adapters produce 503, not placeholder success.
     Finding status notifications, evidence exports and runtime-dependent routes
     remain unavailable; anchored findings require an explicit asset resolver.
@@ -46,6 +47,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     TaskService(task_manager, profile_available=profile_available).register(router)
     AssetService(asset_store).register(router)
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
+    CompanyService(company_store).register(router)
     ExplorationService(exploration_store_resolver, active_task_id=active_task_id,
                        nodeboard_factory=exploration_nodeboard_factory,
                        nodeboard_asset_resolver=exploration_nodeboard_asset_resolver).register(router)
@@ -68,7 +70,9 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     PostgreSQL schema. Read failures propagate: it never substitutes an empty
     registry for a failed database. No task is resumed during loading. Without
     an explicitly supplied cooperative runner, create/resume remain unavailable.
-    Standalone findings use the authenticated administrator/global repository;
+    Companies and standalone findings use authenticated administrator/global repositories;
+    company construction performs no reads or external registry lookup. Company
+    scope mutations/deletion remain unavailable pending full attribution cleanup;
     no inherited task scope is inferred. Finding asset labels require an explicit
     resolver; no global asset lookup is silently enabled. Asset reads remain
     scoped unless allow_global_assets is explicitly enabled. The optional offline
@@ -82,6 +86,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     from ..db.tasks import TaskStore
     from ..db.findings import FindingStore
     from ..db.profiles import ProfileStore
+    from ..db.companies import CompanyStore
     from ..db.asset_store import AssetStore
     from ..db.task_metrics import TaskMetricsStore, TaskMetricsEnricher
     from ..manager import TaskManager
@@ -96,6 +101,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              asset_store=AssetStore(executor, allow_global=allow_global_assets,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
+                             company_store=CompanyStore(executor),
                              profile_store=ProfileStore(executor),
                              profile_coordinator=profile_coordinator, runtime_snapshot=runtime_snapshot,
                              finding_asset_resolver=finding_asset_resolver,

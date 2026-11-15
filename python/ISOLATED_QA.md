@@ -75,3 +75,24 @@ list masking and unavailable runtime response; scoped graph/not-found responses;
 node-board neighbor and anchor composition. Tests invoked WSGI directly without a
 listener. Dummy credentials and explicit fixture resolvers only. This does not
 establish production hosting, provider integration or comprehensive interoperability.
+
+## Company, scheduler and actual loopback transport checks
+
+Immutable local snapshot `da4d7b3cff5990daab8917e5d1d525f96ff29032` passed six
+grouped checks: company normalized upsert and scoped domain/IP/ICP resolution;
+real TaskStore FIFO admission/completion; pause and stale-generation rejection;
+and actual HTTP transport POST against a fixture server inside the isolated
+loopback network. No external provider, user credentials or target was contacted.
+Later skill-label-only edits did not change tested code. Distributed scheduling,
+company scope mutations and external-provider interoperability remain unverified.
+
+## Side-question, worker and company HTTP checks
+
+Immutable local snapshot `376dc0a91124aa6e28c53ccda02674f244c4d5f9` passed seven
+grouped PostgreSQL checks: three side-question parent kinds, snapshot ordering,
+idempotency and clear-generation rejection of late writes; foreign worker
+rejection; worker claim/state version and transcript CAS; lifetime/archive guards;
+and composed company API authentication, create/list/conflict/unsupported scope.
+Only disposable fixture history was cleared. Lifetime guards and transcript
+backends were fixtures, and ordering checks were sequential, not concurrency
+proof. No optional profile factory/provider execution was performed in this run.

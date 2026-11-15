@@ -262,6 +262,39 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.request('/api/exploration/nodes',token=token)[0],503)
         self.assertEqual(factory.call_count,1);self.assertEqual(labels.call_count,1)
 
+    def test_company_auth_missing_empty_and_fake_create(self):
+        from artex.server import sign_jwt
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.request('/api/companies')[0],401)
+        self.assertEqual(self.request('/api/companies',token=token)[0],503)
+        store=Mock();store.list.return_value=[];store.create.return_value=3
+        self.app=build_application(self.db,b'x'*32,TestCodec(),company_store=store)
+        self.assertEqual(store.mock_calls,[])
+        self.assertEqual(self.request('/api/companies')[0],401)
+        store.list.assert_not_called()
+        self.assertEqual(self.request('/api/companies',token=token),(200,None))
+        response=self.request('/api/companies',method='POST',data={'name':'Example'},token=token)
+        self.assertEqual(response,(201,{'id':3,'created':True,'scope_added':0,'scope_skipped':0,'scope_invalid':0}))
+        store.create.assert_called_once_with('Example','',scope_inputs=[])
+        self.assertEqual(self.request('/api/companies/3',method='DELETE',token=token)[0],503)
+        self.assertEqual(self.request('/api/companies/3/scope',method='POST',data={'scope':['example.test']},token=token)[0],503)
+        store.delete.assert_not_called();store.add_scope.assert_not_called()
+
+    def test_persisted_company_admin_repository_no_startup_reads(self):
+        from artex.server import sign_jwt
+        class EmptyTasksCompanies(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql or 'FROM companies c' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        db=EmptyTasksCompanies()
+        self.app=build_persisted_application(db,b'x'*32,TestCodec())
+        self.assertEqual(len(db.calls),1)
+        self.assertNotIn('companies',db.calls[0].sql)
+        self.assertEqual(self.request('/api/companies',token=sign_jwt(b'x'*32)),(200,None))
+        self.assertIn('FROM companies c',db.calls[-1].sql)
+        self.assertEqual(db.calls[-1].params,())  # explicit trusted administrator store
+
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):
             build_application(self.db, b'short', TestCodec())
