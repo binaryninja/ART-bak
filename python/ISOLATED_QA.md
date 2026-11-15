@@ -96,3 +96,27 @@ and composed company API authentication, create/list/conflict/unsupported scope.
 Only disposable fixture history was cleared. Lifetime guards and transcript
 backends were fixtures, and ordering checks were sequential, not concurrency
 proof. No optional profile factory/provider execution was performed in this run.
+
+## Go/Python authentication interoperability
+
+On immutable `36e88a4b61cd1468d54b7922e80a0ab0ec6031a8`, bcrypt hashes and ordinary
+seven-day HS256 login JWTs verified in both directions using source-equivalent
+Go helpers and Python authentication code. Both reject expired/future-not-before
+tokens. Both accept signed arbitrary audience/subject and future issued-at claims;
+these are not configured authorization selectors in the single-admin model.
+
+Confirmed stricter Python differences: it requires expiration and accepts HS256
+only; original Go accepts missing expiration and the broader HMAC family including
+HS512. Ordinary source-generated HS256 tokens interoperate. Dummy keys only; no
+keys, hashes usable as credentials, or tokens are published in this report.
+
+## Streaming, retry and side-runtime integration
+
+Immutable local snapshot `386010389537a906b69386e96f43cab3fad5914e` passed six
+grouped checks in isolation: real PostgreSQL template atomic patch/FK rollback and
+fixture deletion; actual side-question coordinator/service/store preserving partial
+usage and enforcing profile/clear-generation guards; real retry transport/provider
+against loopback HTTP (429 then success used two calls; refusal used one); and
+composed authenticated WSGI log SSE replay/live delivery/close. No product mismatch
+was found. Provider behavior was a fixture and retry waits bypassed; external
+provider compatibility, timing behavior and production streaming remain unverified.

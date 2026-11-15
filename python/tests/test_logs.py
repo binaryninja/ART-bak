@@ -70,7 +70,9 @@ class LogTests(unittest.TestCase):
         self.assertEqual(db.calls[-1].params, (200,))
         request('/api/logs/history?limit=999')
         self.assertEqual(db.calls[-1].params, (500,))
-        self.assertEqual(request('/api/logs/stream').status, 404)
+        stream = request('/api/logs/stream')
+        self.assertEqual(stream.status, 200)
+        stream.body.close()
 
     def test_missing_adapters_and_failures(self):
         svc = LogService()

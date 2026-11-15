@@ -5,9 +5,10 @@ HTTP, a host may pass lambda config: HTTPTransport(approved_origins). Nothing
 here chooses an origin policy. Existing requests retain old providers after
 invalidation; hosts must separately drain them before revoking credentials.
 
-This subset requires all retry attempts=-1 and intervals=0 (upstream zero means
-built-in retries, which are NOT implemented here). Proxy, rate limits and session
-headers are rejected. Context windows feed pool admission, not compaction.
+Retry defaults and overrides use source-pinned bounded layers (see retry.py).
+Each logical profile call has an aggregate attempt/time budget. Global retry
+settings are not read: callers must resolve overrides before assembly.
+Proxy, rate limits and session headers are rejected. Context windows feed pool admission, not compaction.
 Profile streaming=False forbids stream() rather than inventing SSE events.
 Coordinator mutations are serialized only within this instance; external writers
 require external synchronization. Inject server.ProfileApplyPending as
@@ -16,8 +17,10 @@ pending_error to integrate ProfileService without importing server modules.
 from copy import deepcopy
 from dataclasses import fields
 from threading import RLock
+import time
 
 from . import Config, Provider
+from .retry import Policy, RetryProvider, RetryTransport
 from ..db.profiles import LLMProfile, ProfileInvalid, ProfileNotFound, _validate, _public_url
 from ..health import Registry
 from ..llmpool import Member, Pool, RANK_ACTIVE
@@ -54,9 +57,15 @@ class ConfiguredProvider:
 
 
 class ProfileFactory:
-    def __init__(self, transport_factory, *, health=None):
+    def __init__(self, transport_factory, *, health=None, retry_max_attempts=64,
+                 retry_max_seconds=120, clock=time.monotonic, sleep=time.sleep):
         if not callable(transport_factory):
             raise ProfileInvalid('explicit transport factory required')
+        Policy(max_attempts=retry_max_attempts, max_seconds=retry_max_seconds)
+        if not callable(clock) or not callable(sleep):
+            raise ProfileInvalid('explicit clock and sleep must be callable')
+        self._retry_max_attempts, self._retry_max_seconds = retry_max_attempts, retry_max_seconds
+        self._clock, self._sleep = clock, sleep
         self._transport_factory = transport_factory
         self.health = health if health is not None else Registry()
         self._cache = {}
@@ -70,9 +79,7 @@ class ProfileFactory:
             raise ProfileInvalid('proxy and session headers are not implemented')
         if profile.rate_per_second or profile.rate_per_minute:
             raise ProfileInvalid('rate limiting is not implemented')
-        if any(rule.attempts != -1 or rule.interval_ms != 0 for rule in
-               (profile.retry.connect, profile.retry.empty, profile.retry.stream)):
-            raise ProfileInvalid('runtime requires explicitly disabled retries')
+        Policy(profile.retry, self._retry_max_attempts, self._retry_max_seconds)
         if profile.format != 'openai' and profile.max_tokens_field:
             raise ProfileInvalid('maximum-token field requires OpenAI format')
         # Enabled Anthropic thinking requires a budget/config mode not yet
@@ -109,7 +116,11 @@ class ProfileFactory:
                 raise ProfileInvalid('transport construction failed') from None
             if not callable(transport):
                 raise ProfileInvalid('transport factory must return a callable')
-            provider = ConfiguredProvider(Provider(config, transport), profile)
+            policy = Policy(profile.retry, self._retry_max_attempts, self._retry_max_seconds)
+            transport = RetryTransport(transport, policy, clock=self._clock, sleep=self._sleep)
+            retrying = RetryProvider(Provider(config, transport), policy, format=profile.format,
+                                     clock=self._clock, sleep=self._sleep)
+            provider = ConfiguredProvider(retrying, profile)
             self._cache[profile.id] = (fingerprint, provider)
             return provider
 

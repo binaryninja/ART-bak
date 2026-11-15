@@ -5,29 +5,31 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 52,
-    "python_optional_service_routes": 47,
-    "matched_offline_contract_routes": 52,
-    "go_routes_without_python_registration": 209
+    "python_offline_contract_routes": 57,
+    "python_optional_service_routes": 52,
+    "matched_offline_contract_routes": 57,
+    "go_routes_without_python_registration": 204
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
     "server/server.go": "1c467982e9c09321f5ebedd028d7f742b20daa639c7070bb087dc272aa52b34b",
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
-    "python/artex/server/application.py": "ec99ba407e2f2892194b79b8a3211d29f5f9687924d01a8a2453b4634a1b0895",
+    "python/artex/server/application.py": "2da720118496679cc0ee3da2cd056dbb9d43df6f199fa15ac77fa5afff3a3a86",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
     "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
     "python/artex/server/core.py": "1d542aaeb956f07e2106ea043d36f24829d1a829f948fab03484e90dcd433910",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
-    "python/artex/server/logs.py": "29fb2ffbe5548540b660a01500da0dfd957b4e559176e3a5f9be5900218cb8c2",
+    "python/artex/server/logs.py": "658a387531d61234dd1a62b4cf4ed611e09fb7dbe87f12993923532e87bacf11",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
+    "python/artex/server/streaming.py": "9fcc2755a12d3f9c2a451566eacd238fb806f5285012f74e2f63c6e04e17f1e2",
     "python/artex/server/task_categories.py": "5c1b2030659191b818257726353289fc2c923547d00aee58cc2c47c50e096526",
+    "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "9e545ccd8e55d51e0589d52cb4fd8ce2f1cff3c4ddb54054f37b44c1bb43d083",
-    "python/artex/server/wsgi.py": "71252b9308b4466f5c44f0db62961948d038d944f1921372f4b3e34f9ff04872"
+    "python/artex/server/wsgi.py": "3d90db4ab424349fe4922c75b4915b006caf749384d45104f91451efd5167e6d"
   },
   "go_routes": [
     {
@@ -254,7 +256,7 @@
         "method": "GET",
         "path": "/api/logs",
         "source": "python/artex/server/logs.py",
-        "line": 85,
+        "line": 205,
         "function": "LogService.register",
         "handler": "lambda request, params: self.recent(request)",
         "public": false,
@@ -277,7 +279,7 @@
         "method": "GET",
         "path": "/api/logs/history",
         "source": "python/artex/server/logs.py",
-        "line": 86,
+        "line": 206,
         "function": "LogService.register",
         "handler": "lambda request, params: self.history(request)",
         "public": false,
@@ -296,8 +298,19 @@
       "expression": "\"GET /api/logs/stream\"",
       "method": "GET",
       "path": "/api/logs/stream",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/logs/stream",
+        "source": "python/artex/server/logs.py",
+        "line": 207,
+        "function": "LogService.register",
+        "handler": "lambda request, params: self.stream(request)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/update/check",
@@ -517,8 +530,19 @@
       "expression": "\"GET /api/task-templates\"",
       "method": "GET",
       "path": "/api/task-templates",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/task-templates",
+        "source": "python/artex/server/task_templates.py",
+        "line": 30,
+        "function": "TaskTemplateService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/task-templates",
@@ -529,8 +553,19 @@
       "expression": "\"POST /api/task-templates\"",
       "method": "POST",
       "path": "/api/task-templates",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/task-templates",
+        "source": "python/artex/server/task_templates.py",
+        "line": 30,
+        "function": "TaskTemplateService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PATCH /api/task-templates/{id}",
@@ -541,8 +576,19 @@
       "expression": "\"PATCH /api/task-templates/{id}\"",
       "method": "PATCH",
       "path": "/api/task-templates/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "PATCH",
+        "path": "/api/task-templates/{id}",
+        "source": "python/artex/server/task_templates.py",
+        "line": 30,
+        "function": "TaskTemplateService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "DELETE /api/task-templates/{id}",
@@ -553,8 +599,19 @@
       "expression": "\"DELETE /api/task-templates/{id}\"",
       "method": "DELETE",
       "path": "/api/task-templates/{id}",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "DELETE",
+        "path": "/api/task-templates/{id}",
+        "source": "python/artex/server/task_templates.py",
+        "line": 30,
+        "function": "TaskTemplateService.register",
+        "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/tasks/{id}",
@@ -4142,7 +4199,7 @@
       "method": "GET",
       "path": "/api/logs",
       "source": "python/artex/server/logs.py",
-      "line": 85,
+      "line": 205,
       "function": "LogService.register",
       "handler": "lambda request, params: self.recent(request)",
       "public": false,
@@ -4154,9 +4211,21 @@
       "method": "GET",
       "path": "/api/logs/history",
       "source": "python/artex/server/logs.py",
-      "line": 86,
+      "line": 206,
       "function": "LogService.register",
       "handler": "lambda request, params: self.history(request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/logs/stream",
+      "source": "python/artex/server/logs.py",
+      "line": 207,
+      "function": "LogService.register",
+      "handler": "lambda request, params: self.stream(request)",
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring",
@@ -4328,6 +4397,54 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task-templates",
+      "source": "python/artex/server/task_templates.py",
+      "line": 30,
+      "function": "TaskTemplateService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task-templates",
+      "source": "python/artex/server/task_templates.py",
+      "line": 30,
+      "function": "TaskTemplateService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/task-templates/{id}",
+      "source": "python/artex/server/task_templates.py",
+      "line": 30,
+      "function": "TaskTemplateService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/task-templates/{id}",
+      "source": "python/artex/server/task_templates.py",
+      "line": 30,
+      "function": "TaskTemplateService.register",
+      "handler": "lambda request, params, action=action: self._handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

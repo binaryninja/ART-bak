@@ -377,3 +377,100 @@ writers. The transcript backend must enforce generation/idempotency/path safety;
 no backend is supplied here. A backend append can survive a later PostgreSQL commit
 failure, so retry requires reconciliation, exactly as the module documents. No real
 transcript, DB, provider, network or cleanup operation was executed in this review.
+
+## Follow-up: pull-based WSGI streaming and SSE framing
+
+Reviewed `server/streaming.py`, WSGI integration and the 13 inert streaming tests.
+Independently reran all 13 streaming tests plus the existing WSGI byte-response
+suite successfully. No new blocking defect found; no listener or network used.
+
+The iterator is created/pulled lazily after header validation/start_response;
+no stream buffering or Content-Length is introduced. Invalid response metadata
+closes the stream and produces a fixed 500 before headers start. Gateway header
+failure closes then propagates. HEAD and no-body statuses close without pulling.
+Exhaustion, invalid/oversized chunks, producer exceptions and explicit disconnect
+close release iterator/source and callback once under ordinary Exception paths,
+including recursive/repeated close. Distinct source and iterator objects are
+released separately, identical ones only once. Existing bytes responses retain
+computed framing and HEAD behavior.
+
+Post-header producer exceptions never produce secret-bearing error bytes or a
+second header block. They intentionally become EOF with local `failed=True`, not
+an explicit failure frame: downstream protocols must require their own terminal
+success event and must not treat EOF as completed work. The SSE helper prefixes
+every normalized data line; event/ID reject CR/LF/NUL, retry is a bounded exact
+integer, and framing limits use encoded byte lengths. Hop-by-hop and nominated
+connection headers are removed; header values remain validated for WSGI encoding.
+
+Remaining constraints: gateway must close on disconnect and enforce timeouts;
+blocking producer code cannot be interrupted here, total stream length is not
+bounded, and cleanup callbacks must not raise process-control BaseExceptions.
+SSE framing checks the byte cap after constructing the frame, so this helper is
+not an input-allocation bound for arbitrary giant strings. There are no streaming
+routes/runtime completion contracts supplied by this primitive alone.
+
+## Follow-up: live log SSE subscription
+
+Reviewed `server/logs.py` against `server/server.go:streamLogs` and the Go log
+subscription boundary, plus the new virtual-time/fake-gateway tests. Independently
+reran `test_log*.py`: 16 tests passed (12 stream, four existing log tests). No new
+blocking defect identified; no listener, network or actual logging capture ran.
+
+Subscription precedes recent(last 1000) capture, and the captured cursor filters
+queued overlap without rewinding a future caller cursor. A 256-entry FIFO drops
+new arrivals when full, matching Go's nonblocking channel; sequence gaps are not
+silently filled from unrelated persistence. Frames retain source JSON data-only
+shape and 20-second comment heartbeats. Reconnect parsing is intentionally stricter
+than Go; invalid/ambiguous cursors return 400 without subscribing.
+
+Router authentication runs before handler/subscription. HEAD closes immediately
+without polling. Snapshot construction failure and oversized/event serialization
+failure unsubscribe; the latter is a failed EOF, not a successful terminal event.
+Explicit close clears queued entries and wakes a blocked poll. Ring shutdown
+clears subscribers under the ring lock, then closes outside it. Subscription close
+releases its condition before acquiring the ring lock, avoiding inversion against
+append's ring-lock then condition-lock order. Existing virtual wait tests exercise
+heartbeats without sleeping; the event-controlled test exercises actual condition
+wake-up with bounded thread join. No unauthorized stream data was observed.
+
+Deployment boundaries remain explicit: queue count, not log text bytes, is bounded;
+large single log frames exceed the common stream chunk limit and terminate the
+stream rather than being silently truncated. Logs themselves may contain secrets
+from callers and are not semantically scrubbed by this adapter; authenticated
+administrative authorization is essential. Gateway disconnect close/timeouts are
+still required, and one already in-flight frame can race with concurrent close.
+
+## Follow-up: task-template persistence and HTTP
+
+Reviewed `db/task_templates.py`, `server/task_templates.py`, the corresponding
+Go modules, shared rule validators and preset schema. Independently ran 12 inert
+template tests successfully; no new blocking defect found in store/HTTP. Factory
+wiring was not yet present at this review snapshot and needs separate verification.
+
+Seven rule kinds match the source: domain/URL/fuzzy forms remain free-form rather
+than being incorrectly executed or parsed as commands; exact IP/CIDR validate
+addresses, default action is block and omitted enabled is false. Rule arrays and
+name/text lengths are bounded; unsupported profile/source-task fields are rejected.
+Preset writes only bind normalized field values and JSON. Atomic CASE-based PATCH
+preserves omitted values while explicit category null clears the FK, and null
+rules clears only that snapshot. No read-modify-write window is introduced.
+Category FK failures map to redacted 400; name conflict to 409; absent patch/delete
+targets to 404; unexpected backend errors to a fixed response. Four routes use
+existing administrator authentication; presets are intentionally global rather
+than task-scoped. Schema confirms category deletion SET NULL and no task ownership
+relation. DELETE targets only the preset row and cannot delete created tasks.
+No real deletion occurred; executing this permanent deletion for a user still
+requires the applicable confirmation. No rule engine/application-to-task wiring
+is implied by saving rule snapshots.
+
+Boundary notes: the stored JSON decoder trusts existing database rule shape (new
+writes normalize it), and this is not a database-corruption repair layer. HTTP
+body parsing uses Python JSON byte decoding, including its UTF-16/32 auto-detection;
+strict UTF-8-only behavior is not claimed. No live FK/transaction race or upstream
+execution was tested here.
+
+Factory follow-up completed in the same review stage: inspected the delivered
+optional template_store injection, protected registration and persisted factory's
+TaskTemplateStore construction. Independently reran 16 application tests, all
+passing. Missing injection is 503 after auth; no template startup queries or task
+creation/execution occur. The earlier pending-wiring note is now resolved.

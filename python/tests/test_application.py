@@ -295,6 +295,50 @@ class ApplicationTests(unittest.TestCase):
         self.assertIn('FROM companies c',db.calls[-1].sql)
         self.assertEqual(db.calls[-1].params,())  # explicit trusted administrator store
 
+    def test_template_optional_store_auth_and_no_startup_reads(self):
+        from artex.server import sign_jwt
+        from artex.db.task_templates import TaskTemplateStore
+        token=sign_jwt(b'x'*32)
+        self.assertEqual(self.request('/api/task-templates')[0],401)
+        self.assertEqual(self.request('/api/task-templates',token=token)[0],503)
+        self.assertEqual(self.db.calls,[])
+        class Templates(Executor):
+            def fetch_all(self,query):
+                if 'FROM task_templates' in query.sql:
+                    self.calls.append(query);return []
+                if query.sql.startswith('INSERT INTO task_templates'):
+                    self.calls.append(query)
+                    return [(7,'Preset','preset','description','goal',None,'[]',datetime(2026,11,15,tzinfo=timezone.utc),datetime(2026,11,15,tzinfo=timezone.utc))]
+                return super().fetch_all(query)
+        self.db=Templates()
+        self.app=build_application(self.db,b'x'*32,TestCodec(),template_store=TaskTemplateStore(self.db))
+        self.assertEqual(self.db.calls,[])
+        self.assertEqual(self.request('/api/task-templates')[0],401)
+        self.assertEqual(self.db.calls,[])
+        self.assertEqual(self.request('/api/task-templates',token=token),(200,{'templates':[]}))
+        status,data=self.request('/api/task-templates',method='POST',token=token,
+                                 data={'name':'Preset','description':'description','goal':'goal'})
+        self.assertEqual(status,201);self.assertEqual(data['id'],7)
+        self.assertEqual(self.db.calls[-1].params,('Preset','preset','description','goal',None,'[]'))
+        self.assertFalse(any('INSERT INTO tasks' in q.sql for q in self.db.calls))
+        self.assertEqual(self.request('/api/tasks',token=token)[0],503)
+
+    def test_persisted_template_store_no_startup_template_reads(self):
+        from artex.server import sign_jwt
+        class Empty(Executor):
+            def fetch_all(self,query):
+                if 'FROM tasks WHERE deleted_at IS NULL' in query.sql or 'FROM task_templates' in query.sql:
+                    self.calls.append(query);return []
+                return super().fetch_all(query)
+        self.db=Empty()
+        self.app=build_persisted_application(self.db,b'x'*32,TestCodec())
+        self.assertEqual(len(self.db.calls),1)
+        self.assertNotIn('task_templates',self.db.calls[0].sql)
+        self.assertEqual(self.request('/api/task-templates')[0],401)
+        self.assertEqual(len(self.db.calls),1)
+        self.assertEqual(self.request('/api/task-templates',token=sign_jwt(b'x'*32)),(200,{'templates':[]}))
+        self.assertEqual(len(self.db.calls),2)
+
     def test_key_validation_before_use(self):
         with self.assertRaises(ValueError):
             build_application(self.db, b'short', TestCodec())

@@ -67,7 +67,7 @@ class FactoryTests(unittest.TestCase):
     def test_unsupported_settings_fail_before_transport(self):
         for kwargs in ({'format':'openai-responses'}, {'proxy':'http://proxy.test'},
                        {'rate_per_second':1}, {'session_header_key':'Session'},
-                       {'retry':RetryOverride()}, {'format':'anthropic','thinking_type':'enabled'},
+                       {'retry':RetryOverride(connect=RetryRule(21))}, {'format':'anthropic','thinking_type':'enabled'},
                        {'format':'anthropic','reasoning_effort':'xhigh'},
                        {'base_url':'https://user:password@test.invalid'}, {'api_key':''}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
@@ -136,6 +136,41 @@ class FactoryTests(unittest.TestCase):
         store.pool=lambda: []
         with self.assertRaises(ProfileInvalid): coordinator.reload()
         self.assertIsNone(coordinator.runtime()[0])
+
+    def test_default_retry_factory_end_to_end(self):
+        from test_provider_retry import Clock
+        clock=Clock()
+        calls=[]; closed=[]
+        def construct(config):
+            def transport(*args):
+                calls.append(1)
+                if len(calls)<4:
+                    return Response(503,b'',lambda:closed.append(1))
+                return Response(200,json.dumps({'choices':[{'message':{'content':'ok'},'finish_reason':'stop'}]}))
+            return transport
+        factory=ProfileFactory(construct,clock=clock,sleep=clock.sleep)
+        provider=factory.build(profile(retry=RetryOverride()))
+        result=provider.complete(None,{'messages':[]})
+        self.assertEqual(result[0]['content'][0]['text'],'ok')
+        self.assertEqual(len(calls),4); self.assertEqual(len(closed),3)
+        self.assertAlmostEqual(clock.now,3.5)
+
+    def test_factory_retry_budget_and_cancellation(self):
+        from test_provider_retry import Clock
+        from artex.providers.retry import RetryLimitError
+        from artex.providers.http import TransportCancelled
+        clock=Clock(); calls=[]
+        def construct(config):
+            def transport(*args):
+                calls.append(1)
+                return Response(503,b'')
+            return transport
+        factory=ProfileFactory(construct,retry_max_attempts=2,clock=clock,sleep=clock.sleep)
+        provider=factory.build(profile(retry=RetryOverride()))
+        with self.assertRaises(TransportCancelled): provider.complete({'cancelled':True},{'messages':[]})
+        self.assertFalse(calls)
+        with self.assertRaises(RetryLimitError): provider.complete(None,{'messages':[]})
+        self.assertEqual(len(calls),1)
 
     def test_transport_construction_redacted(self):
         def fail(config): raise RuntimeError('private-key')

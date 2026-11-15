@@ -6,10 +6,14 @@ mount unported routes to generic success handlers. WSGI gateways may collapse
 repeated headers before this adapter sees them: the gateway must reject ambiguous
 duplicate Authorization/Content-Length headers and normalize URLs consistently.
 Decoded PATH_INFO containing '?' or '#' is rejected, not reinterpreted as a URL.
+StreamingResponse bodies are pull-based, never buffered or assigned Content-Length.
+Gateways must close the returned iterable on disconnect; stream exceptions close
+without appending internal errors or pretending application-level completion.
 """
 from http import HTTPStatus
 import re
 from .core import Request, error_response
+from .streaming import StreamingResponse, ClosingIterator
 
 _TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
 _HOP_BY_HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -31,9 +35,12 @@ class WSGIApplication:
         self.max_body_bytes = max_body_bytes
 
     def __call__(self, environ, start_response):
+        streaming = None
         try:
             response = self._handle(environ)
-            if type(response.status) is not int or not 100 <= response.status <= 599 or not isinstance(response.body, bytes):
+            if isinstance(response, StreamingResponse):
+                streaming = ClosingIterator(response)
+            if type(response.status) is not int or not 100 <= response.status <= 599 or (streaming is None and not isinstance(response.body, bytes)):
                 raise ValueError('Invalid response')
             headers = list(response.headers.items())
             if any(not _header_valid(k, v) for k, v in headers):
@@ -45,6 +52,9 @@ class WSGIApplication:
             headers = [(k, v) for k, v in headers if k.lower() not in
                        _HOP_BY_HOP | connection_fields | {'content-length', 'x-content-type-options'}]
         except Exception:
+            if streaming is not None:
+                streaming.close()
+                streaming = None
             # Injected routers/handlers must never expose internal exception text.
             response = error_response(500, 'Internal server error')
             headers = list(response.headers.items())
@@ -55,11 +65,18 @@ class WSGIApplication:
         # WSGI servers own framing. Informational/204/304 responses have no body;
         # HEAD preserves the would-be representation length but emits no bytes.
         no_body_status = response.status < 200 or response.status in (204, 304)
-        if not no_body_status:
+        if not no_body_status and streaming is None:
             headers.append(('Content-Length', str(len(response.body))))
         headers.append(('X-Content-Type-Options', 'nosniff'))
-        start_response(f'{response.status} {reason}', headers)
-        return [] if no_body_status or str(environ.get('REQUEST_METHOD', '')).upper() == 'HEAD' else [response.body]
+        try:
+            start_response(f'{response.status} {reason}', headers)
+        except BaseException:
+            if streaming is not None: streaming.close()
+            raise
+        if no_body_status or str(environ.get('REQUEST_METHOD', '')).upper() == 'HEAD':
+            if streaming is not None: streaming.close()
+            return []
+        return streaming if streaming is not None else [response.body]
 
     def _handle(self, environ):
         try:

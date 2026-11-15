@@ -14,6 +14,7 @@ from .logs import LogService
 from .tasks import TaskService
 from .assets import AssetService
 from .findings import FindingService
+from .task_templates import TaskTemplateService
 from .profiles import ProfileService
 from .companies import CompanyService
 from .exploration import ExplorationService
@@ -21,7 +22,7 @@ from .exploration import ExplorationService
 
 def build_application(executor, signing_key: bytes, password_codec, *,
                       category_manager=None, task_manager=None, profile_available=None, asset_store=None,
-                      finding_store=None, finding_asset_resolver=None, company_store=None,
+                      finding_store=None, finding_asset_resolver=None, company_store=None, template_store=None,
                       profile_store=None, profile_coordinator=None, runtime_snapshot=None,
                       exploration_store_resolver=None, active_task_id=None,
                       exploration_nodeboard_factory=None, exploration_nodeboard_asset_resolver=None,
@@ -47,6 +48,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     TaskService(task_manager, profile_available=profile_available).register(router)
     AssetService(asset_store).register(router)
     FindingService(finding_store, asset_resolver=finding_asset_resolver).register(router)
+    TaskTemplateService(template_store).register(router)
     CompanyService(company_store).register(router)
     ExplorationService(exploration_store_resolver, active_task_id=active_task_id,
                        nodeboard_factory=exploration_nodeboard_factory,
@@ -85,6 +87,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
         raise ValueError('Signing key must be at least 32 bytes')
     from ..db.tasks import TaskStore
     from ..db.findings import FindingStore
+    from ..db.task_templates import TaskTemplateStore
     from ..db.profiles import ProfileStore
     from ..db.companies import CompanyStore
     from ..db.asset_store import AssetStore
@@ -101,6 +104,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              asset_store=AssetStore(executor, allow_global=allow_global_assets,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
+                             template_store=TaskTemplateStore(executor),
                              company_store=CompanyStore(executor),
                              profile_store=ProfileStore(executor),
                              profile_coordinator=profile_coordinator, runtime_snapshot=runtime_snapshot,

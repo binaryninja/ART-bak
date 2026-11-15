@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **52**.
-- python optional service routes: **47**.
-- matched offline contract routes: **52**.
-- go routes without python registration: **209**.
+- python offline contract routes: **57**.
+- python optional service routes: **52**.
+- matched offline contract routes: **57**.
+- go routes without python registration: **204**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -163,9 +163,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/llm/retry-policy` | `server/server.go:902` | Not registered |
 | POST | `/api/llm/retry-policy` | `server/server.go:903` | Not registered |
 | POST | `/api/llm/test` | `server/server.go:739` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
-| GET | `/api/logs` | `server/server.go:662` | Optional registration; adapters required: `python/artex/server/logs.py:85` |
-| GET | `/api/logs/history` | `server/server.go:663` | Optional registration; adapters required: `python/artex/server/logs.py:86` |
-| GET | `/api/logs/stream` | `server/server.go:664` | Not registered |
+| GET | `/api/logs` | `server/server.go:662` | Optional registration; adapters required: `python/artex/server/logs.py:205` |
+| GET | `/api/logs/history` | `server/server.go:663` | Optional registration; adapters required: `python/artex/server/logs.py:206` |
+| GET | `/api/logs/stream` | `server/server.go:664` | Optional registration; adapters required: `python/artex/server/logs.py:207` |
 | GET | `/api/mcp` | `server/server.go:866` | Not registered |
 | POST | `/api/mcp` | `server/server.go:867` | Not registered |
 | DELETE | `/api/mcp/{id}` | `server/server.go:868` | Not registered |
@@ -214,10 +214,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/task-categories` | `server/server.go:676` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
 | DELETE | `/api/task-categories/{id}` | `server/server.go:678` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
 | PATCH | `/api/task-categories/{id}` | `server/server.go:677` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
-| GET | `/api/task-templates` | `server/server.go:680` | Not registered |
-| POST | `/api/task-templates` | `server/server.go:681` | Not registered |
-| DELETE | `/api/task-templates/{id}` | `server/server.go:683` | Not registered |
-| PATCH | `/api/task-templates/{id}` | `server/server.go:682` | Not registered |
+| GET | `/api/task-templates` | `server/server.go:680` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
+| POST | `/api/task-templates` | `server/server.go:681` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
+| DELETE | `/api/task-templates/{id}` | `server/server.go:683` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
+| PATCH | `/api/task-templates/{id}` | `server/server.go:682` | Optional registration; adapters required: `python/artex/server/task_templates.py:30` |
 | GET | `/api/tasks` | `server/server.go:673` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
 | POST | `/api/tasks` | `server/server.go:674` | Optional registration; adapters required: `python/artex/server/tasks.py:203` |
 | POST | `/api/tasks/archive/batch` | `server/server.go:697` | Not registered |
@@ -336,6 +336,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/logs/stream`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -350,6 +351,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `DELETE /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/tasks/{id}/category`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/tasks/category/batch`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `GET /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/task-templates/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/task-templates/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `POST /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `GET /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
