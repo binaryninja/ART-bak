@@ -918,3 +918,15 @@ read-only suspended clock. Validation performs two SELECT FOR SHARE statements
 and no UPDATE. Copied leases/stale journals reject; actual trigger rollback leaves
 quarantine and refuses retry. This is not supported positive-timeout runtime,
 automatic expiry/resume/final assessment or production recovery acceptance.
+
+## Main-session metadata (stages 74–75)
+
+Manifest `ca45aa1599b8d72387c0f6847353666906ed6a9b017a4e5c810410b412dbf23c`
+passed two actual PostgreSQL groups and 18 collected tests (including repeated
+imported owner tests). Descending sequences/implicit zero timestamp, exact scope,
+revocation and policy replacement, row bounds and archive refusal were checked.
+No session creation/reset, provider calls or execution.
+
+Optional factory composition independently passed 18 collected tests on manifest
+`5b35dd6bd56f63fd60d38f38b3ffe4c95c3ad9392fec6ce9fed487021d6e9081`, including
+two added private-binding/actual WSGI JWT-order checks. No listener was started.

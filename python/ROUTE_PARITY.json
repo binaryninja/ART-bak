@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 175,
-    "python_optional_service_routes": 170,
-    "matched_offline_contract_routes": 175,
-    "go_routes_without_python_registration": 86
+    "python_offline_contract_routes": 176,
+    "python_optional_service_routes": 171,
+    "matched_offline_contract_routes": 176,
+    "go_routes_without_python_registration": 85
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -16,7 +16,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agents.py": "4bf7c4176bdb1e33c146a36f0b987a3d4b73833f383effcf69afea2e9bbbf8c7",
-    "python/artex/server/application.py": "c08c733bb7af2ccd6edf532ea9dd97579849d5a5b0905eb9f2e4cf9812129dd9",
+    "python/artex/server/application.py": "dbadcd44f12b5e393863e9b8a6a0b6ef9311f5e42110003404fa66f2c6264c92",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/audit.py": "93f5402b00ec4952336c75d77bebff2d711ecb098093c238269c5c7e8bdb732f",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
@@ -34,6 +34,7 @@
     "python/artex/server/intercept_rules.py": "62849c6f92c7a2d5a8236fa1aadf9ac68525004d9f31ac4388d6759bdbd81222",
     "python/artex/server/llm_records.py": "517bddaf11f765360eb4cba683d723ebb1b4d73ab63f12f644c9b3b04be94486",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
+    "python/artex/server/main_sessions.py": "193ec9b75cfe99472747cced3d9e9ae90369d989a342f2e58cf119b114cd4f85",
     "python/artex/server/mcp_catalog.py": "4c04081de65c31c7085e960a65202aa46067f4bddba9e34da6e8039999d6cd0e",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/pool_health.py": "fee471d74dd3c09c9cf4b52f7a13327ab88ab58eb2a320f8964f4a0a8865ee94",
@@ -2341,8 +2342,19 @@
       "expression": "\"GET /api/exploration/main-sessions\"",
       "method": "GET",
       "path": "/api/exploration/main-sessions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/exploration/main-sessions",
+        "source": "python/artex/server/main_sessions.py",
+        "line": 12,
+        "function": "MainSessionsService.register",
+        "handler": "lambda req, params: self.handle(req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+        "status": "optional offline contract; injected repository/live manager required"
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/exploration/main-session/new",
@@ -6171,6 +6183,18 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/main-sessions",
+      "source": "python/artex/server/main_sessions.py",
+      "line": 12,
+      "function": "MainSessionsService.register",
+      "handler": "lambda req, params: self.handle(req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

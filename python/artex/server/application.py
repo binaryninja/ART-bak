@@ -4,6 +4,8 @@ Callers explicitly provide a database executor, signing key and password codec.
 Use PostgresExecutor and BcryptCodec in production; never use test fakes. There
 is no task/provider/tool execution or automatic migration in this factory.
 """
+from .main_sessions import MainSessionsService
+from ..db.main_sessions import MainSessionsStore
 from .task_intent_assets import TaskIntentAssetsService
 from ..db.task_intent_assets import TaskIntentAssetsStore
 from ..db.task_coverage import TaskCoverageStore
@@ -106,6 +108,18 @@ def _validate_visibility_service(executor, service):
         raise ValueError("Visibility service requires original store, scope, guard and application executor")
 
 
+def _validate_main_sessions_service(executor, service):
+    if service is None:return
+    if (type(service) is not MainSessionsService or type(service.store) is not MainSessionsStore
+        or service.store is not service._store or service._executor is not executor
+        or service.store.executor is not executor or service.store._executor is not executor
+        or service.store.scope is not service._scope or service.store._scope is not service._scope
+        or service.store.guard is not service._guard or service.store._guard is not service._guard
+        or not callable(service.authorize) or not callable(service.store.authorize)
+        or not callable(service.store.current)):
+        raise ValueError('Main sessions require original resources and application executor')
+
+
 def _validate_intent_assets_service(executor, service):
     if service is None:return
     if type(service) is not TaskIntentAssetsService or type(service.store) is not TaskIntentAssetsStore:
@@ -165,7 +179,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -219,6 +233,9 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     Optional audit_service exposes only explicitly resolved task Guard diagnostics;
     it is independent of PostgreSQL, and never infers a task or global log view.
     Absent service installs no audit route. Construction invokes no audit callback.
+    Optional main_sessions_service reads only its fixed task main-session metadata;
+    explicit task query/read grants required, no session creation or active fallback.
+
     Optional intent_assets_service exposes only its fixed task intent targets with
     explicit per-source read grants; no discovery/testing or implicit global scope.
 
@@ -244,6 +261,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     _validate_pool_health_service(executor, pool_health_service)
     _validate_intercept_inspection_service(executor, intercept_inspection_service)
     _validate_intent_assets_service(executor, intent_assets_service)
+    _validate_main_sessions_service(executor, main_sessions_service)
     _validate_audit_service(audit_service)
     auth = AuthService(SettingsStore(executor), password_codec, signing_key)
     router = auth.router(version)
@@ -284,6 +302,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
         command_history_service.register(router)
     if visibility_service is not None:
         visibility_service.register(router)
+    if main_sessions_service is not None:
+        main_sessions_service.register(router)
     if intent_assets_service is not None:
         intent_assets_service.register(router)
     if intercept_inspection_service is not None:
@@ -307,7 +327,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -339,6 +359,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     _validate_pool_health_service(executor, pool_health_service)
     _validate_intercept_inspection_service(executor, intercept_inspection_service)
     _validate_intent_assets_service(executor, intent_assets_service)
+    _validate_main_sessions_service(executor, main_sessions_service)
     _validate_audit_service(audit_service)
     if not isinstance(signing_key, bytes) or len(signing_key) < 32:
         raise ValueError('Signing key must be at least 32 bytes')
@@ -386,5 +407,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_wait=side_wait,
                              coverage_service=coverage_service, traffic_service=traffic_service,
                              workspace_mutation_service=workspace_mutation_service,
-                             workspace_upload_service=workspace_upload_service, visibility_service=visibility_service, intercept_service=intercept_service, token_usage_service=token_usage_service, command_history_service=command_history_service, pool_health_service=pool_health_service, intercept_inspection_service=intercept_inspection_service, intent_assets_service=intent_assets_service, audit_service=audit_service,
+                             workspace_upload_service=workspace_upload_service, visibility_service=visibility_service, intercept_service=intercept_service, token_usage_service=token_usage_service, command_history_service=command_history_service, pool_health_service=pool_health_service, intercept_inspection_service=intercept_inspection_service, intent_assets_service=intent_assets_service, main_sessions_service=main_sessions_service, audit_service=audit_service,
                              version=version, max_body_bytes=max_body_bytes)

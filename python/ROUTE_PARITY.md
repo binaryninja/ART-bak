@@ -19,10 +19,10 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **175**.
-- python optional service routes: **170**.
-- matched offline contract routes: **175**.
-- go routes without python registration: **86**.
+- python offline contract routes: **176**.
+- python optional service routes: **171**.
+- matched offline contract routes: **176**.
+- go routes without python registration: **85**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -124,7 +124,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
-| GET | `/api/exploration/main-sessions` | `server/server.go:775` | Not registered |
+| GET | `/api/exploration/main-sessions` | `server/server.go:775` | Optional registration; adapters required: `python/artex/server/main_sessions.py:12` |
 | GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/tokens` | `server/server.go:779` | Optional registration; adapters required: `python/artex/server/token_usage.py:26` |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
@@ -388,6 +388,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/stream`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/exploration/main-sessions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/mcp/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
