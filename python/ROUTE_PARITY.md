@@ -22,12 +22,12 @@ Declaration counts retain every source location; alternatives are not simultaneo
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **192**.
-- python route declarations: **213**.
+- python offline contract routes: **193**.
+- python route declarations: **214**.
 - python alternative route groups: **15**.
-- python optional service routes: **186**.
-- matched offline contract routes: **192**.
-- go routes without python registration: **69**.
+- python optional service routes: **187**.
+- matched offline contract routes: **193**.
+- go routes without python registration: **68**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -254,7 +254,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PATCH | `/api/tasks/{id}/goals/{gid}` | `server/server.go:722` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | GET | `/api/tasks/{id}/intent-assets` | `server/server.go:707` | Optional registration; adapters required: `python/artex/server/task_intent_assets.py:15` |
 | POST | `/api/tasks/{id}/intents/rerun-blocked` | `server/server.go:734` | Not registered |
-| POST | `/api/tasks/{id}/intents/{iid}/control` | `server/server.go:731` | Not registered |
+| POST | `/api/tasks/{id}/intents/{iid}/control` | `server/server.go:731` | Optional registration; adapters required: `python/artex/server/intent_control_setup.py:22` |
 | POST | `/api/tasks/{id}/intents/{iid}/messages` | `server/server.go:732` | Not registered |
 | POST | `/api/tasks/{id}/intents/{iid}/rerun` | `server/server.go:733` | Not registered |
 | DELETE | `/api/tasks/{id}/intents/{iid}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
@@ -377,6 +377,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/exploration/findings/{id}/retests` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `POST /api/exploration/findings/{id}/deepen` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `DELETE /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `POST /api/tasks/{id}/intents/{iid}/control` at `python/artex/server/intent_control_setup.py:22` (_Application.__init__): Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation.
 - `GET /api/intercept/pending` at `python/artex/server/intercept_inspection.py:25` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/pending/{id}` at `python/artex/server/intercept_inspection.py:26` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/history` at `python/artex/server/intercept_inspection.py:27` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.

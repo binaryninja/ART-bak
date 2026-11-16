@@ -1,3 +1,4 @@
+import { ApiError, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -113,14 +114,9 @@ function getToken(): string | null {
 
 // Preserve the server's original row version, including fractional precision.
 // Go ignores this header; the Python metadata API requires it for stale-edit CAS.
-function interceptVersion(updatedAt: string): Record<string, string> {
-  if (typeof updatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(updatedAt)) {
-    throw new Error("Rule version is missing or invalid. Reload the rules before editing.");
-  }
-  return { "X-Rule-Updated-At": updatedAt };
-}
+const interceptVersion = ruleVersionHeaders;
 
-export async function http<T>(path: string, init?: RequestInit): Promise<T> {
+export async function http<T>(path: string, init?: RequestInit, expectedStatus?: number): Promise<T> {
   if (MOCK) return mockHandle<T>(init?.method ?? "GET", path, init?.body ?? null);
   const token = getToken();
   const r = await fetch(`/api${path}`, {
@@ -130,6 +126,9 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers as Record<string, string> | undefined),
     },
+  }).catch(() => {
+    const mutation = !["GET", "HEAD"].includes(init?.method ?? "GET");
+    throw new ApiError(0, mutation ? { unknown: true, retry: false } : {}, mutation ? "Connection lost; operation outcome is unknown. Do not repeat it." : "Connection unavailable");
   });
   if (r.status === 401) {
     if (typeof window !== "undefined") {
@@ -141,19 +140,19 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!r.ok) {
     const fallback = `${init?.method ?? "GET"} ${path}: ${r.status}`;
-    let message = fallback;
-    try {
-      const payload = (await r.json()) as { error?: unknown };
-      if (typeof payload.error === "string" && payload.error.trim()) {
-        message = payload.error.trim();
-      }
-    } catch {
-      // Keep the status-based fallback for empty or non-JSON error responses.
+    let payload: unknown;
+    try { payload = await r.json(); } catch {
+      // A proxy/truncated error body cannot prove an attempted write failed.
+      if (!["GET", "HEAD"].includes(init?.method ?? "GET")) payload = { unknown: true, retry: false };
     }
-    throw new Error(message);
+    throw new ApiError(r.status, payload, fallback);
   }
+  if (expectedStatus !== undefined && r.status !== expectedStatus) throw new ApiError(r.status, { unknown: true, retry: false }, "Unexpected operation response. Reconciliation required.");
   if (r.status === 204) return undefined as T;
-  return r.json();
+  return r.json().catch(() => {
+    const mutation = !["GET", "HEAD"].includes(init?.method ?? "GET");
+    throw new ApiError(r.status, mutation ? { unknown: true, retry: false } : {}, "Response could not be verified. Reload reads; do not repeat an unconfirmed mutation.");
+  });
 }
 
 // sseUrl builds a URL for Server-Sent Events streams.
@@ -354,11 +353,11 @@ export const api = {
     // Cancel only: soft (default) marks deleted and records a reason; hard cascades through exclusive descendants.
     mode?: "soft" | "hard",
   ) =>
-    post<{
+    http<{
       id: number;
       state: "paused" | "open" | "deleted" | "";
       deleted?: { intents: number; facts: number; findings: number; activities: number };
-    }>(`/tasks/${taskId}/intents/${intentId}/control`, { action, reason: reason ?? "", mode: mode ?? "soft" }),
+    }>(`/tasks/${taskId}/intents/${intentId}/control`, { method: "POST", body: JSON.stringify({ action, reason: reason ?? "", mode: mode ?? "soft" }) }, 200),
   sendWorkerMessage: (taskId: string, intentId: string, message: string, requestId: string) =>
     post<{
       id: number;
@@ -1204,11 +1203,11 @@ export const api = {
   interceptRules: () => get<{ rules: InterceptRule[] }>("/intercept/rules").then((r) => arr(r.rules)),
   createInterceptRule: (rule: Omit<InterceptRule, "id" | "created_at" | "updated_at">) =>
     post<InterceptRule>("/intercept/rules", rule),
-  updateInterceptRule: (id: number, rule: Omit<InterceptRule, "id" | "created_at" | "updated_at">) =>
-    put<InterceptRule>(`/intercept/rules/${id}`, rule),
-  deleteInterceptRule: (id: number) => del<{ deleted: number }>(`/intercept/rules/${id}`),
-  toggleInterceptRule: (id: number, enabled: boolean) =>
-    post<{ ok: boolean; enabled: boolean }>(`/intercept/rules/${id}/toggle`, { enabled }),
+  updateInterceptRule: (id: number, rule: Omit<InterceptRule, "id" | "created_at" | "updated_at">, updatedAt: string) =>
+    http<InterceptRule>(`/intercept/rules/${id}`, { method: "PUT", headers: interceptVersion(updatedAt), body: JSON.stringify(rule) }),
+  deleteInterceptRule: (id: number, updatedAt: string) => http<{ deleted: number }>(`/intercept/rules/${id}`, { method: "DELETE", headers: interceptVersion(updatedAt) }),
+  toggleInterceptRule: (id: number, enabled: boolean, updatedAt: string) =>
+    http<{ ok: boolean; enabled: boolean }>(`/intercept/rules/${id}/toggle`, { method: "POST", headers: interceptVersion(updatedAt), body: JSON.stringify({ enabled }) }),
 
   // ---- Asset interception rules (global blocklist) ----
   assetInterceptRules: () => get<{ rules: AssetInterceptRule[] }>("/asset-intercept/rules").then((r) => arr(r.rules)),
@@ -1249,28 +1248,9 @@ export const api = {
     })),
 
   // ---- Intercept tool config (global tool interception scope) ----
-  interceptGetToolConfig: async (): Promise<{ enabled_tools: string[] }> => {
-    if (MOCK) return { enabled_tools: ["bash"] };
-    const token = getToken();
-    const r = await fetch("/api/intercept/tool-config", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
-  },
-  interceptSetToolConfig: async (enabledTools: string[]): Promise<void> => {
-    if (MOCK) return;
-    const token = getToken();
-    const r = await fetch("/api/intercept/tool-config", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ enabled_tools: enabledTools }),
-    });
-    if (!r.ok) throw new Error(await r.text());
-  },
+  interceptGetToolConfig: (): Promise<{ enabled_tools: string[] | null; version_digest?: string }> => MOCK ? Promise.resolve({ enabled_tools: ["bash"] }) : get("/intercept/tool-config"),
+  interceptSetToolConfig: (enabledTools: string[], versionDigest?: string) =>
+    MOCK ? Promise.resolve({ ok: true }) : http<{ ok: boolean }>("/intercept/tool-config", { method: "PUT", headers: toolsVersionHeaders(versionDigest, isPythonProfile(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE)), body: JSON.stringify({ enabled_tools: enabledTools }) }),
 
   // ---- Intercept LLM judge (global model fallback approval) ----
   interceptGetJudgeConfig: () => get<JudgeConfig>("/intercept/judge"),

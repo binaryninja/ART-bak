@@ -21,7 +21,7 @@ class InterceptPolicyOwner:
         store.validate();self.store=store;self.interceptors=interceptors
         self.authorize=authorize;self.current=current;self.idle=idle;self.guard=lifecycle_guard
         self._pins=(store,interceptors,authorize,current,idle,lifecycle_guard)
-        self._locks=tuple(x._lock for x in interceptors);self._lock=RLock();self._active=False;self.unresolved=False;self.generation=0
+        self._locks=tuple(x._lock for x in interceptors);self._lock=RLock();self._active=False;self.unresolved=False;self.generation=0;self._calls={}
         self._transaction=store._executor.transaction
         store._policy_owner=self
     def validate(self):
@@ -32,6 +32,28 @@ class InterceptPolicyOwner:
         s.validate()
         for ic,lock in zip(ics,self._locks):
             if ic.store is not s or ic._lock is not lock or getattr(ic.invalidate,'__func__',None) is not Interceptor.invalidate:raise PolicyDenied('Interceptor binding changed')
+    def _register_call(self,session,call):
+        from .durable import _ConversationSession
+        if type(session) is not _ConversationSession:raise PolicyDenied('Issued session required')
+        session._issued(call)
+        with self._lock:
+            self.validate()
+            if self._active or self._calls:raise PolicyDenied('Policy owner busy')
+            lease=object();self._calls[lease]=(session,call,self.generation)
+            return lease
+    def _check_call(self,lease,session,call):
+        with self._lock:
+            self.validate()
+            entry=self._calls.get(lease)
+            if entry is None or entry[0] is not session or entry[1] is not call or entry[2]!=self.generation:raise PolicyDenied('Call lease unavailable')
+    def _release_call(self,lease,session,call,uncertain=False):
+        with self._lock:
+            entry=self._calls.get(lease)
+            if entry is None or entry[0] is not session or entry[1] is not call:raise PolicyDenied('Call lease unavailable')
+            if uncertain:
+                self.unresolved=True;self._pins[0]._unresolved=True
+            else:del self._calls[lease]
+
     def _allow(self,m,request_authorize,expected=None):
         if expected is None:expected=mutation_identity(m)
         def pure():
@@ -53,7 +75,7 @@ class InterceptPolicyOwner:
             attempted=True
         with self._lock:
             self.validate()
-            if self._active:raise PolicyDenied('Reentrant mutation denied')
+            if self._active or self._calls:raise PolicyDenied('Mutation conflicts with active execution')
             self._active=True
             try:
                 with self._pins[5](),ExitStack() as stack:

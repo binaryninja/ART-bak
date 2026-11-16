@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { mutationMustWait, isPythonProfile } from "@/lib/mutation-contract.mjs";
 import { toast } from "sonner";
+const PYTHON_PROFILE = isPythonProfile(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE);
 import {
   BotIcon,
   ListFilterIcon,
@@ -452,6 +454,9 @@ export default function InterceptPage() {
   // ---- tool scope dialog ----
   const [scopeOpen, setScopeOpen]       = React.useState(false);
   const [allTools, setAllTools]         = React.useState<Tool[]>([]);
+  const [scopeReady, setScopeReady] = React.useState(false);
+  const [scopeVersion, setScopeVersion] = React.useState<string | undefined>();
+  const [mutationBlocked, setMutationBlocked] = React.useState(false);
   const [enabledTools, setEnabledTools] = React.useState<Set<string>>(new Set());
   const [scopeLoading, setScopeLoading] = React.useState(false);
   const [scopeSaving, setScopeSaving]   = React.useState(false);
@@ -462,7 +467,7 @@ export default function InterceptPage() {
   const loadScope = React.useCallback(async () => {
     try {
       const cfg = await api.interceptGetToolConfig();
-      setScopeTools(cfg.enabled_tools);
+      setScopeTools(cfg.enabled_tools ?? []);
     } catch {
       // Nonessential information bar; ignore loading failures
     }
@@ -507,6 +512,7 @@ export default function InterceptPage() {
   }
 
   function openEdit(rule: InterceptRule) {
+    if (PYTHON_PROFILE && rule.match_type === "regex") { toast.error("Regex rules are unsupported by the experimental Python profile."); return; }
     setEditing(rule);
     setForm({
       name: rule.name, enabled: rule.enabled, priority: rule.priority,
@@ -520,13 +526,15 @@ export default function InterceptPage() {
   }
 
   async function handleSave() {
+    if (PYTHON_PROFILE && form.match_type === "regex") { toast.error("Only literal rules are supported in the Python profile."); return; }
+    if (mutationBlocked) { toast.error("Earlier outcome is unconfirmed; reconcile before further changes."); return; }
     if (!form.name.trim())    { toast.error("Name cannot be empty"); return; }
     if (!form.pattern.trim()) { toast.error("Pattern cannot be empty"); return; }
     if (regexErr)             { toast.error("Invalid regular-expression syntax"); return; }
     setSaving(true);
     try {
       if (editing) {
-        await api.updateInterceptRule(editing.id, form);
+        await api.updateInterceptRule(editing.id, form, editing.updated_at);
         toast.success("Rule updated");
       } else {
         await api.createInterceptRule(form);
@@ -535,27 +543,33 @@ export default function InterceptPage() {
       setOpen(false);
       load();
     } catch (e) {
+      if (mutationMustWait(e)) setMutationBlocked(true);
       toast.error((e as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(rule: InterceptRule) {
+    if (mutationBlocked) { toast.error("Earlier outcome is unconfirmed; reconcile before further changes."); return; }
     try {
-      await api.deleteInterceptRule(id);
+      await api.deleteInterceptRule(rule.id, rule.updated_at);
       toast.success("Rule deleted");
       load();
     } catch (e) {
+      if (mutationMustWait(e)) setMutationBlocked(true);
       toast.error((e as Error).message);
     }
   }
 
   async function handleToggle(rule: InterceptRule) {
+    if (PYTHON_PROFILE && rule.match_type === "regex") { toast.error("Regex rules cannot be activated or toggled in the Python profile."); return; }
+    if (mutationBlocked) { toast.error("Earlier outcome is unconfirmed; reconcile before further changes."); return; }
     try {
-      await api.toggleInterceptRule(rule.id, !rule.enabled);
+      await api.toggleInterceptRule(rule.id, !rule.enabled, rule.updated_at);
       load();
     } catch (e) {
+      if (mutationMustWait(e)) setMutationBlocked(true);
       toast.error((e as Error).message);
     }
   }
@@ -563,13 +577,18 @@ export default function InterceptPage() {
   // ---- scope handlers ----
 
   async function openScope() {
+    setScopeVersion(undefined);
+    setScopeReady(false);
     setScopeOpen(true);
     setScopeLoading(true);
     try {
       const [tools, cfg] = await Promise.all([api.tools(), api.interceptGetToolConfig()]);
       setAllTools(tools);
-      setEnabledTools(new Set(cfg.enabled_tools));
+      setEnabledTools(new Set(cfg.enabled_tools ?? []));
+      setScopeVersion(cfg.version_digest);
+      setScopeReady(true);
     } catch (e) {
+      if (mutationMustWait(e)) setMutationBlocked(true);
       toast.error("Load failed: " + (e as Error).message);
     } finally {
       setScopeLoading(false);
@@ -585,13 +604,16 @@ export default function InterceptPage() {
   }
 
   async function saveScope() {
+    if (!scopeReady) { toast.error("Load current configuration before saving."); return; }
+    if (mutationBlocked) { toast.error("Earlier outcome is unconfirmed; reconcile before further changes."); return; }
     setScopeSaving(true);
     try {
-      await api.interceptSetToolConfig([...enabledTools]);
+      await api.interceptSetToolConfig([...enabledTools], scopeVersion);
       toast.success("Interception scope saved");
       setScopeTools([...enabledTools]);
       setScopeOpen(false);
     } catch (e) {
+      if (mutationMustWait(e)) setMutationBlocked(true);
       toast.error("Save failed: " + (e as Error).message);
     } finally {
       setScopeSaving(false);
@@ -604,6 +626,8 @@ export default function InterceptPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-6">
+      {PYTHON_PROFILE && <p role="note" className="text-sm text-amber-600">Experimental Python profile: literal rules only. Existing regex rules are not executable. Durable enforcement is opt-in for conversations; ask, judge and task enforcement are not enabled by this page.</p>}
+      {mutationBlocked && <p role="alert" className="text-sm text-amber-600">An earlier change has an unconfirmed outcome. Further changes are blocked here. Operator reconciliation is required; refreshing this page is not proof of completion.</p>}
 
       {/* ---- header ---- */}
       <div className="flex items-center gap-2.5">
@@ -724,6 +748,7 @@ export default function InterceptPage() {
                     <TableCell className="text-center">
                       <Switch
                         checked={rule.enabled}
+                        disabled={mutationBlocked || (PYTHON_PROFILE && rule.match_type === "regex")}
                         onCheckedChange={() => handleToggle(rule)}
                       />
                     </TableCell>
@@ -731,6 +756,7 @@ export default function InterceptPage() {
                       <div className="flex items-center justify-end gap-0.5">
                         <Button
                           size="icon" variant="ghost" className="h-7 w-7"
+                          disabled={mutationBlocked || (PYTHON_PROFILE && rule.match_type === "regex")}
                           onClick={() => openEdit(rule)}
                         >
                           <PencilIcon className="h-3.5 w-3.5" />
@@ -738,7 +764,7 @@ export default function InterceptPage() {
                         <Button
                           size="icon" variant="ghost"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(rule.id)}
+                          onClick={() => handleDelete(rule)}
                         >
                           <Trash2Icon className="h-3.5 w-3.5" />
                         </Button>
@@ -809,7 +835,7 @@ export default function InterceptPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="string">String contains</SelectItem>
-                  <SelectItem value="regex">Regular expression</SelectItem>
+                  <SelectItem value="regex" disabled={PYTHON_PROFILE}>Regular expression</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -974,7 +1000,7 @@ export default function InterceptPage() {
 
           <div className="shrink-0 border-t px-6 py-3 flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setScopeOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={saveScope} disabled={scopeSaving || scopeLoading}>
+            <Button size="sm" onClick={saveScope} disabled={scopeSaving || scopeLoading || !scopeReady || mutationBlocked}>
               {scopeSaving ? "Saving…" : "Save"}
             </Button>
           </div>

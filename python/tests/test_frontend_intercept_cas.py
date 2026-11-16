@@ -10,8 +10,16 @@ class FrontendInterceptCASTests(unittest.TestCase):
             # Each next named API declaration delimits the current arrow property.
             block=re.split(r'\n  [A-Za-z]+:',block,maxsplit=1)[0]
             self.assertIn('updatedAt: string',block);self.assertIn('headers: interceptVersion(updatedAt)',block)
-        helper=api.split('function interceptVersion',1)[1].split('export async function http',1)[0]
-        self.assertIn('"X-Rule-Updated-At": updatedAt',helper)
+        # The six API methods retain their alias, now backed by the shared pure
+        # helper used by global tool-rule mutations too. Follow that exact import
+        # and alias rather than assuming the helper is declared inline.
+        self.assertRegex(api,r'import \{[^}]*\bruleVersionHeaders\b[^}]*\} from \"\./mutation-contract\.mjs\";')
+        self.assertIn('const interceptVersion = ruleVersionHeaders;',api)
+        source=(ROOT/'web/src/lib/mutation-contract.mjs').read_text()
+        helper=source.split('export function ruleVersionHeaders(version) {',1)[1].split('\nexport function ',1)[0]
+        self.assertIn("'X-Rule-Updated-At': version",helper)
+        self.assertIn("typeof version !== 'string'",helper)
+        self.assertIn('.test(version)',helper)
         self.assertNotIn('Date.',helper);self.assertNotIn('new Date',helper)
         self.assertIn('Reload the rules before editing',helper)
     def test_create_remains_header_free(self):

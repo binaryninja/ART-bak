@@ -22,6 +22,8 @@ No retry, auto-continuation after refusal, tool discovery, shell or target acces
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import nullcontext
+from threading import get_ident
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 import json
@@ -261,7 +263,7 @@ def _result(call_id, text, error=True):
 
 
 class BoundedAgent:
-    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic, settlement=None):
+    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic, settlement=None, _terminal_dispatch=None):
         if not callable(getattr(provider, 'complete', None)):
             raise ValueError('An injected completion provider is required')
         if settlement is not None:
@@ -279,7 +281,15 @@ class BoundedAgent:
                 raise ValueError('Every tool requires a callback and input validator')
             self.tools[tool.name] = Tool(tool.name, tool.description, _arguments(tool.input_schema), tool.callback, tool.validate)
 
+        self._terminal_dispatch_slot=None
+        self._terminal_dispatch=_terminal_dispatch;self._original_terminal_dispatch=_terminal_dispatch
+        if _terminal_dispatch is not None:
+            from ..intercept.durable import _ConversationSession
+            if type(_terminal_dispatch) is not _ConversationSession:raise ValueError('Issued conversation dispatch required')
+            _terminal_dispatch.bind(self)
+
     def _authorize(self, context, action):
+        if self._terminal_dispatch is not self._original_terminal_dispatch:raise RunStopped("intercept_binding_changed")
         context.check()
         if not callable(self.gate):
             raise RunStopped('permission_denied')
@@ -293,6 +303,7 @@ class BoundedAgent:
             raise
         except Exception:
             raise RunStopped('gate_error') from None
+        if self._terminal_dispatch is not self._original_terminal_dispatch:raise RunStopped("intercept_binding_changed")
         context.check()  # Cancellation while waiting for approval never executes.
         if not isinstance(grant, Grant) or not (grant.permission is True and grant.in_scope is True and grant.approved is True):
             raise RunStopped('permission_denied')
@@ -444,35 +455,47 @@ class BoundedAgent:
                         if valid is not True:
                             raise RunStopped('invalid_tool_input')
                         action = Action('tool', tool.name, _json(arguments), use['id'])
+                        intercept_identity=(action.kind,action.name,action.input_json,action.call_id)
+                        intercept_tool=(tool.name,tool.description,_json(tool.input_schema),tool.callback,tool.validate) if self._terminal_dispatch is not None else None
                         self._authorize(context, action)
-                        # Last cooperative boundary before callback execution.
-                        context.check()
-                        tool_calls += 1
+                        if self._terminal_dispatch is not None and (action.kind,action.name,action.input_json,action.call_id)!=intercept_identity:raise RunStopped('intercept_action_changed')
+                        # Issued only here, after whole-turn/tool validation and
+                        # the original ordinary grant. A gate cannot enter an
+                        # arbitrary session dispatch merely by constructing Action.
+                        slot=object()
+                        self._terminal_dispatch_slot=(slot,context,action,get_ident(),tool,intercept_tool)
                         try:
-                            output = tool.callback(context, action.arguments())
-                        except EffectUncertain:
-                            # Do not commit a normal terminal transcript or let
-                            # worker settlement release an undrained effect.
-                            raise
-                        except RunStopped:
-                            raise
-                        except Exception:
-                            raise RunStopped('tool_error') from None
-                        if not isinstance(output, str):
-                            raise RunStopped('invalid_tool_output')
-                        try:
-                            raw = output.encode('utf-8')
-                        except UnicodeError:
-                            raise RunStopped('invalid_tool_output') from None
-                        if len(raw) > limits.max_tool_output_bytes:
-                            marker = b'\n[Output truncated by runtime limit]'
-                            if limits.max_tool_output_bytes <= len(marker):
-                                output = marker[:limits.max_tool_output_bytes].decode('ascii')
-                            else:
-                                output = raw[:limits.max_tool_output_bytes-len(marker)].decode('utf-8', errors='ignore') + marker.decode('ascii')
-                        results.append(_result(use['id'], output or '(no output)', False))
-                        events.append({'type': 'tool_result', 'call_id': use['id'], 'name': tool.name, 'status': 'completed'})
-                        context.check()
+                            with (self._terminal_dispatch.dispatch(self,context,action,slot) if self._terminal_dispatch is not None else nullcontext()):
+                                # Last cooperative boundary before callback execution.
+                                if self._terminal_dispatch is None:context.check()
+                                tool_calls += 1
+                                try:
+                                    output = tool.callback(context, action.arguments())
+                                except EffectUncertain:
+                                    # Do not commit a normal terminal transcript or let
+                                    # worker settlement release an undrained effect.
+                                    raise
+                                except RunStopped:
+                                    raise
+                                except Exception:
+                                    raise RunStopped('tool_error') from None
+                                if not isinstance(output, str):
+                                    raise RunStopped('invalid_tool_output')
+                                try:
+                                    raw = output.encode('utf-8')
+                                except UnicodeError:
+                                    raise RunStopped('invalid_tool_output') from None
+                                if len(raw) > limits.max_tool_output_bytes:
+                                    marker = b'\n[Output truncated by runtime limit]'
+                                    if limits.max_tool_output_bytes <= len(marker):
+                                        output = marker[:limits.max_tool_output_bytes].decode('ascii')
+                                    else:
+                                        output = raw[:limits.max_tool_output_bytes-len(marker)].decode('utf-8', errors='ignore') + marker.decode('ascii')
+                                results.append(_result(use['id'], output or '(no output)', False))
+                                events.append({'type': 'tool_result', 'call_id': use['id'], 'name': tool.name, 'status': 'completed'})
+                                context.check()
+                        finally:
+                            self._terminal_dispatch_slot=None
                     except RunStopped as exc:
                         terminal = exc.reason
                         if not any(r['tool_use_id'] == use['id'] for r in results):

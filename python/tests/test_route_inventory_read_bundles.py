@@ -27,3 +27,9 @@ class ReadBundles(unittest.TestCase):
         self.assertIn('alternative_group',grouped[0])
         for bad in (rows+[rows[0]],rows+[dict(rows[0],function='Other.register')],[rows[0],dict(rows[1],public=True)]):
             with self.assertRaises(fixture.fixture.audit.AuditError):fixture.fixture.audit.group_python_routes(bad)
+    def test_owned_control_declaration_optional_subset(self):
+        rows=fixture.Tests().scan("        staged.add('POST','/api/tasks/{id}/intents/{iid}/control',handler)",file='intent_control_setup.py',owner='_Application',method='__init__')
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['registration_mode'],'optional explicit service registration')
+        self.assertFalse(rows[0]['public'])
+        self.assertIn('pause/resume subset',rows[0]['dependencies'])

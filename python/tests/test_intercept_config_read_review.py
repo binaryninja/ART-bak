@@ -4,6 +4,7 @@ from contextlib import contextmanager,nullcontext
 from unittest.mock import patch
 from artex.server.intercept_config_read import InterceptConfigReader,InterceptConfigReadService
 from artex.server.core import Request,json_response
+from artex.db.tool_intercept_config import tools_digest
 import test_intercept_config_read as fixture
 
 
@@ -50,7 +51,7 @@ class Review(unittest.TestCase):
     def test_only_bounded_read_query_no_mutation(self):
         self.db.rows=[('["x","x",null]',)]
         result=self.service.handle(self.request)
-        self.assertEqual(result.json(),{'enabled_tools':['x','x','']})
+        self.assertEqual(result.json(),{'enabled_tools':['x','x',''],'version_digest':tools_digest(self.db.rows[0][0])})
         self.assertEqual(len(self.db.calls),1)
         self.assertTrue(self.db.calls[0].sql.startswith('SELECT '))
         self.assertEqual(self.db.calls[0].params,('intercept_enabled_tools',65536))
@@ -60,8 +61,8 @@ class Review(unittest.TestCase):
             self.db.rows=rows
             result=self.service.handle(self.request)
             self.assertIn(result.status,(200,500))
-            if result.status==200:self.assertEqual(result.json(),{'enabled_tools':[]})
+            if result.status==200:self.assertEqual(result.json(),{'enabled_tools':[],'version_digest':tools_digest(self.db.rows[0][0])})
     def test_go_string_unmarshal_replaces_unpaired_utf16_surrogates(self):
         self.db.rows=[('["\\ud800","\\udc00","\\ud800\\udc00"]',)]
         result=self.service.handle(self.request)
-        self.assertEqual(result.json(),{'enabled_tools':['\ufffd','\ufffd','\U00010000']})
+        self.assertEqual(result.json(),{'enabled_tools':['\ufffd','\ufffd','\U00010000'],'version_digest':tools_digest(self.db.rows[0][0])})

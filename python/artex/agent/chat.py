@@ -163,7 +163,7 @@ class _Provider:
 
 
 class ChatAgent:
-    def __init__(self,transcript:TranscriptAdapter,resolver,*,gate,tools=(),capture=None,limits=Limits(),clock=None,compaction=None):
+    def __init__(self,transcript:TranscriptAdapter,resolver,*,gate,tools=(),capture=None,limits=Limits(),clock=None,compaction=None,terminal_intercept=None):
         if any(not callable(getattr(transcript,name,None)) for name in ('begin','current','commit')):
             raise ValueError('Explicit transcript adapter required')
         if not callable(resolver) or not callable(gate):raise ValueError('Explicit resolver and permission gate required')
@@ -173,6 +173,11 @@ class ChatAgent:
         self.transcript,self.resolver,self.gate,self.tools=transcript,resolver,gate,tuple(tools)
         self.capture,self.limits,self.clock=capture,limits,clock
         self._lock=RLock();self._running={}
+        self.terminal_intercept=terminal_intercept;self._terminal_intercept=terminal_intercept
+        if terminal_intercept is not None:
+            from ..intercept.durable import ConversationTerminalIntercept
+            if type(terminal_intercept) is not ConversationTerminalIntercept:raise ValueError('Exact conversation interception required')
+            terminal_intercept._bind_agent(self)
 
     def _binding(self,expected):
         try:binding=self.resolver(deepcopy(expected))
@@ -204,11 +209,14 @@ class ChatAgent:
         if self.compaction is not None and self.compaction.budget.context_window!=(model.window_tokens or 200000):
             raise ValueError('Compaction window must match identified model')
         user={'role':'user','content':[{'type':'text','text':message}]}
+        if self.terminal_intercept is not self._terminal_intercept:raise ValueError('Interception binding changed')
+        if self._terminal_intercept is not None:self._terminal_intercept._preflight(self,session_id,model)
         token=_Token(token)
         if token.cancelled:raise RunStopped('cancelled')
         with self._lock:
             if session_id in self._running:raise ChatBusy('Conversation already running')
             self._running[session_id]=token
+        intercept_session=None
         try:
             binding=self._binding(model)  # fail before user persistence when config missing
             # Validate the same immutable tool registry before admitting a user turn.
@@ -226,6 +234,8 @@ class ChatAgent:
             if not turn.created:return ChatOutcome(deepcopy(turn),None,turn.finalized,reused=True)
             if not isinstance(turn.messages,list) or not turn.messages or turn.messages[-1]!=user:
                 raise ChatPersistenceError()
+            if self._terminal_intercept is not None:
+                intercept_session=self._terminal_intercept._open(self,session_id,turn,token,model)
             def checked_gate(context,action):
                 self._check_turn(session_id,turn)
                 self._binding(model)
@@ -238,6 +248,7 @@ class ChatAgent:
             try:serialize(Config('openai','history-validation'),{'messages':turn.messages})
             except Exception:raise ChatPersistenceError() from None
             options={'gate':checked_gate,'tools':tuple(preflight.tools.values()),'limits':self.limits}
+            if intercept_session is not None:options['_terminal_dispatch']=intercept_session
             if self.clock is not None:options['clock']=self.clock
             runner=BoundedAgent(_Provider(self,session_id,turn,model),**options)
             request={'messages':deepcopy(turn.messages),'system':[system] if system else []}
@@ -249,4 +260,5 @@ class ChatAgent:
             if type(persisted) is not bool:raise ChatPersistenceError(result)
             return ChatOutcome(deepcopy(turn),result,persisted,stale=not persisted)
         finally:
+            if intercept_session is not None:intercept_session.close()
             with self._lock:self._running.pop(session_id,None)

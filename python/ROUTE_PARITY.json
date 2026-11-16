@@ -5,12 +5,12 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 192,
-    "python_route_declarations": 213,
+    "python_offline_contract_routes": 193,
+    "python_route_declarations": 214,
     "python_alternative_route_groups": 15,
-    "python_optional_service_routes": 186,
-    "matched_offline_contract_routes": 192,
-    "go_routes_without_python_registration": 69
+    "python_optional_service_routes": 187,
+    "matched_offline_contract_routes": 193,
+    "go_routes_without_python_registration": 68
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -31,10 +31,13 @@
     "python/artex/server/conversations.py": "2927d9dac2c95472749d709177e56a96c2ff2507fc29ead364bcab9629a71ed1",
     "python/artex/server/core.py": "7c8aa40d13f5e1add576483daf411b628871675ee7a98b87333c2add181ac9c3",
     "python/artex/server/exploration.py": "6189248f368c0a4bbe2b8194caa9f25ecf39a1997664f5ed6f73c67f9592bcc5",
+    "python/artex/server/finding_traffic_read.py": "ae31ba4ecc52471b4b248991147423d4779ec82ffb3e47a088b70d3b09042d94",
     "python/artex/server/findings.py": "1cdda8af899bded953a6a8c467b540c7d5ee3f31ad4881cc83841a138de878a6",
     "python/artex/server/hosted_setup.py": "5ed132a194b6e3cfd4ba794a53158e236420b5b89cc908207dbf2a75ff4829b8",
     "python/artex/server/inspection_setup.py": "4dad4b0b2682c609423df2799c032ee954ee1bb0fd5a9be8c1699a0d4b60aed9",
-    "python/artex/server/intercept_config_read.py": "673f2b9a22cd37f043bce7bd596405fdb57b6ff6bdcd979a8b5b66029a5fe2d0",
+    "python/artex/server/intent_control.py": "09df4db300b6bfc6905d485c7e4629fa4e5be6c50b2fc1716b74b5eb049c7ea3",
+    "python/artex/server/intent_control_setup.py": "f9692aa5880e552f39991115f78201fc2d77d48271323173d292e199db03f43d",
+    "python/artex/server/intercept_config_read.py": "5e59b088863f46633b89af9703a0c1e94075957b51d08356e74a899f04de82fd",
     "python/artex/server/intercept_detail_read.py": "6c1c427dd99c6feb57b1124e5a9c03f68b04858027a91f096d6b5c882a5ae2a0",
     "python/artex/server/intercept_execution_read.py": "e8b0635e6d3cb8d3a93f2fe6c8557abedd7ab60550414d5fc98165289215cb58",
     "python/artex/server/intercept_inspection.py": "99975e547b99bccaaa43ffade989e49a1fd114eeb63702de9c21acfc59746126",
@@ -83,6 +86,7 @@
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
     "python/artex/server/token_usage.py": "8b84daa5eefdaf582d7a0cf6617bcec08e097dc556e31da2cb3495f8d302af68",
     "python/artex/server/tool_catalog.py": "7cd1af0502dbb15e1043765d673ee2550df8a148cba7402ef81307262670af6a",
+    "python/artex/server/tool_intercept_mutation.py": "9c5a90a2ab77286d2e51134adf0eabd85cac927160c31df9ac5242a33f37ae6d",
     "python/artex/server/tool_intercept_read.py": "37ae8b14a6022b51a09dae4da3b7d06407ca5f554b03a4726563d194ce0809ff",
     "python/artex/server/traffic_read.py": "5d94c95cb2f80e564a893aa6f6d0461127f7363c78ac82e967a288b6055ab28f",
     "python/artex/server/visibility.py": "1bfac9db916483c61c249054e7cff77cbabf17e399ff40a04a4208f8bd0a5289",
@@ -2460,8 +2464,33 @@
       "expression": "\"POST /api/tasks/{id}/intents/{iid}/control\"",
       "method": "POST",
       "path": "/api/tasks/{id}/intents/{iid}/control",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "POST",
+        "path": "/api/tasks/{id}/intents/{iid}/control",
+        "source": "python/artex/server/intent_control_setup.py",
+        "line": 22,
+        "function": "_Application.__init__",
+        "handler": "self._handle",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
+        "declarations": [
+          {
+            "method": "POST",
+            "path": "/api/tasks/{id}/intents/{iid}/control",
+            "source": "python/artex/server/intent_control_setup.py",
+            "line": 22,
+            "function": "_Application.__init__",
+            "handler": "self._handle",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
+          }
+        ]
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/tasks/{id}/intents/{iid}/messages",
@@ -10082,6 +10111,32 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/tasks/{id}/intents/{iid}/control",
+      "source": "python/artex/server/intent_control_setup.py",
+      "line": 22,
+      "function": "_Application.__init__",
+      "handler": "self._handle",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/tasks/{id}/intents/{iid}/control",
+          "source": "python/artex/server/intent_control_setup.py",
+          "line": 22,
+          "function": "_Application.__init__",
+          "handler": "self._handle",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/intercept/pending",
       "source": "python/artex/server/intercept_inspection.py",
@@ -14381,6 +14436,18 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/tasks/{id}/intents/{iid}/control",
+      "source": "python/artex/server/intent_control_setup.py",
+      "line": 22,
+      "function": "_Application.__init__",
+      "handler": "self._handle",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

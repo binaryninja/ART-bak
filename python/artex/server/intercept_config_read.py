@@ -9,6 +9,7 @@ not a truncated policy. This metadata does not grant execution permission.
 import json
 from urllib.parse import urlsplit
 from ..db.core import Query
+from ..db.tool_intercept_config import tools_digest
 from ..intercept import DEFAULT_ENABLED_TOOLS
 from .core import json_response,error_response
 
@@ -24,23 +25,27 @@ class InterceptConfigReader:
     def validate(self):
         e,b,n=self._pins
         if self.executor is not e or self.max_bytes!=b or self.max_tools!=n:raise ConfigUnavailable()
-    def read(self):
+    def read(self,*,include_version=False):
+        if type(include_version) is not bool:raise ValueError("Exact snapshot option required")
         self.validate()
         rows=self._pins[0].fetch_all(Query('SELECT CASE WHEN octet_length(value)<=$2 THEN value ELSE NULL END FROM settings WHERE key=$1',('intercept_enabled_tools',self.max_bytes)))
         self.validate()
         if type(rows) not in (list,tuple) or len(rows)>1:raise ConfigUnavailable()
-        if not rows:return list(DEFAULT_ENABLED_TOOLS)
+        def result(value,raw):
+            return (value,tools_digest(raw)) if include_version else value
+        if not rows:return result(list(DEFAULT_ENABLED_TOOLS),None)
         row=rows[0]
         if type(row) not in (list,tuple) or len(row)!=1 or type(row[0]) is not str:raise ConfigUnavailable()
         if len(row[0].encode('utf-8'))>self.max_bytes:raise ConfigUnavailable()
-        try:value=json.loads(row[0],parse_constant=lambda _:(_ for _ in ()).throw(ValueError()))
-        except (ValueError,RecursionError):return []
-        if value is None:return None
-        if type(value) is not list or any(v is not None and type(v) is not str for v in value):return []
+        raw=row[0]
+        try:value=json.loads(raw,parse_constant=lambda _:(_ for _ in ()).throw(ValueError()))
+        except (ValueError,RecursionError):return result([],raw)
+        if value is None:return result(None,raw)
+        if type(value) is not list or any(v is not None and type(v) is not str for v in value):return result([],raw)
         if len(value)>self.max_tools:raise ConfigUnavailable()
         # JSON's decoder combines valid UTF-16 escape pairs already. Go replaces
         # remaining unpaired surrogate escapes rather than returning invalid Unicode.
-        return ['' if v is None else ''.join('\ufffd' if 0xD800<=ord(c)<=0xDFFF else c for c in v) for v in value]
+        return result(['' if v is None else ''.join('\ufffd' if 0xD800<=ord(c)<=0xDFFF else c for c in v) for v in value],raw)
 
 class InterceptConfigReadService:
     def __init__(self,reader,*,authorize,current,lifecycle_guard):
@@ -66,8 +71,8 @@ class InterceptConfigReadService:
                 self._check()
             allow()
             with self._pins[4]():
-                allow();value=self._pins[0].read();allow()
-                response=json_response(200,{'enabled_tools':value});allow()
+                allow();value,digest=self._pins[0].read(include_version=True);allow()
+                response=json_response(200,{'enabled_tools':value,'version_digest':digest});allow()
             allow();return response
         except PermissionError:return error_response(403,'Intercept configuration read denied')
         except InvalidRequest:return error_response(400,'Invalid intercept configuration request')

@@ -3,6 +3,7 @@
 import { assetSummaryDisplay } from "@/lib/legacy-display-text";
 
 import * as React from "react";
+import { mutationMustWait, confirmedIntentState, isPythonProfile } from "@/lib/mutation-contract.mjs";
 
 import {
   ArrowUpIcon,
@@ -28,6 +29,7 @@ import {
   ZapOffIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+const PYTHON_PROFILE = isPythonProfile(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE);
 
 import { ApprovalExecutionFocus, useApprovalFocus, useApprovalHistory } from "@/components/approval-execution-focus";
 import { MentionTextarea } from "@/components/mention-textarea";
@@ -368,7 +370,7 @@ function SessionItem({
   ) : null;
 
   const cancellable =
-    s.role === "worker" &&
+    !PYTHON_PROFILE && s.role === "worker" &&
     !s.inherited &&
     !deleted &&
     // Pending means unclaimed/open; pending, running, and paused intents can be deleted.
@@ -535,6 +537,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const [sending, setSending] = React.useState(false);
   const [stopping, setStopping] = React.useState(false);
   const [mainChatRunning, setMainChatRunning] = React.useState<boolean | null>(null);
+  const [unconfirmedControls, setUnconfirmedControls] = React.useState<Set<string>>(() => new Set());
   const [controllingIntent, setControllingIntent] = React.useState<string | null>(null);
   const [cancelIntent, setCancelIntent] = React.useState<Session | null>(null);
   const [cancelReason, setCancelReason] = React.useState("");
@@ -597,6 +600,8 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const controlWorker = React.useCallback(
     async (session: Session, action: "pause" | "resume" | "cancel", reason?: string, mode?: "soft" | "hard") => {
       if (!session.intent_id || session.inherited || controllingIntent) return;
+      if (unconfirmedControls.has(`${taskId}:${session.intent_id}`)) { toast.error("Worker operation is pending or unconfirmed. Do not repeat it; reconciliation is required."); return; }
+      if (PYTHON_PROFILE && action === "cancel") { toast.error("Intent deletion is unsupported by the experimental Python profile."); return; }
       if (action === "cancel" && !reason?.trim()) {
         toast.error("Enter a deletion reason");
         return;
@@ -604,6 +609,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       setControllingIntent(session.intent_id);
       try {
         const res = await api.controlIntent(taskId, session.intent_id, action, reason, mode);
+        confirmedIntentState(res, action);
         if (action === "pause") {
           patchIntentState(session.intent_id, "paused");
           toast.success(`Worker #${session.intent_id} paused`);
@@ -624,13 +630,14 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           setCancelReason("");
         }
       } catch (error) {
+        if (mutationMustWait(error)) setUnconfirmedControls(previous => new Set([...previous, `${taskId}:${session.intent_id}`]));
         toast.error(`Worker operation failed: ${(error as Error).message}`);
       } finally {
         setControllingIntent(null);
         setCancelIntent(null);
       }
     },
-    [controllingIntent, patchIntentState, taskId],
+    [controllingIntent, unconfirmedControls, patchIntentState, taskId],
   );
 
   // SSE connection state — surfaced so a dropped realtime link is visible, never
@@ -1565,6 +1572,8 @@ export function SessionsTab({ taskId }: { taskId: string }) {
 
   return (
     <TooltipProvider delayDuration={300}>
+      {PYTHON_PROFILE && <p role="note" className="text-xs text-amber-600">Experimental Python profile: local pause/resume only; intent deletion is unavailable.</p>}
+      {unconfirmedControls.size > 0 && <p role="alert" className="text-xs text-amber-600">A worker control is pending or unconfirmed. Its controls are blocked here; operator inspection is required. Refreshing is not confirmation.</p>}
       {/* Reserved height includes the page header (title, goal, tabs about 7.5rem) and content padding. Mobile uses p-4;
         desktop uses lg:p-6 plus scroll room. Reserve 10rem / 13rem respectively; using 13rem on mobile
         would waste 3rem of transcript height. */}
@@ -1699,7 +1708,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                             setWorkerMessage("");
                             setWorkerMessageRequestId("");
                           }}
-                          controlling={controllingIntent === s.intent_id}
+                          controlling={controllingIntent === s.intent_id || unconfirmedControls.has(`${taskId}:${s.intent_id}`)}
                           deleted={meta?.deleted}
                           onCancel={() => {
                             setCancelIntent(s);
@@ -2048,7 +2057,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                         size="icon-xs"
                         variant="destructive"
                         onClick={() => void controlWorker(active, "pause")}
-                        disabled={controllingIntent === active.intent_id}
+                        disabled={controllingIntent === active.intent_id || unconfirmedControls.has(`${taskId}:${active.intent_id}`)}
                         title="Pause current worker"
                         aria-label="Pause current worker"
                       >
@@ -2065,7 +2074,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                           size="xs"
                           variant="ghost"
                           onClick={() => void controlWorker(active, "resume")}
-                          disabled={controllingIntent === active.intent_id || workerMessageSending}
+                          disabled={controllingIntent === active.intent_id || unconfirmedControls.has(`${taskId}:${active.intent_id}`) || workerMessageSending}
                           title="Resume execution without sending a message"
                           aria-label="Resume execution directly"
                         >
@@ -2175,7 +2184,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
               <AlertDialogCancel>Back</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
-                disabled={!cancelIntent || controllingIntent !== null || !cancelReason.trim()}
+                disabled={PYTHON_PROFILE || !cancelIntent || controllingIntent !== null || !cancelReason.trim()}
                 onClick={() => cancelIntent && void controlWorker(cancelIntent, "cancel", cancelReason, deleteMode)}
               >
                 {controllingIntent ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}

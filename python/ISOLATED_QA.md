@@ -1810,3 +1810,63 @@ Actual genuine positive20 PostgreSQL expiry now passes the strengthened continua
 Positive120 regression uses unchanged corrected stage134 harness: blocked worker pause/drain, idle resume, ordinary planner then fresh worker claim. This actual PostgreSQL regression passes as well, with task token alive and no model calls inside control.
 
 Fresh original-schema PG17.11 with actual source/extension validators, positive duration from initial JWT task INSERT. No synthetic prepared pins, validator mocks, source gate bypass, real provider/command/target or default activation. Prior stage134 stranded-control evidence remains separately preserved; strengthened assertions are new, not relabeled old passes. Focused copied-freeze/lease/grant tests do not constitute exhaustive actualPG concurrency coverage.
+
+
+# Stage136: scoped finding-traffic metadata LIST
+
+Immutable manifest `99d9038dac9b2c0eeb78538991dbf19621f1dde0bafeccaba0e069038a5fa415`. Stable stage135 plus only new DB/service modules, dedicated owner/review tests and status.
+
+Three actual PostgreSQL17.11 groups and15 focused tests pass. Original schema with synthetic task/exploration/finding-node-linked standalone finding and two evidence snapshots/bindings. Evidence version2 and report-version -1 sentinel preserved; exact advisory transaction lock executes first; bindings ordered position/id. Recorded product SQL explicitly selects only metadata from snapshot tables, never header/body columns or to_jsonb; no SQL rewriting/normalization in harness. The inner CTE SELECT* references only the explicitly projected metadata CTE, not a snapshot table.
+
+Actual selector/grant denial before reads; grant revocation after advisory lock halts disclosure; row limit and aggregate UTF8 byte cap reject (actual NULL note sentinel observed); malformed hash reference rejects; archived parent404. Final JSON serialization grant revocation withholds traffic metadata. Header secret fixtures never appear in DTO.
+
+No fixture/product corrections. No blob/filesystem reads, integrity verification, global/inherited finding support, raw/header access, mutations, capture, traffic execution or default registration. Fresh approved isolated-loopback PostgreSQL under credentialless namespace/bubblewrap only. Advisory contention/concurrency timing not separately tested; actual command and transaction execution were tested.
+
+
+# Stage137: optional authenticated intent control composition
+
+Frozen stage134-fix core plus two reviewed server modules and dedicated setup owner/review tests. Manifest `1df76e81b745b4da747d759d2c988643d509c25be224badd1050a997517b87a8`. Service SHA09df4db300b6bfc6905d485c7e4629fa4e5be6c50b2fc1716b74b5eb049c7ea3 and setup SHA f9692aa5880e552f39991115f78201fc2d77d48271323173d292e199db03f43d exactly match approved source.
+
+Actual original-schema PostgreSQL with genuine JWT-created positive120 task, real validators, canonical worker and inert blocked provider passes:
+- Missing JWT401, original app404, duplicate adapter installation rejected.
+- Original proposal callback revoking selector refuses cleanly before pause effect, no retained control and no task-token cancellation.
+- Adapter grant absent outside ContextVar and on another thread denies, even during selector callback.
+- Actual pending pause retains original worker while post-header selector revocation aborts response body. Effect is not falsely undone or acknowledged paused. Task manager token stays alive.
+- After provider release, explicit authenticated internal inspection confirms canonical paused and releases control. HTTP resume200 changes only metadata, no handler provider call. Ordinary subsequent planner/worker ticks finish new worker claim; no pump failure.
+
+14 focused setup tests pass separately, including exact pending409 body behavior. Actual late-header test deliberately aborts body, so it does not separately assert the non-revoked pending response payload. No product/fixture corrections during run.
+
+Approved credentialless namespace+bubblewrap, fresh isolated-loopback PG and fixed synthetic provider only. No default route, invented HTTP inspect endpoint, cancellation action, messages, rerun, delete, live targets or providers. This verifies explicit pause/resume composition, not complete control/API parity.
+
+
+# Stage138: opt-in durable conversation terminal interception
+
+Immutable manifest `12f4d2f19450791af2074995ea72b06f4787f56906acdc64d2d0355f2a41ef5f`. Stable stage135 plus exact reviewed durable.py, policy_owner.py, agent/chat.py, agent/runtime.py and dedicated owner/review tests. No task runtime assembly wiring.
+
+Three actual PostgreSQL17.11/real JSONL groups and19 focused tests pass:
+
+1. Actual generated conversation, original literal rule/settings, owned session executor, Interceptor cache/owner and conversation DecisionStore. ChatAgent canonical begin → inert provider tool request → durable allowed row visible from inert callback before its in-memory marker → canonical finalization. Audit explicitly correlation=unavailable/execution_status=unknown, no invented run_id or tool_use_id. Unicode schema snapshot works. Callback-held lease blocks policy mutation. Copied session, cross-thread use and retained session after return deny.
+2. Literal deny persists terminal decision and never invokes callback. Ask explicitly refuses without an approval/pending integration or callback.
+3. PostINSERT cancellation produces uncertainty with running JSONL/retained lease and no callback; repeat refuses without more SQL. Simulated lost acknowledgment after actual commit likewise retains and prevents replay. Normal tool grant revoked after audit prevents callback. Original validated Action renamed by gate refuses before callback/interception SQL. No model text grants execution.
+
+No product or fixture corrections; second bounded run added cross-thread/retained checks with unchanged snapshot and passed. No live providers, actual tool effects, task scopes, canonical execution correlation, legacy Context/log integration or default activation. Approved credentialless filesystem/network isolation, fresh original-schema local PostgreSQL and generated temporary JSONL only. Terminal allow/deny integration is not complete approval/judge/runtime enforcement parity.
+
+
+# Stage139: exact raw-setting digest through optional GET
+
+Final manifest `e697ba046305c3542a0fb26f8d3434cbab5f841705db8058e696abbb04ed84d0`. Stable stage138 plus reviewed intercept_config_read.py and dedicated/updated tests. No frontend changes.
+
+Two actual PostgreSQL17.11/JWT groups pass: raw `["Bash"]`, whitespace variant, Unicode-escape variant, JSON null and absent setting produce distinct exact tools_digest(raw string/None), with one bounded SELECT per GET. The opaque returned digest successfully authorizes existing supported owned-session tools-setting writer CAS each time. No digest reconstructed from decoded list. Missing JWT/source grant deny before SQL; revocation after response headers withholds digest/body rather than replacing emitted status.
+
+31 focused tests pass after correcting snapshot assembly: initial snapshot omitted the already-reviewed updated test_intercept_config_read_review.py expectations, yielding three stale exact-response test failures for newly added version_digest. Initial manifest preserved. Added only that reviewed test file; all executable source hashes remain identical to actualPG run. No product/harness correction or PostgreSQL rerun required for this test-only correction.
+
+Approved isolated fresh original-schema PostgreSQL, credentialless filesystem/network namespace, dummyJWT/generated settings. No provider/tool execution/default registration. Writer support is the explicitly owned-session adapter, not pooled capability. Legacy reader.read() default compatibility is tested separately from HTTP response addition.
+
+
+# Stage140: narrow frontend compatibility QA
+
+Exact eight-file manifest SHA256 `5a9ea55daca6f42e20815d3a621d3a83080387354f181de4d03b41eac36cf835`: three changed TS/TSX files, pure mutation-contract.mjs and .d.mts, two authored/review test modules and compatibility documentation. Snapshot readonly in shared evidence directory.
+
+All10 Node tests pass under network-isolated credentialless bubblewrap, Node24.22.1. Only pure authored helper imports and original changed API function extracted into inert VM with stub fetch executed. Tests read changed source as text for call-site assertions; no application module imports, npm scripts, project initialization, network or real request executed. Node emitted its expected experimental stripTypeScriptTypes warning, no test failures.
+
+Cached official TypeScript5.9.3 parser reports zero syntax diagnostics for api.ts, sessions-tab.tsx, intercept/page.tsx and mutation-contract.d.mts. This is syntax parsing only, not type checking, module resolution, React rendering, Next build, browser interactions or whole-project QA. Existing registry-DNS/install blocker is neither retried nor resolved by this evidence. Exact raw timestamps/digests, strict unconfirmed mutation handling and explicit Python profile selection verified within stated test scope.
