@@ -10,10 +10,13 @@ from . import parse_skill,valid_skill_name,skill_rel_path
 from .file_listing import SkillDirectoryScope
 from .file_read import SkillFileReader,SkillFileSelection
 from ..tools.filesystem import ScopedFilesystem
+from ..db.successful_skill_stats import SuccessfulSkillStatsReader,SuccessfulStatsSelection
 
 _PARSER=parse_skill
 _CONTENT_NAMES=("read","validate","validate_disclosure","_allow","_open","_selection","_snapshot_check","_receipt_check")
 _CONTENT_METHODS=tuple(getattr(SkillFileReader,n) for n in _CONTENT_NAMES)
+_USAGE_NAMES=("read","validate","validate_disclosure","_allow")
+_USAGE_METHODS=tuple(getattr(SuccessfulSkillStatsReader,n) for n in _USAGE_NAMES)
 
 class SkillCatalogUnavailable(RuntimeError):pass
 class SkillCatalogConflict(RuntimeError):pass
@@ -27,13 +30,19 @@ class SkillCatalogSnapshot:
 
 class SkillCatalogReader:
     def __init__(self,scope,content_reader,*,authorize_global,current,lifecycle_guard,
-                 max_entries=4000,max_depth=32,max_text_bytes=1048576,max_metadata_bytes=4194304):
+                 max_entries=4000,max_depth=32,max_text_bytes=1048576,max_metadata_bytes=4194304,
+                 usage_reader=None):
         if type(scope) is not SkillDirectoryScope or type(content_reader) is not SkillFileReader or content_reader.scope is not scope:
             raise ValueError('Exact shared catalog root and content reader required')
         scope.validate();content_reader.validate()
         if any(not callable(c) for c in (authorize_global,current,lifecycle_guard)):raise ValueError('Explicit catalog authority required')
         for value,maximum in ((max_entries,10000),(max_depth,64),(max_text_bytes,16777216),(max_metadata_bytes,16777216)):
             if type(value) is not int or not 1<=value<=maximum:raise ValueError('Invalid catalog limits')
+        if usage_reader is not None and type(usage_reader) is not SuccessfulSkillStatsReader:
+            raise ValueError("Exact independently authorized usage reader required")
+        if usage_reader is not None:usage_reader.validate()
+        self.usage_reader=usage_reader;self._usage_reader=usage_reader
+        self._usage_selection=SuccessfulStatsSelection()
         self.scope,self.content_reader=scope,content_reader
         self.authorize_global,self.current,self.guard=authorize_global,current,lifecycle_guard
         self._pins=(scope,content_reader,authorize_global,current,lifecycle_guard)
@@ -48,6 +57,11 @@ class SkillCatalogReader:
         if parse_skill is not _PARSER or any(getattr(getattr(self.content_reader,n),"__self__",None) is not self.content_reader or getattr(getattr(self.content_reader,n),"__func__",None) is not method for n,method in zip(_CONTENT_NAMES,_CONTENT_METHODS)):
             raise SkillCatalogUnavailable("Catalog content implementation changed")
         self.content_reader.validate()
+        if self.usage_reader is not self._usage_reader:raise SkillCatalogUnavailable('Catalog usage binding changed')
+        if self.usage_reader is not None:
+            if any(getattr(getattr(self.usage_reader,n),"__self__",None) is not self.usage_reader or getattr(getattr(self.usage_reader,n),"__func__",None) is not method for n,method in zip(_USAGE_NAMES,_USAGE_METHODS)):
+                raise SkillCatalogUnavailable('Catalog usage implementation changed')
+            self.usage_reader.validate()
     def _allow(self,disclosure):
         self.validate()
         if self._pins[3](self.scope) is not True:raise PermissionError('Catalog scope expired')
@@ -126,6 +140,8 @@ class SkillCatalogReader:
         # final content-authority-only sweep (no more current callbacks).
         for selection,content in snapshot._contents:
             self.content_reader._allow(selection,(selection.name,selection.file),None)
+        if self.usage_reader is not None:
+            self.usage_reader.validate_disclosure(self._usage_selection,disclosure=disclosure)
         if disclosure is not None:disclosure()
         self.validate()
         if self._pins[2](self.scope) is not True:raise PermissionError('Catalog denied')
@@ -136,6 +152,10 @@ class SkillCatalogReader:
         self._snapshot_check(snapshot)
         for selection,content in snapshot._contents:
             if self.content_reader._pins[1](self.scope,selection) is not True:raise PermissionError('Content denied')
+            self.validate()
+        if self.usage_reader is not None:
+            ledger=self.usage_reader
+            if ledger.authorize_global(ledger.scope,self._usage_selection) is not True:raise PermissionError('Catalog usage denied')
             self.validate()
         self._snapshot_check(snapshot)
     def read(self,*,disclosure=None):
@@ -157,6 +177,14 @@ class SkillCatalogReader:
                         if value:row[field]=list(value) if field=='mcps' else value
                     contents.append((selection,content))
                 rows.append(row)
+            if self.usage_reader is not None:
+                stats=self.usage_reader.read(self._usage_selection,disclosure=lambda:self._allow(disclosure))['stats']
+                by_name={row['skill']:row for row in stats}
+                for row in rows:
+                    stat=by_name.get(row['name'])
+                    if stat is not None:
+                        row.update(calls=stat['calls'],tasks=stat['tasks'],usage_agents=stat['agents'])
+                        if stat['last_used'] is not None:row['last_used']=stat['last_used']
             payload=json.dumps({'skills':rows},ensure_ascii=False,separators=(',',':'))
             if len(payload.encode('utf-8'))>self._limits[2]:raise SkillCatalogLimit('Catalog response bound exceeded')
             snapshot=SkillCatalogSnapshot(payload,tree,tuple(contents))

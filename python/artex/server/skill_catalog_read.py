@@ -4,6 +4,7 @@ from .core import Request,json_response,error_response
 from ..skills.catalog_read import SkillCatalogReader,SkillCatalogConflict,SkillCatalogLimit,SkillCatalogUnavailable
 from ..skills.file_read import SkillFileConflict,SkillFileUnavailable
 from ..tools.filesystem import FilesystemError
+from ..db.successful_skill_stats import SuccessfulStatsUnavailable
 
 class InvalidCatalogRequest(ValueError):pass
 
@@ -38,7 +39,7 @@ class SkillCatalogReadService:
         except (SkillCatalogConflict,SkillFileConflict):response=error_response(409,'Skill catalog changed')
         except PermissionError:response=error_response(403,'Skill catalog denied')
         except (SkillCatalogLimit,FilesystemError):response=error_response(400,'Skill catalog unavailable or exceeds bounds')
-        except (OSError,SkillCatalogUnavailable,SkillFileUnavailable):response=error_response(503,'Skill catalog unavailable')
+        except (OSError,SkillCatalogUnavailable,SkillFileUnavailable,SuccessfulStatsUnavailable):response=error_response(503,'Skill catalog unavailable')
         except Exception:response=error_response(500,'Skill catalog read failed')
         return response,None
     def handle(self,request):return self._prepare(request)[0]
