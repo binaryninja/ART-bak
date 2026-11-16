@@ -459,7 +459,8 @@ class ApplicationTests(unittest.TestCase):
         with patch('artex.db.conversations.ConversationStore') as store,patch('artex.server.application.ConversationService') as service:
             build_persisted_application(db,b'x'*32,TestCodec(),conversation_running=running,
                                         conversation_agent_available=agent,conversation_profile_available=profile)
-            store.assert_called_once_with(db)
+            from artex.db.conversations import ConversationReadLimits
+            store.assert_called_once_with(db,read_limits=ConversationReadLimits())
             service.assert_called_once_with(store.return_value,running=running,agent_available=agent,profile_available=profile)
             store.return_value.list.assert_not_called();store.return_value.get.assert_not_called()
         running.assert_not_called();agent.assert_not_called();profile.assert_not_called()

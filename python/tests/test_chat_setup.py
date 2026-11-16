@@ -22,7 +22,7 @@ class ChatDB(Database):
         self.conversation=(1,'fixture-agent','Fixture',None,None,stamp,stamp)
         self.fail_terminal=False
     def fetch_all(self,q):
-        if 'FROM conversations\nORDER BY' in q.sql:return [self.conversation]
+        if 'FROM conversations ORDER BY' in q.sql:return [self.conversation]
         if 'FROM conversation_activities' in q.sql:
             stamp=datetime.now(timezone.utc)
             rows=[(i,*a[1:7],stamp,*a[8:12]) for i,a in enumerate(self.activities,1)]

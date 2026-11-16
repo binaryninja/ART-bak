@@ -30,7 +30,7 @@ from ..agent.runtime import Limits
 from ..chat_dispatch import ChatDispatcher
 from ..chat_transcripts import ChatTranscriptAdapter
 from ..transcripts import TranscriptStore
-from ..db.conversations import ConversationStore, Conversation
+from ..db.conversations import ConversationStore, ConversationReadLimits, Conversation
 from ..db.conversation_activity import ConversationActivityStore,ActivityReadLimits
 from ..sidequestion import Model
 from .runtime_setup import RuntimeBundle
@@ -53,7 +53,7 @@ class ChatRuntimeBundle:
 def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
                                authorize, gate, tools, system_prompt, single_process,
                                workers=1, capacity=4, max_receipts=10000,
-                               capture=None, limits=Limits(), compaction=None, activity_read_limits=ActivityReadLimits()):
+                               capture=None, limits=Limits(), compaction=None, activity_read_limits=ActivityReadLimits(), conversation_read_limits=ConversationReadLimits()):
     """Return an unregistered service and explicit owned dispatcher.
 
     authorize(request, conversation)->True is required for every live resource
@@ -64,6 +64,8 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
     """
     if type(activity_read_limits)is not ActivityReadLimits:raise ValueError('Explicit activity read limits required')
     activity_read_limits.validate()
+    if type(conversation_read_limits)is not ConversationReadLimits:raise ValueError('Explicit conversation read limits required')
+    conversation_read_limits.validate()
     if compaction is not None and not isinstance(compaction,ChatCompaction):
         raise ValueError('Explicit valid compaction configuration required')
     if single_process is not True:
@@ -84,7 +86,7 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
             raise ChatUnavailable('No default provider')
     BoundedAgent(NoProvider(), gate=gate, tools=tools, limits=limits)
     transcript = ChatTranscriptAdapter(TranscriptStore(transcript_root))
-    conversations = ConversationStore(executor)
+    conversations = ConversationStore(executor,read_limits=conversation_read_limits)
     salt = os.urandom(32)  # local opaque identity, not an account credential
 
     def activities(identifier):
@@ -164,7 +166,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
                            transport_factory, health, transcript_root,
                            authorize, gate, tools, agent_available, system_prompt,
                            single_process, workers=1, capacity=4, max_receipts=10000,
-                           capture=None, limits=Limits(), compaction=None, application_options=None, activity_read_limits=ActivityReadLimits(),
+                           capture=None, limits=Limits(), compaction=None, application_options=None, activity_read_limits=ActivityReadLimits(), conversation_read_limits=ConversationReadLimits(),
                            catalog_store=None, catalog_prompt=None, catalog_detail_defaults=None):
     """Opt-in complete configuration/conversation WSGI wiring, without listening.
 
@@ -194,8 +196,10 @@ def build_chat_application(executor, signing_key, password_codec, *,
         raise ValueError('Explicit conversation authority and gate required')
     if type(activity_read_limits)is not ActivityReadLimits:raise ValueError('Explicit activity read limits required')
     activity_read_limits.validate()
+    if type(conversation_read_limits)is not ConversationReadLimits:raise ValueError('Explicit conversation read limits required')
+    conversation_read_limits.validate()
     options = dict(application_options or {})
-    reserved = {'conversation_running', 'conversation_agent_available', 'conversation_profile_available'}
+    reserved = {'conversation_running', 'conversation_agent_available', 'conversation_profile_available', 'conversation_read_limits'}
     if reserved & options.keys():
         raise ValueError('Conversation adapters are owned by this assembly')
     state = {}
@@ -248,7 +252,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
 
     profiles = build_profile_runtime_application(executor, signing_key, password_codec,
         transport_factory=transport_factory, health=health,
-        application_options=dict(options, conversation_running=running,
+        application_options=dict(options, conversation_read_limits=conversation_read_limits, conversation_running=running,
             conversation_agent_available=supported, conversation_profile_available=available_profile))
     state['profiles'] = profiles
     chat = None
@@ -256,7 +260,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
         chat = build_conversation_runtime(executor, profiles,
             transcript_root=transcript_root, authorize=authorize, gate=gate, tools=tools,
             system_prompt=prompt, single_process=single_process, workers=workers,
-            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits, compaction=compaction,activity_read_limits=activity_read_limits)
+            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits, compaction=compaction,activity_read_limits=activity_read_limits,conversation_read_limits=conversation_read_limits)
         state['chat'] = chat
         chat.service.register(profiles.application.router)
         if catalog is not None:catalog.register(profiles.application.router)

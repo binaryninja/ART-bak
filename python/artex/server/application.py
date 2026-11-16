@@ -344,7 +344,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
 def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 runner=None, profile_available=None,
                                 conversation_running=None, conversation_agent_available=None,
-                                conversation_profile_available=None,
+                                conversation_profile_available=None, conversation_read_limits=None,
                                 live_last_activity=None, log_ring=None, allow_global_assets=False,
                                 finding_asset_resolver=None, root_domain_resolver=None,
                                 profile_coordinator=None, runtime_snapshot=None, stats_runtime_snapshot=None,
@@ -374,6 +374,10 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     transport are caller-owned. Exploration resolver/active selection callbacks
     are forwarded unchanged, never inferred or invoked during construction.
     """
+    from ..db.conversations import ConversationReadLimits
+    if conversation_read_limits is None:conversation_read_limits=ConversationReadLimits()
+    if type(conversation_read_limits)is not ConversationReadLimits:raise ValueError('Explicit conversation read limits required')
+    conversation_read_limits.validate()
     _validate_coverage_service(executor, coverage_service)
     _validate_traffic_service(traffic_service)
     _validate_workspace_mutation_service(workspace_mutation_service)
@@ -412,7 +416,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                                     root_domain_resolver=root_domain_resolver),
                              finding_store=FindingStore(executor),
                              template_store=TaskTemplateStore(executor),
-                             conversation_store=ConversationStore(executor),
+                             conversation_store=ConversationStore(executor,read_limits=conversation_read_limits),
                              conversation_running=conversation_running,
                              conversation_agent_available=conversation_agent_available,
                              conversation_profile_available=conversation_profile_available,
