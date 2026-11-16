@@ -1778,3 +1778,35 @@ Four actual PostgreSQL17.11 groups and18 focused tests pass:
 - Two independent transaction/store instances synchronized at a barrier race allow/deny on one pending row: exactly one True and one False, bounded thread joins, final status one winner. No shared test lifecycle lock serializes the calls.
 
 Initial fixture omitted required task.goal and failed before product execution. Corrected only generated INSERT to include harmless goal; failure log preserved. No product edits or driver normalization. No runtime Context, Guard, reviewer, approval UI, tool/model execution or HTTP registration claim. Approved credentialless namespace+bubblewrap and isolated-loopback temporary original-schema DB only.
+
+
+# Stage134: explicit per-intent pause/resume
+
+Exact immutable stage130 genuine timed-admission base plus reviewed intent_control.py, engine.py, engine_runner.py, host.py and dedicated tests. Manifest SHA256 `7fdf1557a00c6c0bd46ed57bee90cac4dcfcc289603f169b98d7360274c49bbd`.
+
+Actual PostgreSQL17.11 genuine authenticated positive120 task (positive at original INSERT, real source/extension validators, no synthetic pins) passes:
+- Foreign intent and denied pause leave original task token alive and no retained clean reservation.
+- Actual blocked worker pause returns pending with exact running claim retained; resume before confirmed drain is denied without provider calls.
+- Provider release yields canonical cancelled worker, exact paused CAS version2, no returned record_fact tool effect. Inspection confirms drain and releases control reservation. Task token remains uncancelled.
+- Resume moves only paused→open version3, no provider call in control. Repeated resume is denied. Ordinary owned ticks first run planner due queued events, then fresh worker claim completes done version5. No pump failure or unresolved owner.
+
+Separate genuine positive20 expiry fixture passes: retained pending control reaches actual persisted deadline; observer reports draining. Resume is denied; after provider release, expired inspection refuses runnable confirmation, original control and runner ownership stay retained, task remains running rather than false terminal, and no extra provider calls occur. This validates conservative retention, not recovery or successful finalization of that retained-control case.
+
+11 focused owner/review tests pass separately. Direct stale-version SQL race and injected CAS/commit failure were not added as actualPG cases here; focused tests cover part of the uncertainty contract, not exhaustive concurrency evidence.
+
+Initial fixture assumed first post-resume tick directly ran worker. Actual intended scheduling ran planner first, so assertion failed. Preserved initial log/harness; author confirmed cadence. Corrected fixture permits at most4 ordinary ticks, no forced claim or product change. Actual next two ticks suffice.
+
+Approved credentialless namespace/bubblewrap, fresh isolated-loopback PostgreSQL and synthetic canonical/provider data only. No live models, commands, targets, HTTP control route, messages, rerun, deletion or default enabling. Fixed inert transport only.
+
+
+# Stage134 corrected frozen-control continuation
+
+Immutable manifest `a830c8d3302bd7d226a37f56a21daa4a63c4e28d0acf619e2823273e99dcd8ca`. Prior stage134 source plus exact reviewed control/engine/runner/host and dedicated frozen owner/review tests/status. No HTTP overlay.
+
+17 focused tests pass on first run, no fixture timeout reproduced.
+
+Actual genuine positive20 PostgreSQL expiry now passes the strengthened continuation that earlier stage134 could not complete: retained pending worker pause; original observer freezes/draining; provider release and canonical cleanup; inspect confirms paused version2 and releases only exact control reservation under original freeze; new pause/resume remain denied; observer becomes ready; restricted inert final assessment persists timeout; repeat finalizer makes no provider calls; host.poll removes runner and leaves manual active/unresolved/pending_removal all zero. No worker thread errors or pump failure.
+
+Positive120 regression uses unchanged corrected stage134 harness: blocked worker pause/drain, idle resume, ordinary planner then fresh worker claim. This actual PostgreSQL regression passes as well, with task token alive and no model calls inside control.
+
+Fresh original-schema PG17.11 with actual source/extension validators, positive duration from initial JWT task INSERT. No synthetic prepared pins, validator mocks, source gate bypass, real provider/command/target or default activation. Prior stage134 stranded-control evidence remains separately preserved; strengthened assertions are new, not relabeled old passes. Focused copied-freeze/lease/grant tests do not constitute exhaustive actualPG concurrency coverage.

@@ -83,6 +83,7 @@ class TaskEngineHandle:
         self.current,self.guard=current,lifecycle_guard
         self.manual_mode,self.heartbeat,self.max_nodes,self.max_events=manual_mode,heartbeat_seconds,max_nodes,max_events
         self._condition=Condition(RLock());self._active=False;self._thread=None;self._child=None
+        self._intent_control=None;self._control_outcome=None;self._worker_scope=None
         self._events=[];self._event_ids=set();self._last_plan=None;self._started=False
         self._unresolved=False;self._closed=False;self._completed=False;self._wake=None
     def bind_cleanup(self,manager,outer):
@@ -191,6 +192,29 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
         if any(n.kind=='intent' and n.state=='running' for n in nodes):raise EngineUnresolved('Unowned running intent requires reconciliation')
         complete=(bool(goals) or self.manual_mode) and all(n.state in ('met','abandoned') for n in goals) and not any(n.kind=='intent' and n.state in ('open','running','paused') for n in nodes)
         return nodes,complete if actions is None else False
+    def reserve_intent_control(self,adapter,intent_id,action):
+        from .intent_control import IntentControl,IntentControlReservation,_KEY
+        if type(adapter) is not IntentControl or action not in ('pause','resume'):raise EngineUnavailable('Exact intent controller required')
+        adapter._owns_engine(self,intent_id,action)
+        with self._condition:
+            if self._intent_control is not None or self._closed or self._unresolved or self.token.cancelled:raise EngineUnavailable('Intent control unavailable')
+            if action=='pause':
+                if not self._active or self._child!=('worker',intent_id) or self._worker_scope is None:raise EngineUnavailable('Exact active worker required')
+                scope=self._worker_scope
+            else:
+                if self._active or self._child is not None:raise EngineUnavailable('Idle engine required')
+                scope=None
+            cap=IntentControlReservation(_KEY,adapter,self,intent_id,action,scope)
+            self._intent_control=cap;self._control_outcome=None
+            return cap
+    def finish_intent_control(self,cap,*,uncertain=False):
+        from .intent_control import IntentControlReservation
+        with self._condition:
+            if type(cap) is not IntentControlReservation or self._intent_control is not cap or cap.engine is not self:raise EngineUnavailable('Original intent control required')
+            if uncertain:self._unresolved=True;return
+            self._intent_control=None;self._control_outcome=None
+            self._condition.notify_all()
+
     def notify(self,event_id,kind,intent_id=0,detail=''):
         if not isinstance(event_id,str) or not event_id or len(event_id)>128 or kind not in ('done','finding','hint','manual'):raise ValueError('Invalid bounded engine event')
         if int64(intent_id,'intent ID')<0 or not isinstance(detail,str) or len(detail.encode('utf-8'))>8192:raise ValueError('Invalid event data')
@@ -220,7 +244,7 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
         if isinstance(now,bool) or not isinstance(now,(int,float)) or not math.isfinite(now) or now<0:raise ValueError('Finite monotonic tick required')
         with self._condition:
             if self._unresolved:raise EngineUnresolved('Engine requires reconciliation; do not retry work')
-            if self._active:return EngineProgress('busy')
+            if self._active or self._intent_control is not None:return EngineProgress('busy')
             if self._closed or self.token.cancelled:return EngineProgress('closed',cancelled=self.token.cancelled)
             self._active=True;self._thread=get_ident()
         effects=False;cleanup_finished=False
@@ -258,7 +282,7 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
                     if record is None:return EngineProgress('idle')
                     worker_scope=WorkerScope(self.scope.task_id,self.scope.exploration_id,self.scope.run_id,self.scope.revision,
                         record.id,record.version,self.owner,self.worker_model,self.worker_system)
-                    with self._condition:self._child=('worker',record.id)
+                    with self._condition:self._child=('worker',record.id);self._worker_scope=worker_scope
                     self._check();action='worker'
             # Do not hold the task guard over a model call: callbacks acquire it
             # for individual effects. Host current callbacks must include token.
@@ -287,6 +311,11 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
                     if len(self._event_ids)>=self.max_events:raise EngineUnresolved('Completed worker event requires reconciliation')
                     event_id=f'worker:{record.id}:{outcome.version}'
                     self._event_ids.add(event_id);self._events.append(dict(kind='done',intent_id=record.id,detail=outcome.state))
+            if action=='worker':
+                with self._condition:
+                    control=self._intent_control
+                    if control is not None and control.action=='pause' and control.scope is worker_scope:
+                        self._control_outcome=(outcome,cleanup_finished)
             terminal=outcome.outcome
             if terminal.result is not None and terminal.result.reason=='task_deadline_expired' and self._timed_execution is not None:
                 if not cleanup_finished or not terminal.persisted or terminal.stale or terminal.reused:
@@ -300,7 +329,7 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
                 raise EngineUnresolved('Child effects or settlement unconfirmed; reconcile before retry') from None
             raise
         finally:
-            with self._condition:self._active=False;self._thread=None;self._child=None;self._condition.notify_all()
+            with self._condition:self._active=False;self._thread=None;self._child=None;self._worker_scope=None;self._condition.notify_all()
     def settle_completed(self,complete):
         """After enclosing manager admission returns, recheck and exact-token CAS.
 

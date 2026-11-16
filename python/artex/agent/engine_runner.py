@@ -46,6 +46,7 @@ class EngineRunner:
         self.max_pending=max_pending
         self._lock=RLock(); self._handles={}; self._host=None; self._host_executor=None; self._host_manager=None
         self._frontier={};self._final_retirement={};self._host_settlement_check=None
+        self._intent_control=None;self._intent_methods=None
         self._timed_admission=None;self._admission_methods=None
         self._timed_lifecycle=None;self._timed_methods=None;self._timed_attempts={};self._host_work_check=None
 
@@ -74,6 +75,71 @@ class EngineRunner:
             self._host_work_check=host.owns_work
             self._host_executor=executor
             self._host_manager=host.manager
+
+    def install_intent_control(self,adapter):
+        """One explicit typed control adapter; no routes or automatic action."""
+        from .intent_control import IntentControl
+        if type(adapter) is not IntentControl or adapter.host is not self._host or self._host is None:
+            raise RuntimeUnavailable('Exact original host intent adapter required')
+        names=('validate_bindings','execute','inspect','retained','bind_frozen_inspection')
+        methods=tuple(getattr(adapter,n) for n in names)
+        if any(getattr(m,'__func__',None) is not getattr(IntentControl,n) for n,m in zip(names,methods)):
+            raise RuntimeUnavailable('Original intent control methods required')
+        methods[0]()
+        with self._lock:
+            if self._intent_control is not None:raise TaskConflict('Intent control already installed')
+            self._intent_control=adapter;self._intent_methods=methods
+
+    def _intent_adapter(self):
+        adapter=self._intent_control
+        if adapter is None:return None
+        if tuple(getattr(adapter,n) for n in ('validate_bindings','execute','inspect','retained','bind_frozen_inspection'))!=self._intent_methods:
+            raise RuntimeUnavailable('Intent control methods changed')
+        self._intent_methods[0]();return adapter
+
+    def _intent_retained(self,handle):
+        adapter=self._intent_adapter()
+        if adapter is None:return False
+        result=self._intent_methods[3](handle)
+        if type(result) is not bool:raise RuntimeUnavailable('Exact intent retention result required')
+        return result
+
+    def control_intent(self,task_id,intent_id,action,*,timeout=5.0):
+        from .host import AgentHost
+        if self._host is None or getattr(self._host.owns_intent_control,'__func__',None) is not AgentHost.owns_intent_control or not AgentHost.owns_intent_control(self._host,self,task_id,intent_id,action):
+            raise TaskConflict('Original hosted intent control slot required')
+        adapter=self._intent_adapter()
+        if adapter is None:raise RuntimeUnavailable('Explicit intent control unavailable')
+        key=str(task_id)
+        with self._lock:handle=self._handles.get(key)
+        if type(handle) is not BootstrapHandle or handle.manager is not self._host_manager or handle.phase!='engine' or type(handle._child) is not TaskEngineHandle:
+            raise RuntimeUnavailable('Actual prepared local generation required')
+        if not self._host_manager.owns_generation(key,handle.token,handle):
+            if action!='inspect' or not self._intent_retained(handle):
+                raise TaskConflict('Original running generation required')
+            # Only a pre-existing pending pause can transfer to its original
+            # registered observer's frozen cleanup authority. Never new work.
+            from .expiry_observer import OwnedExpiryObserver
+            from ..manager import TaskManager
+            binder=self._timed_binding()
+            if binder is None:raise TaskConflict('Original registered expiry owner required')
+            actions=binder.actions(handle);observer=actions.observer
+            if (actions.handle is not handle or type(observer) is not OwnedExpiryObserver
+                or observer.host is not self._host or actions.timing.kernel is not observer.clock
+                or observer.clock.store.handle is not handle or observer.clock.store.manager is not self._host_manager
+                or observer._lease is None or observer._freeze is None or observer._transfer is not None
+                or observer.clock.store.lease is not observer._lease
+                or getattr(self._host_manager.validate_deadline_observation,'__func__',None) is not TaskManager.validate_deadline_observation):
+                raise TaskConflict('Exact pending freeze inspection required')
+            TaskManager.validate_deadline_observation(self._host_manager,key,handle.token,handle,
+                observer._lease,observer._freeze)
+            self._intent_methods[4](handle,intent_id,observer)
+        method=self._intent_methods[2] if action=='inspect' else self._intent_methods[1]
+        result=method(handle,intent_id,timeout) if action=='inspect' else method(handle,intent_id,action,timeout)
+        self._intent_adapter()
+        with self._lock:
+            if self._handles.get(key) is not handle:raise TaskConflict('Intent generation changed')
+        return result
 
     def install_timed_admission(self,cap):
         """Explicit verified capability, only after original app composition."""
@@ -389,7 +455,7 @@ class EngineRunner:
         """Detach execution only after manager acknowledgement; never release a lease."""
         with self._lock:
             if key in self._frontier:return False
-        if self._timed_blocked(handle):return False
+        if self._timed_blocked(handle) or self._intent_retained(handle):return False
         if handle.unresolved or not handle.token.cancelled or handle.wait(0) is not True:
             return False
         manager=self._host_manager
@@ -455,6 +521,7 @@ class EngineRunner:
         with self._lock:
             handle=self._handles.get(str(task_id))
             if handle is None or handle.token is not token:raise TaskConflict('Engine generation not owned')
+        if self._intent_retained(handle):raise TaskConflict('Intent control retains generation; inspect before advance')
         binder=self._timed_binding()
         if binder is None:return handle.advance(now)
         if (self._host.owns_work!=self._host_work_check or self._host_work_check(self) is not True):
@@ -505,11 +572,11 @@ class EngineRunner:
             inventory=tuple(self._handles.items());frontier=tuple(self._frontier.items())
         bound_keys={key for key,entry in frontier}
         for key,entry in frontier:
-            if self._timed_blocked(entry[0]):continue
+            if self._timed_blocked(entry[0]) or self._intent_retained(entry[0]):continue
             if self._settle_frontier(key,entry):settled.append(key)
         for key,handle in inventory:
             if key in bound_keys:continue
-            if self._timed_blocked(handle):continue
+            if self._timed_blocked(handle) or self._intent_retained(handle):continue
             if isinstance(handle,BootstrapHandle) and handle.prepared_timeout_seconds>0 and not handle.token.cancelled:
                 # A positive generation cannot fall back to zero-engine completion.
                 continue

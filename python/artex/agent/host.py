@@ -94,6 +94,7 @@ class AgentHost:
         self._settlement_thread = None
         self._working = False
         self._working_thread = None
+        self._intent_control = None
         claim=getattr(runner,'claim_host',None)
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
@@ -105,6 +106,43 @@ class AgentHost:
             return (runner is self._original_runner and self.runner is runner
                     and self.manager is self._original_manager and self.manager.runner is runner
                     and self._working and self._working_thread == get_ident())
+
+    def owns_intent_control(self,runner,task_id,intent_id,action):
+        """Pure same-thread proof, never an intent or execution permission."""
+        with self._condition:
+            return (type(intent_id) is int and action in ('pause','resume','inspect')
+                    and runner is self._original_runner and self.runner is runner
+                    and self.manager is self._original_manager and self.manager.runner is runner
+                    and self._intent_control==(str(task_id),intent_id,action,get_ident()))
+
+    def control_intent(self,task_id,intent_id,action,*,timeout=5.0):
+        if action not in ('pause','resume','inspect'):raise ValueError('Intent action must be pause, resume or inspect')
+        if type(intent_id) is not int or not 0<intent_id<2**63:raise ValueError('Exact positive intent ID required')
+        if type(task_id) not in (int,str) or (type(task_id) is str and (not task_id.isascii() or not task_id.isdecimal())):
+            raise ValueError('Exact positive task ID required')
+        key=str(int(task_id))
+        if not 0<int(key)<2**63 or str(task_id)!=key:raise ValueError('Canonical task ID required')
+        if type(timeout) not in (int,float) or not math.isfinite(timeout) or timeout<0:raise ValueError('Finite nonnegative timeout required')
+        self._identity()
+        from .engine_runner import EngineRunner
+        if type(self.runner) is not EngineRunner or getattr(self.runner.control_intent,'__func__',None) is not EngineRunner.control_intent:
+            raise RuntimeUnavailable('Original intent control runner required')
+        with self._condition:
+            other_mutations=self._mutations-(1 if self._working else 0)
+            if (self._intent_control is not None or self._settling or self._draining or other_mutations
+                or (self._working and (action=='resume' or self._working_thread==get_ident()))):
+                raise TaskConflict('Intent control conflicts with owned lifecycle work')
+            slot=(key,intent_id,action,get_ident());self._intent_control=slot;self._mutations+=1
+        try:
+            self._identity()
+            result=EngineRunner.control_intent(self.runner,key,intent_id,action,timeout=timeout)
+            self._identity();return result
+        finally:
+            with self._condition:
+                self._intent_control=None;self._mutations-=1;self._condition.notify_all()
+
+    def inspect_intent_control(self,task_id,intent_id,*,timeout=5.0):
+        return self.control_intent(task_id,intent_id,'inspect',timeout=timeout)
 
     def owns_settlement(self, runner):
         """Callback-free check of this thread's original settlement reservation."""
@@ -158,6 +196,8 @@ class AgentHost:
     def _invoke(self, callback, *, admission):
         self._identity()
         with self._condition:
+            if self._intent_control is not None:
+                raise TaskConflict('Intent control owns lifecycle mutation')
             if self._settling:
                 raise TaskConflict('Lifecycle mutation cannot reenter completion settlement')
             if admission and self._working:
