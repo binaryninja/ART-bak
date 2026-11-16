@@ -51,28 +51,41 @@ class TaskInterceptReadService:
     def _check(self):
         s,e,scope,g,a,raw,c,request,rows,bound,response=self._pins
         if self.store is not s or s.executor is not e or s._executor is not e or s.scope is not scope or s._scope is not scope or s.guard is not g or s._guard is not g or s.authorize is not a or s.raw is not raw or s.current is not c or self.authorize is not request or type(s.max_rows) is not int or s.max_rows!=rows or type(s.max_bytes) is not int or s.max_bytes!=bound or self.max_bytes!=response:raise InspectionDenied()
-    def handle(self,request):
+    def validate_disclosure(self,request,selection):
+        if type(selection) is not TaskInterceptSelection:raise InvalidTaskRequest()
+        values=(selection.task_key,selection.unpaged,selection.page,selection.size,selection.status,selection.decision_source)
+        if tuple(type(v) for v in values)!=(str,bool,int,int,str,str) or selection!=parse_request(request):raise InvalidTaskRequest()
+        s,e,scope,g,a,raw,c,request_grant,rows,bound,response_bound=self._pins
+        if selection.task_key!=scope.task_key:raise InspectionDenied()
+        kind='task_all' if selection.unpaged else 'history'
+        source_selection=(kind,None,1 if selection.unpaged else selection.page,rows+1 if selection.unpaged else selection.size,selection.status,selection.decision_source)
+        def current():
+            self._check()
+            if c(scope) is not True:raise InspectionDenied()
+            self._check()
+        def allow():
+            current()
+            if request_grant(request,scope,selection) is not True:raise InspectionDenied()
+            current()
+            if a(scope,source_selection) is not True:raise InspectionDenied()
+            current()
+            if raw(scope,source_selection) is not True:raise InspectionDenied()
+            current()
+            if request_grant(request,scope,selection) is not True or a(scope,source_selection) is not True:raise InspectionDenied()
+            current()
+        allow()
+    def handle(self,request,*,selection=None):
         try:
-            try:selection=parse_request(request)
+            try:
+                parsed=parse_request(request)
+                if selection is not None and (type(selection) is not TaskInterceptSelection or selection!=parsed):raise InvalidTaskRequest()
+                selection=parsed if selection is None else selection
             except (ValueError,UnicodeError):raise InvalidTaskRequest() from None
             s,e,scope,g,a,raw,c,request_grant,rows,bound,response_bound=self._pins
             if selection.task_key!=scope.task_key:raise InspectionDenied()
             kind='task_all' if selection.unpaged else 'history'
             source_selection=(kind,None,1 if selection.unpaged else selection.page,rows+1 if selection.unpaged else selection.size,selection.status,selection.decision_source)
-            def current():
-                self._check()
-                if c(scope) is not True:raise InspectionDenied()
-                self._check()
-            def allow():
-                current()
-                if request_grant(request,scope,selection) is not True:raise InspectionDenied()
-                current()
-                if a(scope,source_selection) is not True:raise InspectionDenied()
-                current()
-                if raw(scope,source_selection) is not True:raise InspectionDenied()
-                current()
-                if request_grant(request,scope,selection) is not True or a(scope,source_selection) is not True:raise InspectionDenied()
-                current()
+            def allow():self.validate_disclosure(request,selection)
             allow()
             # Store owns its guard. Do not wrap its read in another non-reentrant
             # guard; final disclosure checks occur after store guard exit too.

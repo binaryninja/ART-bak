@@ -35,3 +35,26 @@ are validated with finite numbers/depth64/20k values, dates are validated, and r
 errors are redacted. Eventual composition must supply JWT/body-final fences; this
 standalone service is not authentication. Finite grant checks assume cooperative
 read-only policies, not arbitrary mutually mutating callback fixed points.
+
+## Optional exact typed metadata overlay
+
+`bind_metadata_reads(..., task_history_service=...)` adds only the protected GET
+`/api/intercept/task/{taskID}` when explicitly supplied. Exact TaskInterceptReadService
+and InterceptHistoryStore types, the fixed non-global InspectionScope, original
+executor/resources and disclosure method are pinned. No resolver or global task
+fallback is created. Existing original WSGI/AuthService and shared-executor rules
+remain; unsupported overlay stacking is refused rather than guessed.
+
+The pure canonical TaskInterceptSelection is reused by the service and wrapper,
+with exact field types and original request identity. Extracted validate_disclosure
+performs the same original request/source/raw/current grant chain without SQL or
+nested guards. Wrapper repeats that pinned chain after JWT and start_response;
+late revocation withholds body bytes. Dynamic literal/mixed-parameter route
+conflicts are rejected before any original route changes. No mutation, execution
+navigation or default registration is added. Store code is unchanged in this slice.
+
+Four new composition and two exact-scanner tests pass; 39 selected composition,
+standalone and review tests pass together. Four independent review cases and
+70 neighboring regression tests passed. PostgreSQL stage 115 passed four actual
+SQL/JWT groups and 21 focused tests. Standalone acceptance remains separate.
+The public route report was regenerated from the reviewed frozen snapshot.

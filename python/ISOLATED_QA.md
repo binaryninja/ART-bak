@@ -1528,3 +1528,15 @@ Three real PostgreSQL17.11 groups plus 13 focused owner/review tests pass.
 Actual text task007 differs from7 with no active/numeric fallback. Legacy unpaged items/total and paged source rule/model filters return actual joined conversation/rule metadata and exact page contract. max_rows+1 rejects oversized unpaged result rather than returning partial rows; aggregate UTF8 SQL bound refuses oversized diagnostics. Postfetch raw revocation, guard-exit raw revocation and final serialization current revocation all withhold rows.
 
 Service invoked directly; no route registration, decisions, execution, mutation or default activation. Disposable fixtures only, approved credentialless namespace/bwrap/readonly source and fresh loopback PostgreSQL. No targets/providers/real commands or production data.
+
+## Stage 115: optional fixed-task history metadata route
+
+Exact frozen task-route source; manifest SHA256 `6cb75171b0873bd5c506068e514c639e3e28684e49983b67d77cd07e503bfb68`. No overlays/product edits or fixture corrections.
+
+Four actual PostgreSQL17.11/JWT groups and 21 focused tests pass.
+
+Actual authenticated legacy unpaged and paged history return full bounded source rows for exact text key007; numeric7 refuses, query task override refuses, double-encoded selector never gains scope. Detail, judge-usage and notification history routes remain functional; original application unchanged. Missing JWT/global/raw denial, invalid selector/query and POST/HEAD reject before SQL.
+
+Raw grant, current lifetime and original JWT callback replacement during start_response each withhold body after one already-emitted200; no replacement-status claim. Mixed service registration detects literal, dynamic and partial-segment HEAD conflicts atomically without modifying original routes.
+
+Fixed-scope optional wrapper only, no global task resolver, query/body fallback, default activation, mutation or execution. Approved credentialless namespace/bwrap, readonly snapshot, cached dependencies and fresh loopback PostgreSQL. Synthetic fixtures only; no model/commands/targets or production data.

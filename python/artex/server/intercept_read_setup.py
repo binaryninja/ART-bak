@@ -21,6 +21,8 @@ from .intercept_config_read import InterceptConfigReader,InterceptConfigReadServ
 from .tool_intercept_read import ToolInterceptReadService
 from ..db.tool_intercept_read import ToolInterceptReader
 
+from . import intercept_task_read as _task_history
+from ..db.intercept_history import InterceptHistoryStore
 from . import intercept_detail_read as _detail
 from ..db.intercept_detail_read import InterceptDetailReader
 from .judge_config_read import JudgeConfigReadService
@@ -32,9 +34,10 @@ from ..db.notification_history import NotificationHistoryReader,DeliverySelectio
 
 _PATHS={'/api/intercept/judge':'judge_config','/api/intercept/tool-config':'config','/api/intercept/rules':'rules',
         '/api/intercept/judge/usage':'judge_usage','/api/notify/deliveries':'notification_history'}
-_PARSERS=(_judge.parse_request,_history.parse_request,_detail.parse_request)
+_PARSERS=(_judge.parse_request,_history.parse_request,_detail.parse_request,_task_history.parse_request)
 _REQUEST_STATE=ContextVar('metadata_read_request_state',default=None)
-_TYPES={'judge_config':(JudgeConfigReadService,JudgeConfigReader),
+_TYPES={'task_history':(_task_history.TaskInterceptReadService,InterceptHistoryStore),
+        'judge_config':(JudgeConfigReadService,JudgeConfigReader),
         'detail':(_detail.InterceptDetailReadService,InterceptDetailReader),
         'config':(InterceptConfigReadService,InterceptConfigReader),
         'rules':(ToolInterceptReadService,ToolInterceptReader),
@@ -42,6 +45,11 @@ _TYPES={'judge_config':(JudgeConfigReadService,JudgeConfigReader),
         'notification_history':(_history.NotificationHistoryReadService,NotificationHistoryReader)}
 
 def _selection_identity(kind,value):
+    if kind=='task_history':
+        if type(value) is not _task_history.TaskInterceptSelection:raise RuntimeError('Exact task selection required')
+        values=(value.task_key,value.unpaged,value.page,value.size,value.status,value.decision_source)
+        if tuple(type(v) for v in values)!=(str,bool,int,int,str,str):raise RuntimeError('Exact task selection fields required')
+        return (_task_history.TaskInterceptSelection,*values)
     if kind in ('judge_usage','detail'):
         if type(value) is not int:raise RuntimeError('Exact normalized days required')
         return (int,value)
@@ -71,16 +79,21 @@ class MetadataReadBundle:
     notification_history:object=None
     detail:object=None
     judge_config:object=None
+    task_history:object=None
 
 class _InterceptReadApplication:
     def __init__(self,application,services,authorize_global):
         config=services.get('config');rules=services.get('rules')
         self.original=application;self.config=config;self.rules=rules;self.authorize_global=authorize_global
         base=application.router;auth=base.authorize;owner=auth.__self__
-        self._pins=(application,base,auth,owner,authorize_global,config,rules,next(iter(services.values())).reader.executor,application.max_body_bytes)
+        self._pins=(application,base,auth,owner,authorize_global,config,rules,(next(iter(services.values())).store if 'task_history'==next(iter(services)) else next(iter(services.values())).reader).executor,application.max_body_bytes)
         self._auth_pins=(owner.store,owner.codec,owner.key,owner.clock)
         self._methods=(_key(application.__call__),_key(application._handle),_key(base.dispatch),_key(auth))
-        self._services={kind:(service,_key(service.handle),_key(service._check),service.reader,_key(service.reader.read),_key(service.reader.validate)) for kind,service in services.items()}
+        self._services={}
+        for kind,service in services.items():
+            resource=service.store if kind=='task_history' else service.reader
+            validator=service.validate_disclosure if kind=='task_history' else resource.validate
+            self._services[kind]=(service,_key(service.handle),_key(service._check),resource,_key(resource.read),_key(validator))
         self._service_pins=tuple(self._services.items())
         self._paths={path:kind for path,kind in _PATHS.items() if kind in services}
         self._path_pins=tuple(self._paths.items())
@@ -91,11 +104,12 @@ class _InterceptReadApplication:
         if 'rules' in services:staged.add('GET','/api/intercept/rules',lambda r,p:self._handle(r,'rules'))
         if 'judge_usage' in services:staged.add('GET','/api/intercept/judge/usage',lambda r,p:self._handle(r,'judge_usage'))
         if 'notification_history' in services:staged.add('GET','/api/notify/deliveries',lambda r,p:self._handle(r,'notification_history'))
+        if 'task_history' in services:staged.add('GET','/api/intercept/task/{taskID}',lambda r,p:self._handle(r,'task_history'))
         if 'detail' in services:staged.add('GET','/api/intercept/history/{id}',lambda r,p:self._handle(r,'detail'))
         self._router=staged;self._routes=tuple(staged._routes)
     def _check(self):
         app,base,auth,owner,grant,config,rules,executor,bound=self._pins
-        if tuple(self._services.items())!=self._service_pins or tuple(self._paths.items())!=self._path_pins or _judge.parse_request is not _PARSERS[0] or _history.parse_request is not _PARSERS[1] or _detail.parse_request is not _PARSERS[2]:raise RuntimeError('Metadata bindings changed')
+        if tuple(self._services.items())!=self._service_pins or tuple(self._paths.items())!=self._path_pins or _judge.parse_request is not _PARSERS[0] or _history.parse_request is not _PARSERS[1] or _detail.parse_request is not _PARSERS[2] or _task_history.parse_request is not _PARSERS[3]:raise RuntimeError('Metadata bindings changed')
         if (self.original is not app or app.router is not base or base.authorize is not auth
             or self.config is not config or self.rules is not rules or self.authorize_global is not grant
             or app.max_body_bytes!=bound or tuple(base._routes)!=self._base_routes
@@ -104,12 +118,16 @@ class _InterceptReadApplication:
             raise RuntimeError('Original authentication changed')
         if any(not _same(method,key) for method,key in zip((app.__call__,app._handle,base.dispatch,owner.authorized),self._methods)):
             raise RuntimeError('Original transport changed')
-        for service,handle,check,reader,read,validate in self._services.values():
-            if service.reader is not reader or reader.executor is not executor or not _same(service.handle,handle) or not _same(service._check,check) or not _same(reader.read,read) or not _same(reader.validate,validate):raise RuntimeError('Read service changed')
+        for kind,(service,handle,check,reader,read,validate) in self._services.items():
+            resource=service.store if kind=='task_history' else service.reader
+            validator=service.validate_disclosure if kind=='task_history' else reader.validate
+            if resource is not reader or reader.executor is not executor or not _same(service.handle,handle) or not _same(service._check,check) or not _same(reader.read,read) or not _same(validator,validate):raise RuntimeError('Read service changed')
             service._check()
     def _data_grants(self,request,kind,selection):
         service=self._services[kind][0]
         self._check()
+        if kind=='task_history':
+            service.validate_disclosure(request,selection);self._check();return
         scope_args=(service.reader.scope,) if kind=='detail' else ()
         if service.current(*scope_args) is not True:raise PermissionError()
         self._check()
@@ -144,22 +162,23 @@ class _InterceptReadApplication:
             self._check()
             state=_REQUEST_STATE.get()
             if state is None or state.get('request') is not request:raise RuntimeError('Original request context required')
-            selection=_PARSERS[0](request) if kind=='judge_usage' else _PARSERS[1](request) if kind=='notification_history' else _PARSERS[2](request) if kind=='detail' else None
+            selection=_PARSERS[0](request) if kind=='judge_usage' else _PARSERS[1](request) if kind=='notification_history' else _PARSERS[2](request) if kind=='detail' else _PARSERS[3](request) if kind=='task_history' else None
             identity=_selection_identity(kind,selection);request_identity=(request.method,request.target,request.body)
             state.update(selection=selection,identity=identity,request_identity=request_identity)
             self._disclose(request,kind,selection,identity,request_identity)
             service=self._services[kind][0]
-            result=service.handle(request,selection=selection) if kind in ('judge_usage','notification_history','detail') else service.handle(request)
+            result=service.handle(request,selection=selection) if kind in ('judge_usage','notification_history','detail','task_history') else service.handle(request)
             if result.status==200:self._disclose(request,kind,selection,identity,request_identity)
             else:self._check()
             return result
-        except (_judge.InvalidRequest,_history.InvalidRequest,_detail.InvalidDetailRequest):return error_response(400,'Invalid metadata request')
+        except (_judge.InvalidRequest,_history.InvalidRequest,_detail.InvalidDetailRequest,_task_history.InvalidTaskRequest):return error_response(400,'Invalid metadata request')
         except PermissionError:return error_response(403,'Intercept metadata access denied')
         except Exception:return error_response(503,'Intercept metadata unavailable')
     def __call__(self,environ,start_response):
         path=environ.get('PATH_INFO','')
         kind=self._paths.get(path)
         if kind is None and 'detail' in self._services and re.fullmatch(r'/api/intercept/history/[^/]+',path):kind='detail'
+        if kind is None and 'task_history' in self._services and re.fullmatch(r'/api/intercept/task/[^/]+',path):kind='task_history'
         if kind is None:return self.original(environ,start_response)
         state={};outer=self
         class Dispatch:
@@ -187,7 +206,7 @@ class _InterceptReadApplication:
         return body
 
 def bind_metadata_reads(application,*,authorize_global,config_service=None,rules_service=None,
-                        judge_usage_service=None,notification_history_service=None,detail_service=None,judge_config_service=None):
+                        judge_usage_service=None,notification_history_service=None,detail_service=None,judge_config_service=None,task_history_service=None):
     """Typed optional metadata routes. No defaults, mutation, or generic handlers.
 
     Each selected service retains its independent read/raw/current grants. The
@@ -199,21 +218,24 @@ def bind_metadata_reads(application,*,authorize_global,config_service=None,rules
     if type(owner) is not AuthService or getattr(auth,'__func__',None) is not AuthService.authorized:
         raise ValueError('Original AuthService JWT authorizer required')
     services={kind:service for kind,service in (('config',config_service),('rules',rules_service),
-        ('judge_usage',judge_usage_service),('notification_history',notification_history_service),('detail',detail_service),('judge_config',judge_config_service)) if service is not None}
+        ('judge_usage',judge_usage_service),('notification_history',notification_history_service),('detail',detail_service),('judge_config',judge_config_service),('task_history',task_history_service)) if service is not None}
     if not services or not callable(authorize_global):raise ValueError('Explicit metadata services and global grant required')
     executor=None
     for kind,service in services.items():
         service_type,reader_type=_TYPES[kind]
-        if type(service) is not service_type or type(service.reader) is not reader_type:
+        if type(service) is not service_type:raise ValueError('Exact typed metadata service required')
+        resource=service.store if kind=='task_history' else service.reader
+        if type(resource) is not reader_type:
             raise ValueError('Exact typed metadata services/readers required')
-        if executor is None:executor=service.reader.executor
-        elif service.reader.executor is not executor:raise ValueError('Metadata readers must share the original executor')
+        if executor is None:executor=resource.executor
+        elif resource.executor is not executor:raise ValueError('Metadata readers must share the original executor')
     paths={path for path,kind in _PATHS.items() if kind in services}
     for method,path,regex,handler,public in base._routes:
         if method in ('GET','HEAD') and any(regex.fullmatch(target) for target in paths):
             raise ValueError('Metadata read route conflicts with original application')
-    if 'detail' in services:
-        target=('api','intercept','history')
+    for dynamic,segment in (('detail','history'),('task_history','task')):
+        if dynamic not in services:continue
+        target=('api','intercept',segment)
         for method,path,regex,handler,public in base._routes:
             parts=path.strip('/').split('/')
             # Match each fixed prefix against Router's actual segment grammar,
@@ -227,13 +249,16 @@ def bind_metadata_reads(application,*,authorize_global,config_service=None,rules
                 return re.fullmatch(pattern,literal) is not None
             if method in ('GET','HEAD') and len(parts)==4 and all(prefix_matches(part,literal) for part,literal in zip(parts[:3],target)):
                 raise ValueError('Detail route conflicts with original application')
-    for service in services.values():
-        reader=service.reader
-        if not _same(service.handle,(service,type(service).handle)) or not _same(service._check,(service,type(service)._check)) or not _same(reader.read,(reader,type(reader).read)) or not _same(reader.validate,(reader,type(reader).validate)):
+    for kind,service in services.items():
+        reader=service.store if kind=='task_history' else service.reader
+        validator=service.validate_disclosure if kind=='task_history' else reader.validate
+        validator_type=type(service).validate_disclosure if kind=='task_history' else type(reader).validate
+        validator_owner=service if kind=='task_history' else reader
+        if not _same(service.handle,(service,type(service).handle)) or not _same(service._check,(service,type(service)._check)) or not _same(reader.read,(reader,type(reader).read)) or not _same(validator,(validator_owner,validator_type)):
             raise ValueError('Original read service methods required')
         service._check()
     view=_InterceptReadApplication(application,services,authorize_global);view._check()
-    return MetadataReadBundle(view,config_service,rules_service,judge_usage_service,notification_history_service,detail_service,judge_config_service)
+    return MetadataReadBundle(view,config_service,rules_service,judge_usage_service,notification_history_service,detail_service,judge_config_service,task_history_service)
 
 def bind_intercept_reads(application,*,config_service,rules_service,authorize_global):
     """Compatibility entrypoint for the original two explicit intercept reads."""
