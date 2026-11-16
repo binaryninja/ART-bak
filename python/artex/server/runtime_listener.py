@@ -154,8 +154,86 @@ class _AuthenticatedView:
                 if result is not None and callable(getattr(result,'close',None)):result.close()
         return output()
 
+class _RuntimeSkillView:
+    """Route owned skills without delaying their real post-header fences."""
+    def __init__(self,skills,base,pool,runtime_view,check):
+        from .skill_read_setup import SkillReadBundle,_SkillReadApplication,_PATTERNS
+        if type(skills) is not SkillReadBundle or type(skills.application) is not _SkillReadApplication:
+            raise ValueError('Exact skill read composition required')
+        self.skills=skills;self.base=base;self.pool=pool
+        self.runtime_view=runtime_view;self.check=check
+        self.app=skills.application;self.patterns=tuple(_PATTERNS[:len(self.app._views)])
+        self.views=tuple(self.app._views)
+        self.methods=(_SKILL_APPLICATION_CALL,_SKILL_APPLICATION_CHECK)
+        self._fixed=(skills,base,pool,runtime_view,check,self.app,self.patterns,self.views,self.methods)
+        self.validate()
+    def validate(self):
+        if any(a is not b for a,b in zip((self.skills,self.base,self.pool,self.runtime_view,self.check,self.app,self.patterns,self.views,self.methods),self._fixed)):
+            raise RuntimeError("Runtime skill adapter changed")
+        app=self.app
+        if self.skills.application is not app or app.original is not self.base or app._original is not self.base or tuple(app._views)!=self.views:
+            raise RuntimeError('Runtime skill ownership changed')
+        for name,method in zip(('__call__','_check'),self.methods):
+            bound=getattr(app,name)
+            if getattr(bound,'__self__',None) is not app or getattr(bound,'__func__',None) is not method:
+                raise RuntimeError('Runtime skill implementation changed')
+        for index,view in enumerate(self.views):
+            if view is not None:app._check(index)
+        # Every optional ledger path belongs to this listener's resource owner.
+        for index,name in enumerate(("usage","missing","files","content","catalog")):
+            view=self.views[index] if index<len(self.views) else None
+            service=getattr(self.skills,name)
+            if (view is None and service is not None) or (view is not None and getattr(view,name) is not service):
+                raise RuntimeError("Runtime skill service binding changed")
+        readers=[self.skills.usage.reader,self.skills.missing.reader]
+        if self.skills.catalog is not None and self.skills.catalog.reader.usage_reader is not None:
+            readers.append(self.skills.catalog.reader.usage_reader)
+        if any(reader.executor is not self.pool for reader in readers):
+            raise ValueError('Skill ledgers require the exact runtime pool')
+    def __call__(self,environ,start_response):
+        path=environ.get('PATH_INFO','')
+        selected=any(view is not None and type(path) is str and pattern.fullmatch(path)
+                     for pattern,view in zip(self.patterns,self.views))
+        if not selected:
+            # Validate before invoking the fallback: a replaced callable must
+            # not bypass the original runtime wrapper and its authentication.
+            try:self._fixed[4]()
+            except Exception:
+                body=b'{"error":"Runtime skill reads unavailable"}\n'
+                start_response('503 Service Unavailable',[('Content-Type','application/json'),('Content-Length',str(len(body)))])
+                return [] if environ.get('REQUEST_METHOD')=='HEAD' else [body]
+            return self._fixed[3](environ,start_response)
+        def output():
+            result=None;started=False
+            def actual(status,headers,exc_info=None):
+                nonlocal started
+                self._fixed[4]();started=True
+                return start_response(status,headers,exc_info) if exc_info is not None else start_response(status,headers)
+            try:
+                self._fixed[4]()
+                # The original composer observes actual start_response mutations
+                # before its final JWT/source/snapshot checks and body return.
+                result=self.app(environ,actual);self._fixed[4]()
+                for chunk in result:
+                    self._fixed[4]();yield chunk
+            except Exception:
+                if not started:
+                    body=b'{"error":"Runtime skill reads unavailable"}\n'
+                    start_response('503 Service Unavailable',[('Content-Type','application/json'),('Content-Length',str(len(body)))])
+                    if environ.get('REQUEST_METHOD')!='HEAD':yield body
+            finally:
+                if result is not None and callable(getattr(result,'close',None)):result.close()
+        return output()
+
+# Capture trusted composition methods at import, never a pre-bind replacement.
+from .skill_read_setup import _SkillReadApplication
+_SKILL_APPLICATION_CALL=_SkillReadApplication.__call__
+_SKILL_APPLICATION_CHECK=_SkillReadApplication._check
+_RUNTIME_SKILL_METHODS=(_RuntimeSkillView.__init__,_RuntimeSkillView.__call__,_RuntimeSkillView.validate)
+
+
 class RuntimeListener:
-    def __init__(self,bundle,owner,config=DevListenerConfig()):
+    def __init__(self,bundle,owner,config=DevListenerConfig(),*,skill_reads=None):
         if type(bundle) is not TaskRuntimeApplication or type(owner) is not RuntimeResourceOwner or type(owner.pool) is not ExecutorPool or type(config) is not DevListenerConfig:
             raise ValueError('Actual runtime, pool ownership and development configuration required')
         config.validate()
@@ -177,6 +255,13 @@ class RuntimeListener:
                 raise ValueError('Original manual action operations required')
             self._manual_methods=tuple((m.__self__,m.__func__) for m in methods)
         self._view=_AuthenticatedView(bundle.app,self._check)
+        self._skill_view=None
+        if skill_reads is not None:
+            if any(a is not b for a,b in zip((_RuntimeSkillView.__init__,_RuntimeSkillView.__call__,_RuntimeSkillView.validate),_RUNTIME_SKILL_METHODS)):
+                raise ValueError("Original runtime skill adapter required")
+            self._skill_view=_RuntimeSkillView(skill_reads,base,owner.pool,self._view,self._check)
+            self._view=self._skill_view
+        self._skill_binding=self._skill_view
         self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False
     def _check(self):
         b,o=self._bundle,self._owner
@@ -193,6 +278,14 @@ class RuntimeListener:
             raise RuntimeError('Original runtime authentication changed')
         if self._config is not self._original_config:raise RuntimeError('Listener configuration changed')
         b._check();self._config.validate()
+        if self._skill_view is not self._skill_binding:raise RuntimeError('Runtime skill adapter ownership changed')
+        if self._skill_view is not None:
+            if self._view is not self._skill_view:raise RuntimeError('Runtime skill transport changed')
+            for name,method in zip(('__init__','__call__','validate'),_RUNTIME_SKILL_METHODS):
+                bound=getattr(self._skill_view,name)
+                if getattr(bound,'__self__',None) is not self._skill_view or getattr(bound,'__func__',None) is not method:
+                    raise RuntimeError('Runtime skill adapter implementation changed')
+            self._skill_view.validate()
     def start_listener(self):
         with self._lock:
             self._check()
