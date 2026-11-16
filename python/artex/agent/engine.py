@@ -47,7 +47,7 @@ class EngineProgress:
 class TaskEngineHandle:
     def __init__(self,scope,token,*,store,planner,planner_scope,worker,worker_model,
                  worker_system,owner,current,lifecycle_guard,single_process,
-                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None,cleanup_authorize=None,cleanup_current=None):
+                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None,cleanup_authorize=None,cleanup_current=None,timing=None):
         if not isinstance(scope,EngineScope) or not isinstance(token,CancellationToken):raise ValueError('Exact task scope and manager token required')
         for value in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(value,'engine identity')<=0:raise ValueError('Positive engine identity required')
@@ -65,6 +65,10 @@ class TaskEngineHandle:
             from .activity_projection import ActivityProjector
             if type(activity_projector) is not ActivityProjector or activity_projector.executor is not store.executor or activity_projector.scope is not scope:raise ValueError('Exact scoped activity projector required')
         if (cleanup_authorize is None)!=(cleanup_current is None) or cleanup_authorize is not None and (not callable(cleanup_authorize) or not callable(cleanup_current)):raise ValueError('Explicit paired cleanup policies required')
+        if timing is not None:
+            from .task_timing import PreparedTaskTiming
+            if type(timing) is not PreparedTaskTiming or timing.scope is not scope:raise ValueError('Exact scoped timing binding required')
+        self.timing=timing;self._timing=timing
         self._cleanup_authorize=cleanup_authorize;self._cleanup_current=cleanup_current;self.cleanup=None;self._cleanup_owner=None
         self.activity_projector=activity_projector;self._activity_projector=activity_projector
         self.scope,self.token,self.store=scope,token,store
@@ -86,9 +90,18 @@ class TaskEngineHandle:
                 configuration_current=self._cleanup_current,lifecycle_guard=self.guard,authorize=self._cleanup_authorize)
             self.planner.bind_cleanup(owner);self.worker.bind_cleanup(owner);self.cleanup=owner;self._cleanup_owner=owner
 
+    def bind_timing(self,manager,outer):
+        if self.timing is not self._timing:raise EngineUnavailable('Timing binding changed')
+        if self._timing is None:return
+        with self._condition:
+            if self._active or self._started:raise EngineUnavailable('Timing binding requires inert engine')
+            self._timing.bind(manager,outer,self)
+
     @staticmethod
     def _identity(scope):return (scope.task_id,scope.exploration_id,scope.run_id,scope.revision)
     def _check(self):
+        if self.timing is not self._timing:raise EngineUnavailable('Timing binding changed')
+        if self._timing is not None:self._timing.validate_bindings()
         if self.current(self.scope,self.token) is not True:raise EngineUnavailable('Engine generation changed')
         if self.token.cancelled:raise EngineUnavailable('Engine cancelled')
     def _snapshot(self):

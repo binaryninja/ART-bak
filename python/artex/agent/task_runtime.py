@@ -4,6 +4,12 @@ Construction is inert. Host policies, prompts, transcript storage and graph-tool
 catalogs are mandatory inputs, not discovered permissions. Only local graph tools
 are supported here. No process/MCP/network tools, inherited exploration, restart
 adoption, timed execution, quota failover, or automatic pump are supplied.
+Optional TaskTimingPolicy composes inert original-owner timing resources and
+planner/worker wrappers only after prepared binding. It requires explicit cleanup
+permission, pins clocks/grants, and includes its revision in configuration identity.
+Goals stay unwrapped; zero-timeout tasks allocate no deadline store/kernel. This
+prerequisite does NOT enable positive admission, install an expiry observer, or
+connect final assessment/terminal settlement. Positive-duration gates stay closed.
 """
 from copy import deepcopy
 from dataclasses import asdict
@@ -27,7 +33,7 @@ from ..transcripts import TranscriptStore
 class TaskRuntimeAssembly:
     def __init__(self,executor,*,providers,transcript,prompts,policy_revision,
                  current,lifecycle_guard,authorize,asset_authorize,validate_input,
-                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None):
+                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None,timing_policy=None):
         if type(providers) is not TaskProviderResolver or providers.tasks.executor is not executor:
             raise ValueError('Exact persisted provider resolver/executor required')
         if any(not callable(x) for x in (current,lifecycle_guard,authorize,asset_authorize,validate_input)):
@@ -46,6 +52,13 @@ class TaskRuntimeAssembly:
         self._pins=(executor,providers,transcript,providers.tasks,providers.agents,providers.profiles,providers.factory)
         if activity_authorize is not None and not callable(activity_authorize):raise ValueError('Explicit progress projection authorization required')
         if cleanup_authorize is not None and not callable(cleanup_authorize):raise ValueError('Explicit cleanup policy required')
+        if timing_policy is not None:
+            from .task_timing import TaskTimingPolicy
+            if type(timing_policy) is not TaskTimingPolicy:raise ValueError('Exact task timing policy required')
+            if cleanup_authorize is None:raise ValueError('Task timing requires explicit inflight cleanup policy')
+        self._timing_policy=self._timing_pin=timing_policy
+        self._timing_fields=None if timing_policy is None else (timing_policy.revision,timing_policy.clock,
+            timing_policy.wall_clock,timing_policy.stamp_authorize,timing_policy.dispatch_authorize)
         self._cleanup_authorize=cleanup_authorize;self._cleanup_pin=cleanup_authorize
         self._activity_authorize=activity_authorize;self._activity_pin=activity_authorize
         self._configurations={}
@@ -58,9 +71,17 @@ class TaskRuntimeAssembly:
         self._coordinator=self.coordinator
         self._coordinator_pins=(self.coordinator.journal,self.coordinator.factory,self.coordinator.current)
     def _configuration_identity(self):
-        return json.dumps({'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}},sort_keys=True,allow_nan=False)
+        payload={'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}}
+        if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
+        return json.dumps(payload,sort_keys=True,allow_nan=False)
     def validate_bindings(self):
         e,p,t,tasks,agents,profiles,factory=self._pins
+        policy=self._timing_policy
+        if policy is not self._timing_pin:raise RuntimeUnavailable('Task timing policy changed')
+        if policy is not None:
+            fields=(policy.revision,policy.clock,policy.wall_clock,policy.stamp_authorize,policy.dispatch_authorize)
+            if any(a is not b for a,b in zip(fields,self._timing_fields)):
+                raise RuntimeUnavailable('Task timing authority changed')
         if self._cleanup_authorize is not self._cleanup_pin:raise RuntimeUnavailable('Cleanup policy changed')
         if self._activity_authorize is not self._activity_pin:raise RuntimeUnavailable('Activity projection authority changed')
         if any(a is not b for a,b in zip((self._current,self._guard,self._authorize,self._assets,self._input,self._limits,self._revision),self._policy_pins)) or self._configuration_identity()!=self._configuration_bytes or t.store is not self._transcript_store:
@@ -83,6 +104,7 @@ class TaskRuntimeAssembly:
                  'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()},
                  'limits':asdict(self._limits),'policy':self._revision,'activity_projection':self._activity_authorize is not None}
         if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
+        if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,allow_nan=False).encode()).hexdigest()
         self.validate_bindings();return models,digest
     def bootstrap_configuration(self,task):
@@ -137,11 +159,21 @@ class TaskRuntimeAssembly:
             names={r.key for r in self._catalog[role]}
             if not names.issubset({t.name for t in tools}):raise RuntimeUnavailable('Only explicit local graph tools supported')
             return tuple(t for t in tools if t.name in names)
+        timing=None;clock_options={}
+        if self._timing_policy is not None:
+            from .task_timing import PreparedTaskTiming
+            timing=PreparedTaskTiming(scope,self._timing_policy,configuration_current=cleanup_current)
+            clock_options={'clock':self._timing_policy.clock}
+        def bind_role(s,role,model):
+            self.validate_bindings()
+            binding=self.providers.bind(s,role,model,current=exact,lifecycle_guard=guarded)
+            self.validate_bindings()
+            return timing.wrap(s,role,binding) if timing is not None else binding
         ps=PlannerScope(scope.task_id,scope.exploration_id,scope.run_id,scope.revision,models['planner'],self._prompts['planner'])
         planner=PlannerCycle(store=graph,transcript=self.transcript,current=exact,lifecycle_guard=guarded,
-            provider_resolver=lambda s,m:self.providers.bind(s,'planner',m,current=exact,lifecycle_guard=guarded),
+            provider_resolver=lambda s,m:bind_role(s,'planner',m),
             authorize=self._authorize,asset_authorize=self._assets,limits=self._limits,
-            additional_tools=graph_tools('planner',ps,lambda:exact(ps)),additional_catalog=self._catalog['planner'])
+            additional_tools=graph_tools('planner',ps,lambda:exact(ps)),additional_catalog=self._catalog['planner'],**clock_options)
         worker=None
         def registry(s,record):
             def owned():
@@ -152,8 +184,8 @@ class TaskRuntimeAssembly:
         worker=IntentWorker(store=WorkerStore(self.executor,scope.task_id,scope.exploration_id,
             lifetime_guard=lambda tid,eid,write:guard(scope)),transcript=self.transcript,
             current=lambda s,phase:exact(s),lifecycle_guard=guarded,
-            provider_resolver=lambda s,m:self.providers.bind(s,'worker',m,current=exact,lifecycle_guard=guarded),
-            registry_factory=registry,authorize=self._authorize,limits=self._limits)
+            provider_resolver=lambda s,m:bind_role(s,'worker',m),
+            registry_factory=registry,authorize=self._authorize,limits=self._limits,**clock_options)
         projector=None
         if self._activity_authorize is not None:
             from .activity_projection import ActivityProjector
@@ -161,7 +193,7 @@ class TaskRuntimeAssembly:
         return TaskEngineHandle(scope,token,store=graph,planner=planner,planner_scope=ps,worker=worker,
             worker_model=models['worker'],worker_system=self._prompts['worker'],owner='runtime-'+str(scope.run_id),
             current=current,lifecycle_guard=guard,single_process=True,activity_projector=projector,cleanup_authorize=self._cleanup_authorize,
-            cleanup_current=cleanup_current if self._cleanup_authorize is not None else None)
+            cleanup_current=cleanup_current if self._cleanup_authorize is not None else None,**({'timing':timing} if timing is not None else {}))
     @staticmethod
     def initialized_readiness(task):raise RuntimeUnavailable('Initialized task adoption requires explicit recovery and is unsupported')
     @staticmethod

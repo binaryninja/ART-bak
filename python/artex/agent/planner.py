@@ -100,12 +100,14 @@ class _FreshTranscript:
             return self.owner.transcript.commit(session,self.original,joined)
 
 class PlannerCycle:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=(),persist_current=None,cleanup=None):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=(),persist_current=None,cleanup=None,clock=None):
         if not isinstance(store,ExplorationStore) or store.read_only:raise ValueError('Writable scoped ExplorationStore required')
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,authorize,asset_authorize)):raise ValueError('Explicit planner authority required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','current','commit','finalized_result')):raise ValueError('Durable scoped transcript required')
         if persist_current is not None and not callable(persist_current):raise ValueError('Explicit persistence authority must be callable')
         if type(max_nodes) is not int or not 1<=max_nodes<=10000:raise ValueError('Invalid graph bound')
+        if clock is not None and not callable(clock):raise ValueError('Explicit runtime clock must be callable')
+        self.clock=self._clock=clock
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
         self._store,self._executor=store,store.executor
         if cleanup is not None:
@@ -140,7 +142,7 @@ class PlannerCycle:
             self.cleanup=owner
 
     def _validate_scope(self,scope):
-        if self.store is not self._store or self.store.executor is not self._executor:raise ChatUnavailable('Planner owning resource changed')
+        if self.clock is not self._clock or self.store is not self._store or self.store.executor is not self._executor:raise ChatUnavailable('Planner owning resource changed')
         if not isinstance(scope,PlannerScope):raise ValueError('Planner scope required')
         for id in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(id,'scope ID')<=0:raise ValueError('Positive scope identity required')
@@ -250,7 +252,8 @@ class PlannerCycle:
                     binding=self.provider(scope,model)
                     self.check(scope)
                     return binding
-            agent=ChatAgent(fresh,resolver,gate=self.authorize,tools=registry.tools(),limits=self.limits)
+            self._validate_scope(scope)
+            agent=ChatAgent(fresh,resolver,gate=self.authorize,tools=registry.tools(),limits=self.limits,clock=self._clock)
             outcome=agent.run(scope.session_id,wake.cycle_id,wake.message,model=scope.model,system=scope.system,metadata=scope.identity(),token=token)
             if not outcome.persisted or outcome.stale:raise ChatUnavailable('Planner transcript persistence unconfirmed')
             if fresh.cap is not None:outcome=fresh.cleanup.canonical_outcome(fresh.cap,outcome)

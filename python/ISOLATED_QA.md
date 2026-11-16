@@ -1180,3 +1180,18 @@ Three actual PG17 integration groups and one intentional entry-refusal case pass
 The focused ten tests include blocked-provider threading against SQL doubles; that is protocol evidence only, not real-PG timed execution. Normal positive-duration admission, default observer scheduling/threads, final assessment, production deadline support, arbitrary provider preemption, and recovery are not established. The real-PG observer tests use explicitly synthetic positive prepared ownership and a near-expiry persisted fixture clock. No external targets, credentials or user data.
 
 Artifacts: source manifest, actual component and refusal harnesses, two result logs. No fixture/product corrections were needed in this stage.
+
+## Stage 94: exact timing36, natural zero-timeout application binding
+
+Immutable source: exact frozen timing-assembly checkpoint without later finalization work.
+Manifest SHA-256: `d4e5c61791624534871df4f5db9e1cb9f667d0326ca97a3df8cc9800fce0ad65`.
+
+Three actual PG17 authenticated application scenarios passed, each in a fresh disposable database inside the approved credential-free filesystem/network isolation. Fixed inert in-process OpenAI-shaped transport only; no live provider, external target or user data. Twenty-one focused timing/assembly/review tests passed on the same snapshot.
+
+1. Explicit timing policy plus cleanup opt-in, natural timeout=0 HTTP creation: no provider before owned tick; actual goals→prepared child binds exact timing owner. Planner/worker use the policy's identical clock object. No TaskDeadlineStore or OwnedGenerationClock is created. No timing stamp/dispatch grants run. Actual planner intent→worker fact→planner proof completes normally; persisted first_run_at/deadline_at remain NULL. Provider counts goals2/planner4/worker2. Positive timeout HTTP creation then refuses before adding a task.
+2. Explicit no-policy/default mode completes the same actual lifecycle with engine.timing absent, no grants or persisted deadline, and positive HTTP creation refusal.
+3. A fixture mutates the timing policy clock at the real binding boundary, before calling the original bind method. Binding refuses, actual child and unresolved outer owner remain retained, task stays running; only the two goals provider calls occurred, no timing grants or planner/worker calls. This is deliberate immutable-policy corruption for a negative check, not a product code change or supported mutation API.
+
+No synthetic positive fixture was needed or used in this stage. This is genuine zero-timeout application acceptance only. Earlier synthetic positive clock component evidence remains separate and does not establish public timed admission. Goals are not timing-dispatched, timing grants are not inferred, and no deadline default activation, observer scheduling, final assessment or production behavior is claimed.
+
+No product edits or fixture corrections were required. Artifacts: manifest, harness and three logs.

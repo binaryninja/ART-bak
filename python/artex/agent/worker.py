@@ -90,11 +90,13 @@ class _Transcript:
             return self.core.transcript.commit(session,turn,result)
 
 class IntentWorker:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,registry_factory,authorize,limits=Limits(),cleanup=None):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,registry_factory,authorize,limits=Limits(),cleanup=None,clock=None):
         self.cleanup=self._cleanup=None
         if not isinstance(store,WorkerStore):raise ValueError('Real WorkerStore required')
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,registry_factory,authorize)):raise ValueError('Explicit worker authority and adapters required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','check_scoped','current','commit')):raise ValueError('Durable scoped transcript required')
+        if clock is not None and not callable(clock):raise ValueError('Explicit runtime clock must be callable')
+        self.clock=self._clock=clock
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
         self._store,self._executor=store,store.executor
         self.provider,self.registry_factory,self.authorize=provider_resolver,registry_factory,authorize
@@ -111,7 +113,7 @@ class IntentWorker:
                 raise ValueError('Exact cleanup owner with original worker resources required')
             self.cleanup=self._cleanup=owner
     def _binding(self):
-        if self.cleanup is not self._cleanup or self.store is not self._store or self.store.executor is not self._executor:raise WorkerConflict('Worker owning resource changed')
+        if self.clock is not self._clock or self.cleanup is not self._cleanup or self.store is not self._store or self.store.executor is not self._executor:raise WorkerConflict('Worker owning resource changed')
     def check(self,scope,phase,*,claimed=False):
         self._binding()
         if not isinstance(scope,WorkerScope):raise ValueError('WorkerScope required')
@@ -190,7 +192,8 @@ class IntentWorker:
                         return tool.callback(context,args)
                 guarded.append(Tool(tool.name,tool.description,tool.input_schema,execute,tool.validate))
             transcript=_Transcript(self,scope)
-            agent=ChatAgent(transcript,provider,gate=gate,tools=guarded,limits=self.limits)
+            self._binding()
+            agent=ChatAgent(transcript,provider,gate=gate,tools=guarded,limits=self.limits,clock=self._clock)
             outcome=agent.run(scope.session_id,client_id,message,model=scope.model,system=scope.system,metadata=scope.identity(self.limits),token=token)
             if transcript.cap is not None:
                 outcome=transcript.cleanup.canonical_outcome(transcript.cap,outcome)
