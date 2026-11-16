@@ -27,12 +27,18 @@ class FinalizationPlan:
     persist_authorize:object
     settlement_authorize:object
     clock:object
+    task_provider:object=None
     def __post_init__(self):
         if type(self.configuration) is not FinalConfiguration or self.configuration.tool_catalog_digest!=CATALOG_DIGEST:
             raise ValueError('Exact restricted final configuration required')
         if type(self.transcript) is not ChatTranscriptAdapter or type(self.transcript.store) is not TranscriptStore:
             raise ValueError('Canonical final transcript required')
-        if any(not callable(getattr(self,f.name)) for f in fields(self)[2:]):raise ValueError('Explicit final policies and clock required')
+        if self.task_provider is not None:
+            from .final_task_provider import FinalTaskProviderAdapter
+            if type(self.task_provider) is not FinalTaskProviderAdapter or self.provider_resolver is not None:
+                raise ValueError('Exclusive exact final task provider required')
+        elif not callable(self.provider_resolver):raise ValueError('Explicit final provider required')
+        if any(not callable(getattr(self,f.name)) for f in fields(self)[2:] if f.name not in ('provider_resolver','task_provider')):raise ValueError('Explicit final policies and clock required')
 
 @dataclass(frozen=True)
 class FinalizationResult:
@@ -115,7 +121,7 @@ class OwnedFinalization:
                 transcript=p.transcript,lifecycle_guard=store.guard,authorize=lambda *a:call(p.journal_authorize,*a))
             self._owned_journal=self.journal
             self._validate()
-            runner=FinalAssessmentRunner(self.journal,provider_resolver=lambda *a:call(p.provider_resolver,*a,execution=True),authorize=lambda *a:call(p.model_authorize,*a,execution=True),
+            runner=FinalAssessmentRunner(self.journal,provider_resolver=(lambda *a:call(p.provider_resolver,*a,execution=True)) if p.task_provider is None else None,task_provider=p.task_provider,authorize=lambda *a:call(p.model_authorize,*a,execution=True),
                 read_authorize=lambda *a:call(p.read_authorize,*a,execution=True),persist_authorize=lambda *a:call(p.persist_authorize,*a),clock=p.clock)
             with self._lock:
                 self.runner=runner;self._owned_runner=runner

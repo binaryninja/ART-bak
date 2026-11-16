@@ -36,6 +36,11 @@ class TimedLifecyclePolicy:
         self.__post_init__()
         if type(runtime) is not TaskRuntimeAssembly or runtime._timing_policy is not self.timing_policy or runtime._timing_pin is not self.timing_policy or runtime._cleanup_authorize is None:raise ValueError('Same actual timing policy and cleanup runtime required')
         if self.final_plan is not None and self.final_plan.transcript is not runtime.transcript:raise ValueError('Original canonical transcript required for final plan')
+        if self.final_plan is not None and self.final_plan.task_provider is not None:
+            from .final_task_provider import FinalTaskProviderAdapter
+            adapter=self.final_plan.task_provider
+            if type(adapter) is not FinalTaskProviderAdapter or adapter.resolver is not runtime.providers:raise ValueError('Original runtime persisted final provider required')
+            adapter.validate_bindings()
         runtime.validate_bindings();return True
 
 @dataclass(frozen=True)

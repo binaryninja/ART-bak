@@ -1540,3 +1540,29 @@ Actual authenticated legacy unpaged and paged history return full bounded source
 Raw grant, current lifetime and original JWT callback replacement during start_response each withhold body after one already-emitted200; no replacement-status claim. Mixed service registration detects literal, dynamic and partial-segment HEAD conflicts atomically without modifying original routes.
 
 Fixed-scope optional wrapper only, no global task resolver, query/body fallback, default activation, mutation or execution. Approved credentialless namespace/bwrap, readonly snapshot, cached dependencies and fresh loopback PostgreSQL. Synthetic fixtures only; no model/commands/targets or production data.
+
+## Stage 116: recorded execution navigation
+
+Exact frozen source; manifest SHA256 `91fd61bf3ea2d86180e9c963f01f07c995e58686dde1a18f733dbab118e50435`. No overlays/product edits/fixture corrections.
+
+Six actual PostgreSQL17.11 groups and 28 unchanged focused tests pass.
+
+Actual recorded exact audit correlation/tool_use_id links a tool_use/tool_result pair to original task intent session. Wrong worker/segment and third duplicate row refuse409 via bounded LIMIT3. Recorded conversation activity takes precedence even when associated task is deleted; no retarget. Missing approval404, missing original parent/activity410, absent exact audit409, and missing-conversation hint permission403 versus authorized nonexistent410 match source shape.
+
+Actual multibyte activity summary exceeds bound: SQL emits false sentinel and NULL summary before raw transfer. Postfetch raw denial, final serialization parent deletion, approval tool_use_id remap and original activity summary mutation all withhold stale navigation403.
+
+Read-only synthetic records; tool names/command-looking text are data and never execute. Service invoked directly, no new routes or runtime permission. No global/default activation, provider, commands, target network or production data. Approved credentialless namespace/bwrap with readonly snapshot and fresh loopback PostgreSQL, cached trusted dependencies.
+
+## Stage 117: persisted planner final provider component
+
+Exact frozen source, manifest SHA256 `bdf7c31fc870a62faa44edc75ad188fe93a43b65f1c6b10d5669d9ee9c8b83cc`. No overlays/product changes.
+
+Seven real PostgreSQL17.11 scenarios +33 focused test executions pass (21 adapter/invocation,12 restricted runner).
+
+Actual TaskStore/AgentStore/ProfileStore selection and ProfileFactory use an injected in-process OpenAI-shaped transport. Original FinalAssessmentRunner receives exact FinalTaskProviderAdapter, actual final journal and canonical JSONL transcript. Complete and SSE paths finalize canonical results using persisted planner profile; task stays running, manager assessment ownership not terminally settled. Separate profile change, planner role change and private profile grant denial all prevent transport construction/call. Final monotonic budget exhausted during model grant also prevents transport. Streaming close callback cancels final invocation: one close, canceled rather than completed canonical result. All scenarios reject stale invocation and second runner execution without additional model call.
+
+A runtime guard assertion enabled during each final run rejects nested lifetime guard acquisition; no nested entries occurred. Actual transport observes original final invocation remaining budget bounded by independent four-second limit. Initial fixture mistakenly called remaining_seconds on retry transport's wrapper context; corrected to original invocation accessor. Profile/grant failure may raise AssessmentUncertain rather than return an outcome; negative expectation updated explicitly. Both initial diagnostic logs preserved. No product correction.
+
+Fixture scope: genuine manual zero-timeout bootstrap plus explicitly synthetic positive prepared pins and real expired clock/freeze/journal. No natural positive application admission or timeout-gate bypass. Prior ordinary execution is frozen; this run does not claim cancellation of the original generation token while continuing final model execution. Typed OwnedFinalization forwarding, unused-generator lazy close and persistence-failure variants are not newly real-PG tested here; focused tests cover lazy/stale/budget/guard/close cases as named in logs. No full timed application or final terminal settlement claim.
+
+Approved credentialless namespace/bwrap, readonly source/cached dependencies, fresh loopback-only PostgreSQL and temporary canonical transcripts. Dummy fixture profile key only. No external provider/target, actual tool command, production data or public listener.
