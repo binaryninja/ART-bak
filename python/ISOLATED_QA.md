@@ -1653,3 +1653,14 @@ Exact reviewed frozen source, manifest `ff6c5a5334934d9be8d5cc40a89b68afba7c0cc2
 Four actual PostgreSQL/service groups and 13 focused executions pass. Synthetic channel metadata updates and pending/sending→skipped atomic transition verified, sent unchanged. Kind and config::text byte representation unchanged including unknown nested keys; instrumented product SQL never selects config or updates kind/config. Harness alone reads before/after to verify preservation.
 Injected delivery-write error and precommit grant revocation cause actual transaction rollback of metadata/deliveries. Injected acknowledgement failure after actual commit reports503 outcomeunknown/retryfalse while committed name remains persisted. PreSQL grant denial and forbidden config/kind/Boolean numeric fields reject; null metadata produces no effect.
 No fixture/product corrections. Same approved credentialless disposable PG17.11 namespace, synthetic configuration marker only; no existing user channels, delivery sends/provider/network calls/default registration. In-process service, not external notification configuration. Lost acknowledgement simulated after genuine transaction commit, not real network failure.
+
+
+## Stages 127–128: standalone mention catalog and task report
+
+Stage 127 manifest: `39f1272a03e2be7942cb6d0a2598b849f1686fe63cc887d53d0d4c5e16324d4a`.
+Three actual PostgreSQL groups and 15 focused tests pass. Original-schema fixtures verify findings/companies/assets union, exact numeric-ID priority and tie ordering, 21-row lookahead with 20-item pages, scoped cursors, literal percent/underscore/backslash search, Unicode projection bounds, and concrete asset authorization. Post-SQL source revocation and post-serialization request revocation withhold results. No source or fixture correction was needed.
+
+Stage 128 manifest: `9f067164bc6806931831d32d9d8dd1efacb40c7a2cc2c71e2d9cd8c1ac4bf29b`.
+Three actual PostgreSQL groups and 14 focused tests pass. The report includes only the selected task's graph findings, not facts, foreign explorations or the global findings table. Separate global asset counts, exact task selection, deleted-task handling and the actual UTF-8 payload sentinel were checked. The preserved late-current callback regression now denies disclosure after request authorization is revoked. No fixture or product corrections were needed during this run.
+
+Both snapshots contain the published base plus only their named standalone modules, tests and status. These were credentialless, disposable PostgreSQL 17.11 fixtures with synthetic data. They do not register default routes, expand mentions, call models, fetch URLs or execute report contents. Markdown is text, not an HTML sanitization guarantee. The source's large count cap was not populated to 100,001 rows, and no cross-statement atomic snapshot is claimed. Timed final-retirement and notification PATCH follow-on defects remain separate, unpublished work.
