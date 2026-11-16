@@ -35,3 +35,24 @@ source's swallowed errors/defaults. Missing keys in a healthy store still produc
 source defaults. Prompt/text overflow refuses instead of truncating or silently
 selecting a different policy. Query/body/other methods are rejected. No service
 registration or automatic default activation is provided here.
+
+## Optional metadata composition (separate acceptance)
+
+`bind_metadata_reads(..., judge_config_service=...)` explicitly mounts the protected
+GET `/api/intercept/judge` only when the exact service/reader is provided. No default
+judge, model or provider is created. The new `judge_config` global grant remains
+separate from the service's configuration/raw-prompt/current grants. Original JWT
+and all disclosure grants are rechecked after serialization and start_response;
+late denial aborts body transmission. PUT and other mutations are not installed.
+
+Existing fixed-path conflict checking rejects intersecting original GET/HEAD
+routes before mutation. Exact original WSGI/AuthService and common executor rules
+remain unchanged. The route inventory accepts only the exact audited
+`judge_config in services` guarded GET declaration in the metadata wrapper.
+Unknown paths/guards/files/methods remain refused; the inventory is generated from
+the reviewed frozen candidate.
+
+Three new composition and two scanner tests pass; 38 selected surrounding tests
+pass together. Four independent review tests pass. PostgreSQL stage 112 passed
+four actual database/JWT groups and 43 focused executions, separate from the
+accepted standalone reader's PostgreSQL stage 111.

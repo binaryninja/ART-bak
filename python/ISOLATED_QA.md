@@ -1489,3 +1489,18 @@ Five real PostgreSQL17.11 groups and twelve unchanged owner/review tests pass, n
 Focused tests compare default prompt to original source constants. Prompt text is configuration data only: no model invocation, tool permission, policy activation, provider/profile-secret join, or route registration.
 
 Approved credentialless namespace/bwrap, readonly exact source/cached dependencies, fresh disposable loopback PostgreSQL. No external targets/providers, real credentials, command execution, user data or production writes.
+
+## Stage 112: optional judge configuration JWT route
+
+Exact frozen judge-route source; manifest SHA256 `ff0236da8002d041690ab06f65d94c2f8873e74fc038896f63736cec5908a6d3`. Exact prompt.go copied only as read-only test data. No source overlays or product changes.
+
+Four actual PostgreSQL17.11/JWT groups and 43 focused test executions pass (39 related reader/composition +4 independent judge composition).
+
+- Actual missing settings return source default prompt and defaults; seven inserted settings resolve exact requested fields. Unrelated synthetic auth value is absent. Detail, judge-usage and notification history coexist; legacy intercept config wrapper still works. Original unwrapped application remains404.
+- Missing JWT, global/raw denial, query unknown, PUT and HEAD refuse before SQL. HEAD returns empty body.
+- Separate start_response callbacks revoke raw authority, current lifetime or replace original Router JWT authorizer. Each aborts before body after one already-issued200; no replacement-status claim.
+- Conflicting generic dynamic intercept route with mixed selected services rejects atomically without changing original route inventory.
+
+Fixture correction only: original JWT callback belongs to application.router.authorize, not application.authorize. Initial AttributeError log preserved; corrected exact boundary then all tests pass.
+
+Credentialless approved namespace/bwrap, readonly snapshot, cached dependencies and fresh loopback-only PostgreSQL. No default registration, settings mutations outside fixtures, providers, profile-secret join, commands, production data or external target.
