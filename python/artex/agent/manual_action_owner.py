@@ -16,8 +16,9 @@ class ManualActionSnapshot:
     active:int
     unresolved:int
     sealed:bool
+    pending_removal:int=0
     @property
-    def drained(self):return self.active==0 and self.unresolved==0
+    def drained(self):return self.active==0 and self.unresolved==0 and self.pending_removal==0
 
 @dataclass(frozen=True,eq=False)
 class _Invocation:
@@ -31,7 +32,7 @@ class ManualActionOwner:
             raise ValueError('Actual host and bounded manual inventory required')
         self.host=host;self.max_components=max_components
         self._pins=(host,host.manager,host.runner,host.manager.repository,host.manager.repository.executor,max_components)
-        self._condition=Condition(RLock());self._components={};self._active={};self._unresolved=set();self._sealed=False;self._application=None
+        self._condition=Condition(RLock());self._components={};self._active={};self._unresolved=set();self._pending=set();self._sealed=False;self._application=None
     def validate_bindings(self):
         h,m,r,repo,e,bound=self._pins
         if self.host is not h or self.max_components!=bound or h.manager is not m or h.runner is not r or m.runner is not r or m.repository is not repo or repo.executor is not e:
@@ -49,7 +50,8 @@ class ManualActionOwner:
     def _register(self,component,kind):
         from .expiry_observer import OwnedExpiryObserver
         from .owned_finalization import OwnedFinalization
-        expected=OwnedExpiryObserver if kind=='observer' else OwnedFinalization
+        from .frontier_completion import OwnedFrontierCompletion
+        expected=OwnedExpiryObserver if kind=='observer' else OwnedFrontierCompletion if kind=='frontier' else OwnedFinalization
         if type(component) is not expected:raise ValueError('Exact manual component required')
         with component._tracking_lock:
             with self._condition:
@@ -57,8 +59,12 @@ class ManualActionOwner:
                 if self._sealed or component._manual_started or component._manual_owner is not None or component in self._components:
                     raise ManualActionUnavailable('Manual component cannot be adopted or rebound')
                 if len(self._components)>=self.max_components:raise ManualActionUnavailable('Manual inventory full')
-                observer=component if kind=='observer' else component._observer
-                h,k,s,m,handle,token,read,freeze=observer._pins
+                if kind=='frontier':
+                    h,m,runner,handle,token,s,executor,receipt,guard,owner=component._pins
+                    if owner is not self or runner is not self._pins[2]:raise ManualActionUnavailable('Foreign frontier tracker')
+                else:
+                    observer=component if kind=='observer' else component._observer
+                    h,k,s,m,handle,token,read,freeze=observer._pins
                 if h is not self._pins[0] or m is not self._pins[1] or s.executor is not self._pins[4] or s.manager is not m or s.handle is not handle or handle.token is not token:
                     raise ManualActionUnavailable('Foreign manual owner')
                 if kind=='finalizer' and (observer._manual_owner is not self or self._components.get(observer)!='observer'):
@@ -68,12 +74,14 @@ class ManualActionOwner:
         return True
     def register_observer(self,observer):return self._register(observer,'observer')
     def register_finalizer(self,finalizer):return self._register(finalizer,'finalizer')
+    def register_frontier_completion(self,component):return self._register(component,'frontier')
     def _enter(self,component,operation):
         with self._condition:
             self.validate_bindings()
             kind=self._components.get(component)
-            expected=('tick','claim_finalization') if kind=='observer' else ('run_once',) if kind=='finalizer' else ()
-            if self._sealed or operation not in expected or component._manual_owner is not self or component._manual_owner_pin is not self:
+            expected=('tick','claim_finalization') if kind=='observer' else ('run_once',) if kind=='finalizer' else ('run_once','confirm_runner_removal') if kind=='frontier' else ()
+            continuation=(kind=='frontier' and operation=='confirm_runner_removal' and component in self._pending and component._removal_pending and component.result is not None)
+            if (self._sealed and not continuation) or operation not in expected or component._manual_owner is not self or component._manual_owner_pin is not self:
                 raise ManualActionUnavailable('Manual action admission closed')
             receipt=_Invocation(component,operation,get_ident());self._active[receipt]=component
             return receipt
@@ -84,10 +92,13 @@ class ManualActionOwner:
             component=receipt.component
             # Pure code-owned outcome inspection, no arbitrary callbacks.
             failed=bool(getattr(component,'_failed',False))
-            retained=(getattr(component,'_handoff',None) is not None or getattr(component,'_freeze',None) is not None)
+            retained=(getattr(component,'_handoff',None) is not None or getattr(component,'_freeze',None) is not None or (self._components.get(component)=='frontier' and component._used))
+            if self._components.get(component)=='frontier':
+                if component._removal_pending:self._pending.add(component)
+                else:self._pending.discard(component)
             if failed and retained:self._unresolved.add(component)
             del self._active[receipt];self._condition.notify_all()
-    def _snapshot(self):return ManualActionSnapshot(len(self._active),len(self._unresolved),self._sealed)
+    def _snapshot(self):return ManualActionSnapshot(len(self._active),len(self._unresolved),self._sealed,len(self._pending))
     def snapshot(self):
         with self._condition:self.validate_bindings();return self._snapshot()
     def stop_new_actions(self):
@@ -97,7 +108,7 @@ class ManualActionOwner:
         with self._condition:
             self.validate_bindings()
             if not self._sealed:raise ManualActionUnavailable('Seal manual admission before cancellation')
-            components=tuple({c for c in self._active.values() if self._components[c]=='finalizer'})
+            components=tuple({c for c in self._active.values() if self._components[c] in ('finalizer','frontier')})
         for component in components:
             try:component.cancel()
             except BaseException:

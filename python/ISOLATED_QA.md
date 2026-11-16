@@ -1430,3 +1430,20 @@ Focused modules: test_intercept_detail_read, test_intercept_detail_read_review, 
 Fixture correction: the initial byte-bound assertion wrongly expected fixed numeric/date fields to be NULL too. Source correctly nulls only raw/text columns. Updated fixture checks every projected text/audit field, preserving initial failed fixture log. No implementation fix required.
 
 Isolation reused approved user/network namespace + credentialless bwrap with readonly exact snapshot, loopback-only fresh PostgreSQL, cached dependencies and inert providers. No listener or new HTTP route enabled, real commands, user data, or production database involved.
+
+## Stage 108: tracked frontier completion
+
+Exact frozen frontier source, manifest SHA256 `8da1df70f10d33b662d9139305f991ca7240edaebb68613540ed1b0c257f89e8`. No product changes or live overlays.
+
+Four actual PostgreSQL 17.11 groups and twelve unchanged focused tests pass:
+
+1. Standalone OwnedFrontierCompletion chooses actual unstamped or existing unexpired-clock store. Abandoned goal/paused intent source frontier settles done/frontier_drained. Unstamped path preserves NULL clock and no lease. Tracker becomes pending_removal, not drained. After sealing, confirmation is read-only and false while exact handle remains; existing runner settlement removes it; confirmation then clears pending and drain succeeds. No replay.
+2. Actual open SQL goal gives repeatable waiting without terminal store/cap allocation. Changing only disposable fixture goal to abandoned allows one completion.
+3. Another thread blocks inside original token cancellation after actual SQL/manager retirement. Tracker active=1 prevents drain; sealing does not release it. After return it becomes pending_removal and still blocks drain until existing runner inventory removes the exact handle and explicit confirmation succeeds.
+4. Actual transaction commits done/receipt, then injected acknowledgement exception: tracker unresolved, manager quarantined, no result, no runner-removal continuation or retry, even after sealing.
+
+Fixture migration correction: ManualActionOwner.wait requires sealed admission. Two initial pre-seal observations now use the pure snapshot().drained API; post-seal waits unchanged. Original failed fixture log retained; no product correction.
+
+Setup uses genuine zero-timeout manual bootstrap with inert fixed goals responses, then explicitly synthetic positive prepared configuration and matching task metadata. Early branch installs a real component clock; unstamped branch does not. This does not validate positive public admission, automatic engine hook, full timed application, or goal achievement. No final model/commands/targets executed.
+
+Approved credentialless namespace/bwrap isolation, readonly exact source, cached dependencies, loopback-only fresh disposable PostgreSQL. Original/bootstrap schema plus explicit additive early/unstamped receipt tables only; no production data or external network.
