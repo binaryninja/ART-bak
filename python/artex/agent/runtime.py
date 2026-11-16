@@ -30,6 +30,15 @@ import time
 from typing import Callable
 
 
+class EffectUncertain(RuntimeError):
+    """An admitted effect has not verifiably drained.
+
+    Propagates outside ordinary terminal results so the owning execution layer
+    retains its claim/resources for explicit reconciliation, never auto-retry.
+    This marker does not itself provide cancellation or prove containment.
+    """
+
+
 class RunStopped(RuntimeError):
     def __init__(self, reason):
         self.reason = reason
@@ -437,6 +446,10 @@ class BoundedAgent:
                         tool_calls += 1
                         try:
                             output = tool.callback(context, action.arguments())
+                        except EffectUncertain:
+                            # Do not commit a normal terminal transcript or let
+                            # worker settlement release an undrained effect.
+                            raise
                         except RunStopped:
                             raise
                         except Exception:

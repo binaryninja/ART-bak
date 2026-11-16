@@ -1324,3 +1324,20 @@ Verified actual JWT judge usage and notification history conditional routes with
 Missing original JWT401, global deny403 and independent raw deny403 each performed zero database queries. Revoking raw grant inside start_response raised before returning body; observed one already-emitted200 status and no fictitious replacement response. No body bytes were delivered to the fixture caller after revocation.
 
 No source or fixture corrections, socket/listener/browser activity, default activation, real notifications, delivery claims/retries, live credentials or external targets. Optional wrapper bound only in this disposable fixture. Finite callback-fence evidence does not claim atomicity under arbitrary mutually mutating policies.
+
+## Stage 104: uncertain process effect retention
+
+Exact frozen process-retention source, copied read-only for execution; no working-tree overlays. Manifest SHA256: `323019dfe4d1c7e65322fa6ced7b6c0ac35133af8d34d06bfb99b7345720f31a`.
+
+Two actual PostgreSQL 17.11 groups and three unchanged focused regressions pass.
+
+1. Explicit component composition: actual bootstrap HTTP creation, zero-timeout owned host → bootstrap handle → engine → planner creates intent → worker invokes an explicitly installed BashTool with an inert Python runner that raises CleanupUncertain. No subprocess executes. Real intent remains running; canonical turn has no finalized result; outer handle unresolved; manager cleanup capability retained; actual drain remains unsettled. Retrying owned advance refuses and runner call count stays one. Task remains running, not falsely complete.
+2. Separate natural persisted-role TaskRuntimeAssembly fixture with a Bash planner catalog entry refuses at engine construction, before planner or worker provider calls. The owner remains unresolved. This verifies the graph-only boundary was not weakened to make the component case pass.
+
+Focused unchanged tests: test_process_uncertainty_retention (two) and test_process_uncertainty_engine_review (one), all pass. These use inert providers/SQL doubles and are supplementary to the real-PG component case.
+
+Isolation: existing approved outer user/network namespace, loopback only; credentialless bwrap disposable filesystem and fresh local PostgreSQL; readonly exact Python snapshot, cached trusted dependencies. No external targets, model credentials, process launches, real user files, positive timeout pins, or public listeners.
+
+Fixture corrections only: OwnedWorkResult does not expose action directly, so the first harness now verifies the actual persisted intent instead; the default-refusal harness now catches the expected BootstrapUnresolved before asserting retained state. Original failed fixture logs preserved. No product files changed.
+
+Limits: this is explicitly installed component coverage, not Bash availability in the application, OS process cleanup validation, broad runtime parity, or default tool enablement. No actual subprocess was started or terminated.

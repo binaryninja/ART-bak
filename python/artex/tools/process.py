@@ -32,14 +32,14 @@ import signal
 import subprocess
 import time
 
-from ..agent.runtime import Grant, Tool
+from ..agent.runtime import EffectUncertain, Grant, Tool
 
 
 class ProcessError(RuntimeError):
     pass
 
 
-class CleanupUncertain(ProcessError):
+class CleanupUncertain(ProcessError, EffectUncertain):
     pass
 
 
