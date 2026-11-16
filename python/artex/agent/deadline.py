@@ -40,15 +40,71 @@ class DispatchBudget:
     monotonic_deadline:float|None
     task_limited:bool
 
+class OwnedGenerationClock:
+    """One original prepared owner shares one confirmed stamp across roles.
+
+    This is persistence/clock coordination, not permission to execute. Callers
+    must still use the role-specific final-dispatch grants. Construction is
+    inert; existing leases cannot be adopted, and uncertain calls never retry.
+    """
+    def __init__(self,store,timeout_seconds,*,monotonic_clock=monotonic):
+        if type(store) is not TaskDeadlineStore or type(timeout_seconds) is not int or not 0<=timeout_seconds<=2**31-1:raise ValueError('Actual store and bounded timeout required')
+        if store.lease is not None:raise ValueError('Existing clock cannot be adopted')
+        if not callable(monotonic_clock):raise ValueError('Explicit shared monotonic clock required')
+        self.monotonic_clock=monotonic_clock;self._mono_pin=monotonic_clock;self._ceiling=None;self._last_mono=None
+        self.store=store;self.timeout_seconds=timeout_seconds
+        self._pins=(store,store.manager,store.handle,store.receipt,store.executor,store.guard,timeout_seconds)
+        self._lock=Lock();self._clock=None;self._lease=None;self._failed=False
+    @property
+    def unresolved(self):return self._failed
+    def _check(self):
+        s,m,h,r,e,g,t=self._pins
+        if self.monotonic_clock is not self._mono_pin or self.store is not s or self.timeout_seconds!=t or any(a is not b for a,b in zip((s.manager,s.handle,s.receipt,s.executor,s.guard),(m,h,r,e,g))) or h.prepared_timeout_seconds!=t or s.lease is not self._lease:
+            raise DispatchClockUnavailable('Shared clock ownership changed')
+    def narrow_deadline(self,candidate,now):
+        """Generation-wide nonexpanding ceiling in the one declared clock."""
+        if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) for v in (candidate,now)):raise DispatchClockUnavailable('Invalid shared clock sample')
+        with self._lock:
+            self._check()
+            if self._failed:raise DispatchClockUncertain('Shared clock needs reconciliation')
+            if self._last_mono is not None and now<self._last_mono:raise DispatchClockUnavailable('Shared monotonic clock moved backwards')
+            self._last_mono=now
+            self._ceiling=candidate if self._ceiling is None else min(self._ceiling,candidate)
+            return self._ceiling
+    def read_or_stamp(self):
+        if not self._lock.acquire(False):raise DispatchClockUnavailable('Shared clock dispatch already active')
+        attempted=False
+        try:
+            if self._failed:raise DispatchClockUncertain('Shared clock needs reconciliation')
+            self._check()
+            if self.timeout_seconds==0:return None
+            attempted=True
+            if self._clock is None:
+                value=self.store.stamp_owned(self.timeout_seconds)
+                lease=self.store.lease
+                if lease is None or lease.clock is not value:raise DispatchClockUncertain('Exact installed clock missing')
+                self._lease=lease;self._clock=value
+            else:
+                value=self.store.validate_current(self.timeout_seconds)
+                if value!=self._clock:raise DispatchClockUncertain('Shared clock changed')
+            self._check();return self._clock
+        except BaseException:
+            if attempted:self._failed=True
+            raise
+        finally:self._lock.release()
+
 class PreparedDispatchClock:
     def __init__(self,store,*,model,role,timeout_seconds,authorize,binding_current,
-                 wall_clock=lambda:datetime.now(timezone.utc),monotonic_clock=monotonic):
+                 wall_clock=lambda:datetime.now(timezone.utc),monotonic_clock=monotonic,generation_clock=None):
         if type(store) is not TaskDeadlineStore or not isinstance(model,Model) or not model.identity:raise ValueError('Actual prepared deadline store and identified model required')
         if role not in ('planner','worker') or type(timeout_seconds) is not int or not 0<=timeout_seconds<=2**31-1:raise ValueError('Explicit planner/worker timeout required')
         if any(not callable(f) for f in (authorize,binding_current,wall_clock,monotonic_clock)):raise ValueError('Explicit dispatch policy and clocks required')
+        if generation_clock is not None and (type(generation_clock) is not OwnedGenerationClock or generation_clock.store is not store or generation_clock.timeout_seconds!=timeout_seconds or generation_clock.monotonic_clock is not monotonic_clock):raise ValueError('Exact shared generation clock required')
+        self.generation_clock=generation_clock;self._generation_clock=generation_clock
         self.store,self.model,self.role,self.timeout_seconds=store,model,role,timeout_seconds
         self.authorize,self.binding_current=authorize,binding_current
         self.wall_clock,self.monotonic_clock=wall_clock,monotonic_clock
+        self._policy_pins=(authorize,binding_current,wall_clock,monotonic_clock)
         self._store,self._model,self._role,self._timeout=store,model,role,timeout_seconds
         self._manager,self._handle,self._receipt,self._executor,self._guard=store.manager,store.handle,store.receipt,store.executor,store.guard
         scope=store.handle.scope
@@ -60,6 +116,9 @@ class PreparedDispatchClock:
     def _check(self,context):
         if not isinstance(context,dict) or not callable(getattr(context,'check',None)):raise DispatchClockUnavailable('Exact runtime context required')
         context.check()
+        if any(a is not b for a,b in zip((self.authorize,self.binding_current,self.wall_clock,self.monotonic_clock),self._policy_pins)):raise DispatchClockUnavailable('Dispatch clock policy changed')
+        if self.generation_clock is not self._generation_clock:raise DispatchClockUnavailable('Shared clock changed')
+        if self._generation_clock is not None:self._generation_clock._check()
         if (self.store is not self._store or self.model!=self._model or self.role!=self._role or self.timeout_seconds!=self._timeout
             or self.store.manager is not self._manager or self.store.handle is not self._handle or self.store.receipt is not self._receipt
             or self.store.executor is not self._executor or self.store.guard is not self._guard):raise DispatchClockUnavailable('Dispatch clock binding changed')
@@ -71,6 +130,12 @@ class PreparedDispatchClock:
         scope=self._handle.scope
         if (scope.task_id,scope.exploration_id,scope.run_id,scope.revision)!=(self._identity['task_id'],self._identity['exploration_id'],self._identity['run_id'],self._identity['revision']):raise DispatchClockUnavailable('Dispatch configuration changed')
         context.check();self._handle.token.check()
+    def validate_dispatch(self,context):
+        """Read-only per-chunk binding fence; no stamp, SQL or new grant."""
+        self._check(context)
+        if self._failed or self._generation_clock is not None and self._generation_clock.unresolved:raise DispatchClockUncertain('Dispatch clock requires reconciliation')
+        if self.binding_current(self._model) is not True:raise DispatchClockUnavailable('Provider binding unavailable')
+        self._check(context);return True
     def _validate_receipt(self,value):
         r=self._receipt
         if type(value) is not DeadlineReceipt or (value.task_id,value.exploration_id,value.run_id,value.journal_revision,value.timeout_seconds)!=(r.task_id,r.exploration_id,r.run_id,r.revision,self._timeout):raise DispatchClockUncertain('Clock receipt identity mismatch')
@@ -98,7 +163,7 @@ class PreparedDispatchClock:
             # potentially non-reentrant lifetime guard around their transaction.
             if self._timeout:
                 attempted=True
-                value=self._store.stamp_owned(self._timeout) if self._clock is None else self._store.validate_current(self._timeout)
+                value=self._generation_clock.read_or_stamp() if self._generation_clock is not None else self._store.stamp_owned(self._timeout) if self._clock is None else self._store.validate_current(self._timeout)
                 self._validate_receipt(value);self._clock=value
             with self._guard(self._receipt.task_id,self._receipt.exploration_id):
                 # SQL/policy callbacks may block or invalidate the generation.
@@ -119,6 +184,7 @@ class PreparedDispatchClock:
                     seconds=(deadline-wall).total_seconds()
                     candidate=mono+seconds
                     self._mono_deadline=candidate if self._mono_deadline is None else min(self._mono_deadline,candidate)
+                    if self._generation_clock is not None:self._mono_deadline=self._generation_clock.narrow_deadline(self._mono_deadline,mono)
                     seconds=min(seconds,self._mono_deadline-mono)
                     if seconds<=0:raise TaskBudgetExpired()
                     limited=remaining is None or seconds<=remaining
@@ -136,11 +202,18 @@ class PreparedDispatchClock:
                 if self._timeout:
                     if not isinstance(final_wall,datetime) or final_wall.tzinfo is None or final_wall.utcoffset() is None:raise DispatchClockUnavailable('Aware final wall clock required')
                     self._mono_deadline=min(self._mono_deadline,final_mono+(deadline-final_wall).total_seconds())
+                    if self._generation_clock is not None:self._mono_deadline=self._generation_clock.narrow_deadline(self._mono_deadline,final_mono)
                     ceiling=self._mono_deadline if ceiling is None else min(ceiling,self._mono_deadline)
                     if self._mono_deadline<=final_mono:raise TaskBudgetExpired()
                     limited=own_budget_seconds is None or self._mono_deadline<=mono+own_budget_seconds
                 remaining=None if ceiling is None else ceiling-final_mono
                 if remaining is not None and remaining<=0:raise RunStopped('timeout')
+                # Clock callbacks are host code too. Pure final pins and the
+                # actual manager token fence follow sampling, without another
+                # callback/clock measurement that could replenish the budget.
+                if any(a is not b for a,b in zip((self.authorize,self.binding_current,self.wall_clock,self.monotonic_clock),self._policy_pins)) or self.generation_clock is not self._generation_clock:raise DispatchClockUnavailable('Final dispatch binding changed')
+                if self._generation_clock is not None:self._generation_clock._check()
+                if self._handle.token.cancelled or not self._manager.owns_generation(str(self._receipt.task_id),self._handle.token,self._handle):raise DispatchClockUnavailable('Final dispatch owner revoked')
                 return DispatchBudget(deadline,remaining,ceiling,limited)
         except TaskBudgetExpired:raise
         except BaseException:

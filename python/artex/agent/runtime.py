@@ -132,9 +132,51 @@ class RuntimeContext(dict):
     def __init__(self, metadata, token, deadline, clock, *, usage=None, max_tokens=None):
         super().__init__(metadata or {})
         self.token, self.deadline, self.clock = token, deadline, clock
+        self._clock_identity=clock;self._deadline_ceiling=deadline;self._remaining_last=None
         self['runtime_context'] = self
         self._usage, self._max_tokens = usage, max_tokens
         self._ledger_active=usage is not None
+
+    def _remaining_now(self):
+        def bindings():
+            if self.clock is not self._clock_identity:raise RunStopped('invalid_clock')
+            for value in (self.deadline,self._deadline_ceiling):
+                if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):raise RunStopped('invalid_clock')
+            if self.deadline>self._deadline_ceiling:raise RunStopped('invalid_clock')
+        def cancellation():
+            value=getattr(self.token,'cancelled',False)
+            if callable(value):value=value()
+            if value or self.get('cancelled') is True:raise RunStopped('cancelled')
+            err=getattr(self.token,'err',None)
+            if callable(err) and err() is not None:raise RunStopped('cancelled')
+        bindings();cancellation();bindings()
+        # Record every sample, including the check sample, so a backwards
+        # transition within this call cannot hide behind the final sample.
+        for _ in range(2):
+            now=self._clock_identity()
+            if isinstance(now,bool) or not isinstance(now,(int,float)) or not math.isfinite(now) or self._remaining_last is not None and now<self._remaining_last:raise RunStopped('invalid_clock')
+            self._remaining_last=now
+            cancellation();bindings()
+            if now>=self.deadline:raise RunStopped('timeout')
+        return now
+
+    def remaining_seconds(self):
+        """Positive duration in this context's own clock, never an absolute time.
+
+        Transports may min this duration with their own I/O budget without
+        comparing independent monotonic clock origins. Exhaustion never means
+        unlimited. Cancellation, rebinding, widening and invalid clocks fail.
+        """
+        now=self._remaining_now()
+        return self.deadline-now
+
+    def clamp_deadline(self,deadline,*,clock):
+        """Shorten the actual context using ONLY its original clock identity."""
+        if clock is not self._clock_identity or isinstance(deadline,bool) or not isinstance(deadline,(int,float)) or not math.isfinite(deadline):raise RunStopped('invalid_clock')
+        now=self._remaining_now()
+        self.deadline=min(self.deadline,deadline);self._deadline_ceiling=self.deadline
+        if now>=self.deadline:raise RunStopped('timeout')
+        return self.deadline-now
 
     @property
     def remaining_tokens(self):

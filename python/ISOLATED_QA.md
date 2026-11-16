@@ -1149,3 +1149,18 @@ harness changes. Manifest:
 `e729a65b98a3b93a77986773d3b291b22b9c3b2085f2c8514869e1424f0b91a3`.
 The earlier moving-source stage91 result remains separate evidence, not relabeled.
 This exact rerun still verifies refusal, not execution, of positive timed entry.
+
+## Stage 92: exact clock34 provider component, real PostgreSQL
+
+Source: exact frozen clock/provider checkpoint, without later observer changes.
+Manifest SHA-256: `577d2331e53f1b8737c0e91327ba35ab9380d7f55d81fc236e6207be39abe586`.
+
+Three actual PostgreSQL 17 component groups passed in the existing credential-free filesystem/network isolation, with synthetic prepared positive-timeout pins and fixed inert provider methods. No timed engine advance or guard bypass occurred.
+
+1. Shared OwnedGenerationClock and actual DeadlineProvider/RuntimeContext: streaming construction and unstarted close did not stamp or call provider. First next stamped once in real SQL. A genuinely distinct worker model identity/name/profile and fresh context reused the exact persisted clock, despite backwards wall time. Its monotonic ceiling did not extend; later expiry rejected the next event and closed the iterator once.
+2. Original iterator close revoked its binding grant. Explicit close surfaced DispatchClockUnavailable, did not silently succeed, closed once and did not repeat provider effects.
+3. Actual clock stamp committed, then the fixture raised acknowledgement uncertainty. Shared clock latched unresolved; the worker role could not retry or invoke transport, and actual first_run_at remained persisted. Rejection was DispatchClockUnavailable at the shared ownership fence, not necessarily DispatchClockUncertain. The original overly specific harness expectation was corrected; initial log retained.
+
+Fifty focused collected tests passed on the same snapshot: owned_generation_clock, task_deadline_provider and review, runtime_clock_review, runtime_deadline_clamp, provider_deadline and review. These include mocked HTTP duration/stream checks; no live HTTP model provider was used.
+
+Limitations: component-level opt-in only. Synthetic private prepared timeout pins remain necessary and do not establish natural positive-duration admission, default assembly wiring, first-goal deadline behavior, external transport preemption or deadline finalization. Distinct contexts share the same explicitly injected monotonic clock. Postcommit uncertainty is an injected acknowledgement failure after a real successful SQL write, not a simulated PostgreSQL server crash. No production credentials, infrastructure, external targets or source edits.

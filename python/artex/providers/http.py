@@ -242,6 +242,21 @@ class HTTPTransport:
         if remaining <= 0:
             raise TransportTimeout('Provider request deadline exceeded')
         limit = min(self.timeout, remaining)
+        # Runtime clocks may have a different epoch from this transport clock.
+        # Transfer only an independently measured duration, never a timestamp.
+        from ..agent.runtime import RuntimeContext
+        runtime = context if type(context) is RuntimeContext else (
+            context.get('runtime_context') if isinstance(context, Mapping) else None)
+        if type(runtime) is RuntimeContext:
+            try:
+                budget = runtime.remaining_seconds()
+            except Exception:
+                raise TransportCancelled('Runtime context unavailable') from None
+            if type(budget) not in (int, float) or not math.isfinite(budget):
+                raise TransportPolicyError('Invalid runtime duration')
+            if budget <= 0:
+                raise TransportTimeout('Runtime deadline exceeded')
+            limit = min(limit, budget)
         if connection is not None:
             connection.timeout = limit
             if connection.sock is not None:
