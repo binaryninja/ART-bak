@@ -1369,3 +1369,25 @@ Scope: original natural zero-timeout bootstrap produces a genuine prepared owner
 
 Original failing stage103 manifest (not relabeled as passing):
 `9b7a681f6092dd64e07bdb9b7da1f2388589dfed5822038efec9726018fa2880`.
+
+## Stage 105: unstamped completion
+
+Exact frozen unstamped-completion source; manifest SHA256 `2d5d716f012a236c10f33c37e66c8db21f9a821925e97269deed4c7d1adf983b`. No moving overlays, product edits or fixture corrections.
+
+Eleven real PostgreSQL 17.11 groups and 19 unchanged focused owner/review tests pass.
+
+- Empty, abandoned+paused-intent, and met-without-proof frontiers atomically produce done/frontier_drained/unstamped receipt. Both task clock timestamps remain NULL; no lease is created. Manager owner retires and token cancels; replay refuses. This is source frontier-drained semantics, not proof that goals were achieved.
+- Open goal refuses with quarantined owner.
+- Actual BEFORE INSERT trigger error rolls task/receipt back; original NULL clock persists.
+- Final write permit revocation preserves committed done but quarantines owner.
+- Real committed transaction with injected acknowledgement failure retains truth and forbids retry.
+- Fifth write callback changes actual task status to failed; final verification blocks false retirement.
+- Third/fourth complete receipt readback permit revocation quarantines committed owner (transaction verification is first; pool-level reads two/three).
+- Concurrent permit revocation from cancellation callback runs after retirement, without permit/registry lock deadlock.
+- Cancellation failure preserves committed done and quarantines ownership; no second cancellation/replay.
+- Six barrier-controlled two-thread races between actual manager unstamped reservation and first-stamp reservation each have exactly one winner, one inventory owner, no lease or SQL clock write. This tests reservation linearization, not two concurrent database writes.
+- A separate actual SQL first stamp wins before unstamped construction/settlement: unstamped path refuses and never clears or changes persisted clock values.
+
+Method: genuine zero-timeout manual-bootstrap fixture with inert fixed goals responses creates a prepared installed owner; private prepared timeout pin and matching local task row are then explicitly configured positive solely for this standalone component. No fake lease, planner/worker/final-model dispatch, public positive admission, full engine hook, tracked invocation tail or production runtime support is inferred.
+
+Original schema and explicit fresh additive bootstrap/unstamped receipt tables only, in a new disposable PostgreSQL database. Reused approved credentialless bwrap filesystem and outer user/network namespace, loopback only, readonly snapshot/cached dependencies, no external targets or real user data.

@@ -142,6 +142,20 @@ class EarlyCompletion:
     task_id: str
 
 
+@dataclass(frozen=True,eq=False)
+class UnstampedCompletion:
+    task_id:str
+
+@dataclass
+class _UnstampedSlot:
+    cap:UnstampedCompletion
+    store:object
+    token:CancellationToken
+    handle:object
+    repository:object
+    executor:object
+    state:str='reserved'
+
 @dataclass
 class _DeadlineSlot:
     reservation: DeadlineReservation
@@ -227,6 +241,7 @@ class TaskManager:
         self._runs: dict[str, _Run] = {}
         self._active = ''
         self._deadline_slots: dict[str, _DeadlineSlot] = {}
+        self._unstamped_slots: dict[str, _UnstampedSlot] = {}
 
     def load_existing(self):
         """Register persisted tasks without launching/resuming any execution."""
@@ -288,6 +303,7 @@ class TaskManager:
                 return False
             if allow_cancelled:
                 return True
+            if key in self._unstamped_slots:return False
             deadline=self._deadline_slots.get(key)
             if deadline is not None and deadline.state in ('freezing','drained','assessing','settling','early_settling','quarantined'):return False
             return (run.started is True and row['status']=='running'
@@ -298,7 +314,7 @@ class TaskManager:
         """Bounded process-local ownership inventory, not execution permission."""
         with self._lock:
             return tuple(DeadlineOwnerSnapshot(key,slot.state)
-                         for key,slot in sorted(self._deadline_slots.items()))
+                         for key,slot in sorted((*self._deadline_slots.items(),*self._unstamped_slots.items())))
 
     def _deadline_slot(self,reservation):
         if type(reservation) is not DeadlineReservation:
@@ -344,7 +360,7 @@ class TaskManager:
             raise TaskConflict('Deadline differs from original prepared configuration')
         key=_id(task_id)
         with self._lock:
-            if key in self._deadline_slots:raise TaskConflict('Deadline ownership already retained')
+            if key in self._deadline_slots or key in self._unstamped_slots:raise TaskConflict('Deadline or completion ownership already retained')
             if not self.owns_generation(key,token,handle):raise TaskConflict('Installed deadline generation required')
             row=self._tasks[key]
             if row.get('timeout_seconds')!=timeout_seconds:raise TaskConflict('Task deadline configuration changed')
@@ -662,6 +678,66 @@ class TaskManager:
             raise
         store._retired_slot=None
 
+    def reserve_unstamped_completion(self,store):
+        from .db.unstamped_completion import UnstampedCompletionStore
+        if type(store) is not UnstampedCompletionStore:raise TaskConflict('Exact unstamped store required')
+        store.validate_reservation()
+        d=store.deadline;key=str(d.receipt.task_id)
+        with self._lock:
+            if key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key):raise TaskConflict('Original unstamped owner unavailable')
+            if not self.owns_generation(key,d._token,d.handle):raise TaskConflict('Installed execution owner required')
+            if len(self._unstamped_slots)>=10000:raise TaskConflict('Completion inventory full')
+            cap=UnstampedCompletion(key)
+            slot=_UnstampedSlot(cap,store,d._token,d.handle,self.repository,self.repository.executor)
+            self._unstamped_slots[key]=slot
+        try:
+            if slot.handle.wait(0) is not True or slot.handle.unresolved is not False or not self.validate_unstamped_completion(cap,store):raise TaskConflict('Unstamped owner not cleanly drained')
+        except BaseException:
+            self.quarantine_unstamped_completion(cap,store);raise
+        return cap
+
+    def validate_unstamped_completion(self,cap,store):
+        with self._lock:
+            slot=self._unstamped_slots.get(getattr(cap,'task_id',None))
+            if type(cap) is not UnstampedCompletion or slot is None or slot.cap is not cap or slot.store is not store or slot.state!='reserved' or self._has_cleanup(cap.task_id) or cap.task_id in self._deadline_slots:return False
+            d=store.deadline;row=self._tasks.get(cap.task_id);run=self._runs.get(cap.task_id)
+            return (self.repository is slot.repository and self.repository.executor is slot.executor
+                and d.executor is slot.executor and d.manager is self and d.handle is slot.handle and d._token is slot.token and d._lease is None
+                and row is not None and row.get('status')=='running' and row.get('paused') is False and row.get('queued') is False
+                and row.get('deleted_at') is None and row.get('archived_at') is None
+                and row.get('timeout_seconds')==store.timeout and type(row.get('timeout_seconds')) is int
+                and run is not None and run.handle is slot.handle and run.token is slot.token and run.started and not run.uncertain and not slot.token._event.is_set())
+
+    def quarantine_unstamped_completion(self,cap,store):
+        with self._lock:
+            slot=self._unstamped_slots.get(getattr(cap,'task_id',None))
+            if slot is None or slot.cap is not cap or slot.store is not store:raise TaskConflict('Exact unstamped reservation required')
+            slot.state='quarantined'
+
+    def confirm_unstamped_completion(self,cap,store,evidence):
+        from .db.unstamped_completion import UnstampedCompletionStore
+        if type(store) is not UnstampedCompletionStore or not self.validate_unstamped_completion(cap,store):raise TaskConflict('Unstamped owner unavailable')
+        result=store.consume_evidence(cap,evidence)
+        with self._lock:
+            if not self.validate_unstamped_completion(cap,store):raise TaskConflict('Unstamped owner changed')
+            if result.task_id!=int(cap.task_id) or result.status!='done' or result.reason!='frontier_drained' or result.clock_state!='unstamped':raise TaskConflict('Unstamped receipt mismatch')
+            slot=self._unstamped_slots.pop(cap.task_id)
+            self._tasks[cap.task_id].update(status='done',completed_at=result.completed_at.isoformat())
+            self._runs.pop(cap.task_id,None)
+        store._retired_slot=slot
+        return result
+
+    def finish_unstamped_completion_cancellation(self,cap,store):
+        from .db.unstamped_completion import UnstampedCompletionStore
+        if type(store) is not UnstampedCompletionStore or cap is not store._cap:raise TaskConflict('Exact unstamped retirement required')
+        slot=getattr(store,'_retired_slot',None)
+        if slot is None or slot.cap is not cap or slot.store is not store:raise TaskConflict('Unstamped retirement unavailable')
+        try:slot.token.cancel('frontier_drained')
+        except BaseException:
+            with self._lock:slot.state='quarantined';self._unstamped_slots[cap.task_id]=slot
+            raise
+        store._retired_slot=None
+
     def validate_deadline_owner(self,lease,operation='read'):
         """Lease-only read capability; never permits providers/tools/completion.
 
@@ -709,6 +785,7 @@ class TaskManager:
         try:key=_id(task_id)
         except TaskNotFound:return False
         with self._lock:
+            if key in self._unstamped_slots:return False
             if self._has_cleanup(key):return False
             slot=self._deadline_slots.get(key)
             if slot is None:return True
@@ -826,7 +903,7 @@ class TaskManager:
         with self._lock:
             key, row = self._require(task_id)
             if self._has_cleanup(key):raise TaskConflict('Retained cleanup prevents admission')
-            if key in self._deadline_slots:
+            if key in self._deadline_slots or key in self._unstamped_slots:
                 raise TaskConflict('Retained deadline requires explicit resume reconciliation')
             if key in self._runs:
                 if self._runs[key].token.cancelled:
@@ -913,6 +990,7 @@ class TaskManager:
             key, row = self._require(task_id)
             if row.get('status') in _TERMINAL or row.get('paused'):
                 raise TaskConflict('Task is terminal or already paused')
+            if key in self._unstamped_slots:raise TaskConflict('Unstamped completion retained')
             deadline_slot=self._deadline_slots.get(key)
             if deadline_slot is not None and deadline_slot.state!='attached':
                 raise TaskConflict('Deadline reservation or uncertainty prevents pause retirement')
@@ -988,7 +1066,7 @@ class TaskManager:
             key, row = self._require(task_id)
             run = self._runs.get(key)
             if self._has_cleanup(key):return False
-            if key in self._deadline_slots:
+            if key in self._deadline_slots or key in self._unstamped_slots:
                 return False  # No deadline terminal-CAS authority is implemented yet.
             if run is None or run.token is not token or token.cancelled:
                 return False
