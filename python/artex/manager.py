@@ -794,6 +794,19 @@ class TaskManager:
             except (TaskConflict,AttributeError):return False
             return slot.state=='suspended' and key not in self._runs
 
+    def retirement_snapshot(self,task_id):
+        """Atomic callback-free terminal metadata and retained ownership read.
+
+        No SQL, authorization, cancellation or retirement mutation. A terminal
+        row alone does not establish that execution/cleanup ownership is gone.
+        """
+        key=_id(task_id)
+        with self._lock:
+            _,row=self._require(key)
+            return (row.get('status'),row.get('completed_at'),
+                    key in self._runs,
+                    key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key))
+
     def lifecycle_snapshot(self, task_id):
         with self._lock:
             _, row = self._require(task_id)

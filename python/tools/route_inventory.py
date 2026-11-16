@@ -295,6 +295,7 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     'rules': '/api/intercept/rules',
                     'judge_usage': '/api/intercept/judge/usage',
                     'notification_history': '/api/notify/deliveries',
+                    'detail': '/api/intercept/history/{id}',
                 }
                 test = node.test
                 key = test.left.value if isinstance(test, ast.Compare) and isinstance(test.left, ast.Constant) else None

@@ -5,6 +5,13 @@ from ..db.intercept_detail_read import InterceptDetailReader,DetailUnavailable
 from .core import json_response,error_response
 
 class InvalidDetailRequest(ValueError):pass
+def parse_request(request):
+    match=re.fullmatch(r'/api/intercept/history/([1-9][0-9]{0,18})',request.path)
+    if request.method!='GET' or not match or request.body or urlsplit(request.target).query:raise InvalidDetailRequest()
+    id=int(match[1])
+    if id>=2**63:raise InvalidDetailRequest()
+    return id
+
 class InterceptDetailReadService:
     def __init__(self,reader,*,authorize,raw_authorize,current,lifecycle_guard):
         if type(reader) is not InterceptDetailReader or any(not callable(v) for v in (authorize,raw_authorize,current,lifecycle_guard)):raise ValueError('Explicit record and raw diagnostic grants required')
@@ -14,12 +21,11 @@ class InterceptDetailReadService:
         r,e,s,a,raw,c,g=self._pins
         if self.reader is not r or r.executor is not e or r.scope is not s or self.authorize is not a or self.raw_authorize is not raw or self.current is not c or self.guard is not g:raise PermissionError()
         r.validate()
-    def handle(self,request):
+    def handle(self,request,*,selection=None):
         try:
-            match=re.fullmatch(r'/api/intercept/history/([1-9][0-9]{0,18})',request.path)
-            if request.method!='GET' or not match or request.body or urlsplit(request.target).query:raise InvalidDetailRequest()
-            id=int(match[1])
-            if id>=2**63:raise InvalidDetailRequest()
+            parsed=parse_request(request)
+            if selection is not None and (type(selection) is not int or selection!=parsed):raise InvalidDetailRequest()
+            id=parsed if selection is None else selection
             r,e,s,a,raw,c,g=self._pins
             def check_current():
                 self._check()

@@ -5,7 +5,7 @@ is attempted, uncertainty is sticky. Confirmed retirement remains tracked until
 actual original runner removal is observed; this module never mutates runner
 inventory or invokes unrelated tasks' completion callbacks.
 """
-from dataclasses import dataclass,fields
+from dataclasses import dataclass,fields,asdict
 from threading import Lock,Event
 from .host import AgentHost
 from .bootstrap_handle import BootstrapHandle
@@ -42,8 +42,10 @@ class OwnedFrontierCompletion:
         self._pins=(host,host.manager,host.runner,handle,handle.token,deadline_store,deadline_store.executor,deadline_store.receipt,deadline_store.guard,manual_owner)
         self._policy_pins=tuple(getattr(policy,f.name) for f in fields(policy));self._policy=policy
         self._current=handle.coordinator.current;self._handles=host.runner.handles
+        from ..manager import TaskManager
+        self._retirement_snapshot=TaskManager.retirement_snapshot
         self._lock=Lock();self._cancel=Event();self._active=False;self._used=False;self._failed=False
-        self._store=None;self.result=None;self._removal_pending=False
+        self._store=None;self.result=None;self._retirement=None;self._removal_pending=False
         self._tracking_lock=Lock();self._manual_owner=None;self._manual_owner_pin=None;self._manual_started=False
     def _binding(self):
         h,m,r,handle,token,d,e,receipt,guard,owner=self._pins
@@ -121,7 +123,9 @@ AND run_id=$3 AND request_id=$4 AND config_digest=$5 AND owner_token=$6 AND revi
                 cls=EarlyCompletionStore if phase=='stamped' else UnstampedCompletionStore
                 self._store=cls(self.deadline,grant=self._policy_pins[1],authorize=self._policy_pins[2])
                 result=self._store.settle()
-                self.result=result;self._removal_pending=True
+                self.result=result
+                self._retirement=(self._store,result,tuple(asdict(result).values()),self._store._cap,self._store._pins,self._store._grant,type(self._store._cap),tuple(asdict(self._store._cap).values()))
+                self._removal_pending=True
                 self._binding()
                 return FrontierCompletionResult('awaiting_runner_removal',result)
             except BaseException:
@@ -130,6 +134,46 @@ AND run_id=$3 AND request_id=$4 AND config_digest=$5 AND owner_token=$6 AND revi
             finally:
                 with self._lock:self._active=False
         finally:owner._leave(receipt)
+    def retirement_result(self,runner):
+        """Return original committed evidence for the exact runner, without effects.
+
+        Call outside runner/host/registry locks. This does not remove inventory,
+        query SQL, run grants, wait for a handle, or restore execution permission.
+        Revoking a permit after acknowledged retirement cannot undo that result.
+        The runner must still verify actual drain and compare original identities.
+        """
+        from ..manager import TaskManager,CancellationToken
+        from ..db.early_completion import EarlyCompletionReceipt
+        from ..db.unstamped_completion import UnstampedCompletionReceipt
+        self._binding()
+        with self._lock:
+            if runner is not self._pins[2] or self._active or self._failed or not self._used or not self._removal_pending or self._retirement is None:
+                raise FrontierUnavailable('Exact pending retirement required')
+            store,result,values,cap,pins,grant,cap_type,cap_values=self._retirement
+            expected=EarlyCompletionReceipt if type(store) is EarlyCompletionStore else UnstampedCompletionReceipt if type(store) is UnstampedCompletionStore else None
+            if (type(result) is not expected or self._store is not store or self.result is not result
+                or tuple(asdict(result).values())!=values or store._result is not result
+                or store._cap is not cap or type(cap) is not cap_type or tuple(asdict(cap).values())!=cap_values
+                or cap.task_id!=str(result.task_id) or store._pins is not pins or store._grant is not grant
+                or store.grant is not grant or store.deadline is not self._pins[5]
+                or store.authorize is not self._policy_pins[2] or store._evidence is not None
+                or getattr(store,'_retired_slot',None) is not None or store._used is not True):
+                raise FrontierUnavailable('Committed retirement evidence changed')
+            manager=self._pins[1];token=self._pins[4];prepared=self._pins[7]
+            if (result.task_id,result.exploration_id,result.run_id,result.bootstrap_revision,result.config_digest)!=(prepared.task_id,prepared.exploration_id,prepared.run_id,prepared.revision,prepared.config_digest) or result.status!='done' or result.reason!='frontier_drained':
+                raise FrontierUnavailable('Retirement generation mismatch')
+        # Invoke the original code-owned read methods, not replaceable host
+        # policy/current callbacks or instance-provided inventory adapters.
+        if TaskManager.retirement_snapshot is not self._retirement_snapshot:raise FrontierUnavailable('Original retirement reader changed')
+        snapshot=self._retirement_snapshot(manager,str(result.task_id))
+        if snapshot!=('done',result.completed_at.isoformat(),False,False) or not CancellationToken.cancelled.fget(token):
+            raise FrontierUnavailable('Registry retirement is not confirmed')
+        self._binding()
+        with self._lock:
+            if self._active or self._failed or self._retirement is None or self._retirement[1] is not result or self.result is not result or not self._removal_pending:
+                raise FrontierUnavailable('Retirement continuation changed')
+        return result
+
     def confirm_runner_removal(self):
         """Read-only continuation, permitted after seal for already retired work.
 

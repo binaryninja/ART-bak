@@ -86,6 +86,7 @@ class AgentHost:
         if any(not callable(getattr(runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
             raise RuntimeUnavailable('Runner lacks required lifecycle methods')
         self.manager, self.runner = manager, runner
+        self._original_manager, self._original_runner = manager, runner
         self._condition = Condition(RLock())
         self._mutations = 0
         self._draining = False
@@ -96,6 +97,13 @@ class AgentHost:
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
             claim(self)
+
+    def owns_settlement(self, runner):
+        """Callback-free check of this thread's original settlement reservation."""
+        with self._condition:
+            return (runner is self._original_runner and self.runner is runner
+                    and self.manager is self._original_manager and self.manager.runner is runner
+                    and self._settling and self._settlement_thread == get_ident())
 
     def _identity(self):
         if self.manager.runner is not self.runner:
@@ -125,7 +133,7 @@ class AgentHost:
         self._identity()
         if (type(owners) is not tuple or len(owners)>100000
                 or any(type(o) is not DeadlineOwnerSnapshot or o.state not in
-                       ('reserved','attached','suspended','quarantined','freezing','drained','assessing','settling')
+                       ('reserved','attached','suspended','quarantined','freezing','drained','assessing','settling','early_settling')
                        or type(o.task_id) is not str or not o.task_id.isascii()
                        or not o.task_id.isdecimal() or not 0<int(o.task_id)<2**63
                        for o in owners)

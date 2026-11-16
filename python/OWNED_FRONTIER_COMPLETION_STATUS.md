@@ -39,6 +39,20 @@ Eight authored fixture tests cover stamped/unstamped source frontier, repeatable
 waiting, busy/expired nonallocation, seal/cancellation, sticky insert uncertainty,
 actual post-retirement blocked cancellation tail, and explicit runner-removal
 confirmation. Fixtures use real manager/handle/runner and synthetic positive
-prepared pins/inert SQL, not natural timed admission. Independent review and
-actual PostgreSQL acceptance remain pending. Existing 11 registry, 7 listener
+prepared pins/inert SQL, not natural timed admission. The standalone scope passed 12 tests (including four independent cases) and
+actual PostgreSQL stage108 acceptance in four groups. Existing 11 registry, 7 listener
 composition and 17 finalization tests pass.
+
+
+## Separate in-progress runner/accessor stage
+
+The subsequent runner hook and retirement-result accessor are a distinct stage,
+not part of standalone PG108 acceptance. The accessor pins the exact consumed
+capability object **and semantic fields**, original immutable committed result,
+store/cancellation bookkeeping and original atomic manager retirement reader.
+The callback-free registry snapshot checks terminal metadata and absence of any
+run, clock/completion reservation or cleanup ownership together. It does not
+query SQL or grant permission. Current accessor tests include unchanged
+independent cap-mutation and reattached-run regressions; new hook acceptance is
+pending its independent review and fresh PostgreSQL run. Positive admission is
+still closed; earlier PG evidence used explicitly synthetic positive pins.

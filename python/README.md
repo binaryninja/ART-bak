@@ -27,7 +27,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **3011 tests**; these are authored unit/adapter
+combined suite currently passes **3056 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.

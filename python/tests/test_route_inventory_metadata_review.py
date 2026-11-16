@@ -30,3 +30,13 @@ class MetadataScannerReview(unittest.TestCase):
         rows=self.scan(''.join(f"        if {key!r} in services:staged.add('GET',{path!r},handler)\n" for key,path in pairs.items()))
         self.assertEqual({r['path'] for r in rows},set(pairs.values()))
         self.assertTrue(all(r['registration_mode']=='optional explicit service registration' for r in rows))
+
+    def test_detail_does_not_expand_receiver_arity_or_branch_whitelist(self):
+        cases=[
+            "        other=Router(auth)\n        if 'detail' in services:other.add('GET','/api/intercept/history/{id}',handler)\n",
+            "        if 'detail' in services:staged.add('GET','/api/intercept/history/{id}',handler,False)\n",
+            "        if 'detail' in services:\n            staged.add('GET','/api/intercept/history/{id}',handler)\n        else:\n            staged.add('GET','/api/intercept/history/{id}',handler)\n",
+            "        if 'detail' in services:\n            staged.add('GET','/api/intercept/history/{id}',handler)\n            noop()\n",
+        ]
+        for source in cases:
+            with self.subTest(source=source),self.assertRaises(fixture.audit.AuditError):self.scan(source)

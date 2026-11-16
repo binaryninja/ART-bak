@@ -1447,3 +1447,29 @@ Fixture migration correction: ManualActionOwner.wait requires sealed admission. 
 Setup uses genuine zero-timeout manual bootstrap with inert fixed goals responses, then explicitly synthetic positive prepared configuration and matching task metadata. Early branch installs a real component clock; unstamped branch does not. This does not validate positive public admission, automatic engine hook, full timed application, or goal achievement. No final model/commands/targets executed.
 
 Approved credentialless namespace/bwrap isolation, readonly exact source, cached dependencies, loopback-only fresh disposable PostgreSQL. Original/bootstrap schema plus explicit additive early/unstamped receipt tables only; no production data or external network.
+
+## Stage 109: explicit frontier runner hook
+
+Exact frozen hook source; manifest SHA256 `d4643adfdb16a8b46e31605533fafa7fc2cbd70ae9993033bda46d2bb28701ca`. No moving overlays/product edits.
+
+Four actual-PG hook groups plus two distinct natural-zero process scenarios pass; 43 focused tests pass (31 runner/result/process +12 component). Do not combine these scopes into timed-process-hook acceptance.
+
+Hook actual PostgreSQL: both early and unstamped branches settle only through host.poll, exact receipt/manager retirement, handle removal and tracker drain. Direct runner settlement outside host slot refuses before terminal SQL. Open actual frontier stays waiting without store allocation, then fixture abandonment allows settlement. Interrupted confirmation after handle removal preserves binding/pending; sealed continuation succeeds with pool fetch/transaction methods deliberately forbidden, proving no SQL replay. Public result substitution cannot remove installed handle or alter running task.
+
+Synthetic positive prepared configuration remains prerequisite for hook component. Actual timed engine execution is still intentionally blocked by SQL timeout gate; combined timed process plus hook remains unverified. No gate bypass performed.
+
+Separately, unchanged stage106 natural-zero application scenarios on this exact snapshot confirm active blocked inert process and CleanupUncertain retain running claim, pending canonical turn, cleanup/process ownership, undrained host and no second invocation. No actual subprocess. Initial blocked fixture missed its two-second entry deadline; preserved log. Same deadline rerun passed with diagnostic exception printing only added; this is timing-sensitive fixture evidence, not a claimed deterministic performance guarantee. Uncertain scenario passed first run.
+
+Isolation: approved credentialless namespace/bwrap, readonly exact source, fresh PostgreSQL17.11 loopback only, cached dependencies and inert providers. No external targets, public positive admission, default hook or commands.
+
+## Stage 110: optional metadata detail route
+
+Exact frozen detail-route source; manifest SHA256 `0fb1192b9fb5f2b1221c9c02da9525164d8c7e18044aea3add84b01e7b709f26`. No source overlays, product edits or fixture corrections.
+
+Four real PostgreSQL17.11 groups and nine unchanged focused composition tests pass.
+
+Actual original JWT WSGI authorizer wraps explicitly supplied detail service alongside judge/history services. Detail returns actual recorded intercept row, conversation join, exact task key007 and old null audit; foreign key7 is404. Judge/history routes continue to return actual fixture data. Original application remains404 for detail. Unknown execution subroute delegates404; POST405 and HEAD400 with empty body.
+
+Missing JWT, denied global/raw grants and malformed selectors all refuse before any detail SQL query. Revocation inside start_response raises before body emission after one already-issued200; no fake replacement403 is claimed. Literal, dynamic HEAD and overlapping generic dynamic route conflicts reject atomically with original route list unchanged.
+
+Only explicit optional route composition tested; no default registration, execution decision, mutation, retry/send or browser/frontend claim. Approved credentialless namespace+bwrap, readonly source, fresh loopback PostgreSQL and cached dependencies. No external model/target, commands, production data or public listener.

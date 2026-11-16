@@ -3,8 +3,11 @@
 New `db/intercept_detail_read.py` and `server/intercept_detail_read.py` implement
 only the source GET `/api/intercept/history/{id}` projection. Nothing is registered
 in an application, no matcher/approval is activated, and execution navigation is
-not implemented. Eight synthetic owner tests pass; independent review and actual
-PostgreSQL acceptance remain pending.
+not implemented by the standalone service. Eight synthetic owner tests plus six
+independent review tests pass. Standalone PostgreSQL stage 107 passed four groups
+and 21 focused tests, frozen manifest
+`372dad512810e89b74d1bab677e5a28655b6cf4f9f0f0499e989393918bbca4a`
+(see ISOLATED_QA.md). Optional composition acceptance is separately recorded below.
 
 Source: `server/intercept.go:interceptDetail`, `db/intercept_detail.go:GetInterceptDetail`,
 and `db/intercept.go:approvalRowSelectWithAudit`. The original approval ID, nullable
@@ -47,3 +50,30 @@ a later alias from hiding an earlier known-field type error. Source
 GetInterceptDetail returns json.Unmarshal errors, and interceptDetail maps them
 to HTTP 500; the Python handler likewise returns a redacted 500, never a partial
 record. Raw model_input objects are not case-folded or subject to alias rejection.
+
+## Explicit optional authenticated composition
+
+`bind_metadata_reads(..., detail_service=...)` now optionally adds the protected
+GET `/api/intercept/history/{id}` overlay. Default omission adds no detail route.
+Construction requires the exact original WSGI/Router/AuthService and exact reader
+and service types, pins methods/resources, and performs no SQL or grants. It does
+not stack onto arbitrary dynamic overlays. Existing literal or parameter-template
+GET/HEAD routes intersecting the detail path family are rejected before mutation;
+this conservative conflict rule can reject noncanonical literal IDs too.
+
+A shared pure parser selects the canonical positive int64 ID once for wrapper
+grants; the service verifies it against the original request and reuses that same
+selection. Scope, original JWT, independent record/raw grants and current policy
+are checked through serialization and after start_response. Revocation after
+headers aborts body delivery instead of fabricating a new status. HEAD is not
+silently widened, mutations are not registered, and `/execution` remains outside
+this overlay. Original application behavior outside the selected family remains.
+
+Five authored and four independent composition tests pass. PostgreSQL stage 110
+passed four actual database/JWT groups and nine focused composition tests; see
+ISOLATED_QA.md. This does
+not establish browser/runtime activation or permission to execute a reviewed tool.
+
+Composition conflict matching includes Router-supported mixed literal/parameter
+segments, not only whole-segment parameters. Uncertain fourth-segment overlap is
+conservatively refused, without modifying original routes.

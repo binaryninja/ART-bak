@@ -45,6 +45,7 @@ class EngineRunner:
         self._readiness,self._factory=readiness,factory
         self.max_pending=max_pending
         self._lock=RLock(); self._handles={}; self._host=None; self._host_executor=None; self._host_manager=None
+        self._frontier={};self._host_settlement_check=None
 
     def claim_host(self, host):
         """One lifecycle fence for this runner, retained even on setup failure.
@@ -67,6 +68,7 @@ class EngineRunner:
             if self._host is not None or self._handles:
                 raise RuntimeUnavailable('Engine runner already has lifecycle ownership')
             self._host=host
+            self._host_settlement_check=host.owns_settlement
             self._host_executor=executor
             self._host_manager=host.manager
 
@@ -124,6 +126,7 @@ class EngineRunner:
         task,scope=self._prepare(task)
         key=None if task.get('provisional') else str(int(task['id']))
         with self._lock:
+            if key in self._frontier:raise TaskConflict('Frontier generation still owns retirement')
             old=self._handles.get(key)
             if old is not None and (old.unresolved or not old.token.cancelled or not old.wait(0)):
                 raise TaskConflict('Prior engine generation still owns work')
@@ -131,8 +134,96 @@ class EngineRunner:
                 raise RuntimeUnavailable('Engine capacity exhausted')
         return True
 
+    def bind_frontier_completion(self, handle, component):
+        """Explicit prepared timed generation only; no default policy/admission.
+
+        Binding performs pure original-resource validation, never SQL, grants or
+        provider execution. Controller tracking owns any later removal tail.
+        """
+        from .frontier_completion import OwnedFrontierCompletion
+        from .manual_action_owner import ManualActionOwner
+        if type(handle) is not BootstrapHandle or type(component) is not OwnedFrontierCompletion:
+            raise RuntimeUnavailable('Exact prepared frontier components required')
+        if self._host is None:raise RuntimeUnavailable('Frontier requires original hosted runner')
+        self.claim_host(self._host)
+        for name in ('run_once','retirement_result','confirm_runner_removal'):
+            if getattr(getattr(component,name),'__func__',None) is not getattr(OwnedFrontierCompletion,name):
+                raise RuntimeUnavailable('Original frontier methods required')
+        component._binding()
+        owner=component._manual_owner_pin
+        if (type(owner) is not ManualActionOwner or owner.host is not self._host
+            or component.host is not self._host or component.handle is not handle
+            or component.deadline.receipt!=handle._receipt
+            or component.deadline.executor is not self._host_executor
+            or handle.manager is not self._host_manager or handle.token.cancelled
+            or type(handle.prepared_timeout_seconds) is not int or handle.prepared_timeout_seconds<=0
+            or component._used or component._active or component._failed):
+            raise RuntimeUnavailable('Original unused positive frontier required')
+        with owner._condition:
+            if owner._sealed or owner._components.get(component)!='frontier':
+                raise RuntimeUnavailable('Registered unsealed frontier owner required')
+        if handle.validate_prepared_receipt(component.deadline.receipt) is not True:
+            raise RuntimeUnavailable('Original prepared receipt required')
+        if self._host_manager.owns_generation(handle.task_id,handle.token,handle) is not True:
+            raise RuntimeUnavailable('Original installed generation required')
+        entry=(handle,component,handle.token,component.run_once,component.retirement_result,
+               component.confirm_runner_removal,handle.wait)
+        with self._lock:
+            if self._handles.get(handle.task_id) is not handle or handle.task_id in self._frontier:
+                raise TaskConflict('Frontier binding cannot adopt or replace an inventory entry')
+            self._frontier[handle.task_id]=entry
+
+    def _frontier_slot(self):
+        host=self._host
+        if (host is None or host.owns_settlement!=self._host_settlement_check
+            or self._host_settlement_check(self) is not True):
+            raise TaskConflict('Frontier completion requires original host settlement slot')
+
+    def _settle_frontier(self,key,entry):
+        self._frontier_slot()
+        handle,component,token,run,retirement,confirm,wait=entry
+        if (component.handle is not handle or handle.token is not token or component.run_once!=run
+            or component.retirement_result!=retirement or component.confirm_runner_removal!=confirm
+            or handle.wait!=wait):raise RuntimeUnavailable('Frontier completion binding changed')
+        component._binding()
+        with self._lock:
+            if self._frontier.get(key) is not entry:raise TaskConflict('Frontier binding changed')
+            installed=self._handles.get(key)
+        if installed is not None and installed is not handle:raise TaskConflict('Frontier inventory generation changed')
+        # A used controller must never replay SQL. Its private evidence accessor
+        # distinguishes committed retirement from attempted/uncertain effects.
+        if not component._used:
+            if installed is not handle:raise TaskConflict('Frontier handle missing before attempt')
+            result=run()
+            if result.phase in ('busy','waiting','expiry_required'):return False
+            if result.phase!='awaiting_runner_removal':raise RuntimeUnavailable('Unexpected frontier outcome')
+        receipt=retirement(self)
+        if wait(0) is not True or handle.unresolved is not False:
+            raise TaskConflict('Frontier effects have not drained')
+        self._frontier_slot()
+        # Wait can execute callbacks; revalidate exact private retirement proof
+        # and original methods before a callback-free compare/remove.
+        if (retirement(self) is not receipt or component.retirement_result!=retirement or handle.wait!=wait
+            or component.run_once!=run or component.confirm_runner_removal!=confirm):
+            raise RuntimeUnavailable('Frontier retirement proof changed')
+        with self._lock:
+            if self._frontier.get(key) is not entry:raise TaskConflict('Frontier binding changed')
+            current=self._handles.get(key)
+            if current is handle:del self._handles[key]
+            elif current is not None:raise TaskConflict('Frontier inventory generation changed')
+        # Keep binding on failure: sealed ManualActionOwner permits this exact
+        # already-retired read-only continuation, never another store attempt.
+        if confirm() is not True:raise TaskConflict('Frontier removal confirmation pending')
+        self._frontier_slot()
+        with self._lock:
+            if self._frontier.get(key) is not entry:raise TaskConflict('Frontier binding changed')
+            del self._frontier[key]
+        return True
+
     def _retire_cancelled(self, key, handle):
         """Detach execution only after manager acknowledgement; never release a lease."""
+        with self._lock:
+            if key in self._frontier:return False
         if handle.unresolved or not handle.token.cancelled or handle.wait(0) is not True:
             return False
         manager=self._host_manager
@@ -151,7 +242,9 @@ class EngineRunner:
         if not isinstance(token,CancellationToken):raise RuntimeUnavailable('Exact manager token required')
         token.check()
         task,scope=self._prepare(task); key=str(int(task['id']))
-        with self._lock:old=self._handles.get(key)
+        with self._lock:
+            if key in self._frontier:raise TaskConflict('Frontier generation still owns retirement')
+            old=self._handles.get(key)
         if old is not None and old.token is not token:
             if not self._retire_cancelled(key,old):
                 raise TaskConflict('Prior engine generation still owns work')
@@ -203,8 +296,16 @@ class EngineRunner:
         settled=[]
         # Snapshot under the runner lock; manager and handle callbacks run outside
         # it to avoid reversing manager/engine lifetime lock ordering.
-        with self._lock: inventory=tuple(self._handles.items())
+        with self._lock:
+            inventory=tuple(self._handles.items());frontier=tuple(self._frontier.items())
+        bound_keys={key for key,entry in frontier}
+        for key,entry in frontier:
+            if self._settle_frontier(key,entry):settled.append(key)
         for key,handle in inventory:
+            if key in bound_keys:continue
+            if isinstance(handle,BootstrapHandle) and handle.prepared_timeout_seconds>0 and not handle.token.cancelled:
+                # A positive generation cannot fall back to zero-engine completion.
+                continue
             if handle.unresolved:continue
             if handle.token.cancelled:
                 self._retire_cancelled(key,handle)
