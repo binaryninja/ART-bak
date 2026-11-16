@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from threading import Condition, RLock
+from threading import Condition, RLock, get_ident
 from time import monotonic
 
 from ..manager import RuntimeUnavailable, TaskConflict, TaskManager
@@ -90,6 +90,7 @@ class AgentHost:
         self._mutations = 0
         self._draining = False
         self._settling = False
+        self._settlement_thread = None
         self._working = False
         claim=getattr(runner,'claim_host',None)
         if claim is not None:
@@ -226,29 +227,38 @@ class AgentHost:
                 self._condition.notify_all()
 
     def poll(self):
-        """Non-background settlement pass. Busy is not evidence of no live work."""
+        """Non-background settlement pass. Busy is not evidence of no live work.
+
+        The thread-owned slot spans all callback tails, including inventory and
+        waits after manager retirement. No host condition lock spans callbacks.
+        Other polls return busy; same-thread recursion is a programming error.
+        """
         self._identity()
         with self._condition:
+            if self._settling:
+                if self._settlement_thread == get_ident():
+                    raise TaskConflict('Completion settlement cannot reenter itself')
+                return PollResult(busy=True)
             if self._mutations:
                 return PollResult(busy=True)
-            # Hold the admission fence through settlement; manager callbacks must
-            # not reenter this host or start new work on another thread and wait.
-            if self._settling:
-                raise TaskConflict('Completion settlement cannot reenter itself')
             self._settling = True
-            try:
-                settled = self.runner.settle_completed(self.manager.complete)
-                self._identity()
-                if not isinstance(settled, (list, tuple)) or len(settled)>100000 or any(not isinstance(item,str) or not item or len(item)>1024 for item in settled) or len(set(settled))!=len(settled):
-                    raise RuntimeUnavailable('Invalid runner settlement receipts')
-                settled = tuple(settled)
-                handles = self._handles()
-                running = sum(not self._wait(handle,0) for handle in handles)
-                owners=self._deadline_inventory()
-                return PollResult(False, settled, running, len(handles) - running,
-                                  len(owners),sum(o.state != 'suspended' for o in owners))
-            finally:
+            self._settlement_thread = get_ident()
+        try:
+            settled = self.runner.settle_completed(self.manager.complete)
+            self._identity()
+            if not isinstance(settled, (list, tuple)) or len(settled)>100000 or any(not isinstance(item,str) or not item or len(item)>1024 for item in settled) or len(set(settled))!=len(settled):
+                raise RuntimeUnavailable('Invalid runner settlement receipts')
+            settled = tuple(settled)
+            handles = self._handles()
+            running = sum(not self._wait(handle,0) for handle in handles)
+            owners=self._deadline_inventory()
+            return PollResult(False, settled, running, len(handles) - running,
+                              len(owners),sum(o.state != 'suspended' for o in owners))
+        finally:
+            with self._condition:
                 self._settling = False
+                self._settlement_thread = None
+                self._condition.notify_all()
 
     def drain(self, timeout):
         """Wait at most timeout for cooperative workers (excluding blocked stores).
@@ -262,12 +272,14 @@ class AgentHost:
             raise ValueError('timeout must be finite and nonnegative')
         deadline = monotonic() + timeout
         with self._condition:
+            if self._settling and self._settlement_thread == get_ident():
+                raise TaskConflict('Completion settlement cannot drain itself')
             if self._draining:
                 raise TaskConflict('A drain is already in progress')
             self._draining = True
         try:
             with self._condition:
-                while self._mutations:
+                while self._mutations or self._settling:
                     remaining = deadline - monotonic()
                     if remaining <= 0:
                         return DrainResult(False, PollResult(True))

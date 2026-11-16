@@ -1414,3 +1414,19 @@ The runner contract is synchronous: a valid ProcessResult is the host runner's a
 Isolation: approved outer user/network namespace and credentialless bwrap, loopback-only disposable PostgreSQL, readonly exact snapshot, cached trusted dependencies; no external providers, credentials, real user files or public listener.
 
 One fixture correction: captured activity callback receives ChatOutcome, so completion assertion uses `.result.reason`, not `.reason`. Original failed fixture log preserved. All subsequent scenarios passed without product modifications.
+
+## Stage 107: recorded detail and settlement tail
+
+Exact frozen detail/host source; manifest SHA256 `372dad512810e89b74d1bab677e5a28655b6cf4f9f0f0499e989393918bbca4a`. No working-tree overlay or product modifications.
+
+Four actual PostgreSQL 17.11 groups and 21 unchanged focused tests pass.
+
+Detail service, invoked directly (no new route registered): actual conversation/rule LEFT JOIN fields, exact opaque task key `007` versus foreign `7`, old SQL NULL audit and JSON null audit, recorded structural context/defaults, preserved nested model-input null, unknown audit field omission. Oversized multibyte reason produces false bound sentinel and NULL for every raw/text projected field before transfer; numeric IDs/timestamps remain fixed-width. Raw grant revocation immediately after actual SQL fetch returns403 without diagnostics.
+
+Host settlement: genuine zero-timeout HTTP bootstrap and actual planner→intent→worker fact→proof engine progression; actual SQL task becomes done and manager retires inside runner settlement. An event blocks the return tail on another thread. Competing host.poll and advance_owned return busy, bounded drain(0) reports unsettled while tail remains active. Releasing the callback lets original poll and subsequent drain report settled. No fabricated active flags, positive timeout pins, final model, external provider or target.
+
+Focused modules: test_intercept_detail_read, test_intercept_detail_read_review, test_host_settlement_slot, test_host_settlement_review, 21 tests. These supplement real database evidence, including final serialization/guard policy and reentry cases.
+
+Fixture correction: the initial byte-bound assertion wrongly expected fixed numeric/date fields to be NULL too. Source correctly nulls only raw/text columns. Updated fixture checks every projected text/audit field, preserving initial failed fixture log. No implementation fix required.
+
+Isolation reused approved user/network namespace + credentialless bwrap with readonly exact snapshot, loopback-only fresh PostgreSQL, cached dependencies and inert providers. No listener or new HTTP route enabled, real commands, user data, or production database involved.

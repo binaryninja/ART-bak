@@ -102,3 +102,23 @@ proxy, alternate endpoint, credentials or execution isolation were changed.
 Approval is present, but the environment capability remains unavailable; dependency
 fetch and actual compiler/linter execution remain blocked pending platform support
 or a complete verified cache.
+
+### Dependency-independent source syntax check
+
+The verified TypeScript **5.9.3** parser parsed an immutable snapshot of all **191
+tracked frontend source files** with supported TS/TSX/JS extensions: **152 TSX,
+35 TS, and 4 JS**. Each file used its matching ScriptKind; `.mjs`/`.cjs` use JS,
+`.mts`/`.cts` use TS. Result: **zero syntactic diagnostics**.
+
+Source manifest SHA-256:
+`5e26d8638b12b2269119e6e5c147c4821e79cafd7483ca1029d2d3e7c5b3fe45`.
+The manifest records every relative path, byte length and content hash; snapshot
+bytes were rechecked before parsing. Parser/harness hashes and machine-readable
+results are retained with QA evidence. No project modules, Next configuration,
+plugins or package scripts were loaded or executed. No dependency resolution,
+installation or network access was performed for this check.
+
+This establishes syntax only. It is **not** a TypeScript semantic/type check,
+Next build, Biome result, runtime execution or browser validation. Untracked files,
+non-JavaScript assets and project dependency availability are outside this check.
+The npm dependency blocker above remains unchanged.
