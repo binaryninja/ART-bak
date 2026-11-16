@@ -17,6 +17,7 @@ from .task_model_usage_read import TaskModelUsageRead
 from .task_scope_read import TaskScopeRead
 from .task_constraint_read import TaskConstraintRead
 from .task_intercept_rule_read import TaskInterceptRuleRead
+from .task_intercept_history_read import TaskInterceptHistoryRead
 from ..db.token_usage import TokenUsageStore,UsageScope
 from ..db.task_intent_assets import TaskIntentAssetsStore
 from ..db.main_sessions import MainSessionsStore
@@ -37,6 +38,7 @@ class TaskReadServices:
     scope:TaskScopeRead | None = None
     constraints:TaskConstraintRead | None = None
     intercept_rules:TaskInterceptRuleRead | None = None
+    intercept_history:TaskInterceptHistoryRead | None = None
 
 class TaskReadBuilder:
     def __init__(self,executor,*,request_authorize,context_authorize,asset_authorize,
@@ -51,7 +53,8 @@ class TaskReadBuilder:
                  model_usage_authorize=None,model_usage_request_authorize=None,
                  scope_authorize=None,scope_request_authorize=None,
                  constraint_authorize=None,constraint_request_authorize=None,
-                 intercept_rule_workspace=None,intercept_rule_authorize=None,intercept_rule_request_authorize=None):
+                 intercept_rule_workspace=None,intercept_rule_authorize=None,intercept_rule_request_authorize=None,
+                 intercept_history_workspace=None,intercept_history_authorize=None,intercept_history_raw_authorize=None,intercept_history_request_authorize=None):
         policies=(request_authorize,context_authorize,asset_authorize,runtime_snapshot,
                   activity_authorize,activity_raw_authorize,activity_request_authorize,stream_authorize,stream_wait)
         if any(not callable(f) for f in policies[:-1]) or stream_wait is not None and not callable(stream_wait):raise ValueError('Explicit independent task read grants required')
@@ -92,6 +95,11 @@ class TaskReadBuilder:
                 or not callable(intercept_rule_request_authorize)):
             raise ValueError('Explicit rule workspace and independent grants required')
         self._intercept_rule_policies=intercept_rule_policies;self._original_intercept_rule_policies=intercept_rule_policies
+        history_policies=(intercept_history_workspace,intercept_history_authorize,intercept_history_raw_authorize,intercept_history_request_authorize)
+        if any(v is not None for v in history_policies) and (type(intercept_history_workspace) is not str
+                or not 1<=len(intercept_history_workspace.encode())<=256 or any(not callable(f) for f in history_policies[1:])):
+            raise ValueError('Explicit history workspace and metadata/raw/request grants required')
+        self._history_policies=history_policies;self._original_history_policies=history_policies
         self._coverage_policies=coverage_policies;self._original_coverage_policies=coverage_policies
         self._goal_policies=(goal_authorize,goal_request_authorize)
         self._original_goal_policies=self._goal_policies
@@ -102,7 +110,7 @@ class TaskReadBuilder:
         self._original_policies=policies;self._original_bounds=self._bounds
     def validate_bindings(self):
         if (self.executor is not self._executor or self._policies is not self._original_policies
-                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies or self._intercept_rule_policies is not self._original_intercept_rule_policies):raise ValueError('Read builder configuration changed')
+                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies or self._intercept_rule_policies is not self._original_intercept_rule_policies or self._history_policies is not self._original_history_policies):raise ValueError('Read builder configuration changed')
         return True
     def build(self,scope,*,current,lifecycle_guard):
         self.validate_bindings()
@@ -208,4 +216,12 @@ class TaskReadBuilder:
             intercept_rule_read=TaskInterceptRuleRead(self.executor,scope,workspace=rule_workspace,
                 authorize=lambda s:grant(rule_source,scope),request_authorize=lambda req,s:grant(rule_request,req,scope),
                 current=live,lifecycle_guard=guard,max_rows=rows,max_bytes=bytes_)
-        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read,intercept_rule_read)
+        history_read=None
+        history_workspace,history_source,history_raw,history_request=self._history_policies
+        if history_workspace is not None:
+            history_read=TaskInterceptHistoryRead(self.executor,scope,workspace=history_workspace,
+                authorize=lambda s,selection:grant(history_source,scope,selection),
+                raw_authorize=lambda s,selection:grant(history_raw,scope,selection),
+                request_authorize=lambda req,s,selection:grant(history_request,req,scope,selection),
+                current=live,lifecycle_guard=guard,max_rows=rows,max_bytes=bytes_)
+        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read,intercept_rule_read,history_read)
