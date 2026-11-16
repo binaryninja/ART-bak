@@ -31,6 +31,41 @@ class ActivityInvalid(ValueError):pass
 class ActivityMissing(LookupError):pass
 class ActivityUnavailable(RuntimeError):pass
 
+@dataclass(frozen=True)
+class ActivityReadLimits:
+    row_bytes:int=65536
+    page_bytes:int=1048576
+    detail_bytes:int=1048576
+    def validate(self):
+        for value,maximum in ((self.row_bytes,1048576),(self.page_bytes,16777216),(self.detail_bytes,16777216)):
+            if type(value)is not int or not 1<=value<=maximum:raise ValueError('Invalid activity read byte bounds')
+        if self.row_bytes>self.page_bytes:raise ValueError('Activity row bound exceeds page bound')
+
+_TEXT_FIELDS=('worker','kind','tool','tool_use_id','summary')
+_NAMES=('id','worker','kind','tool','tool_use_id','is_error','summary','created_at','input_tokens','output_tokens','cache_read_tokens','cache_write_tokens')
+_PROJECT=', '.join("COALESCE("+n+",'') AS "+n if n in _TEXT_FIELDS else n for n in _NAMES)
+_MASKED=', '.join('CASE WHEN permitted THEN '+n+' ELSE NULL END AS '+n if n in _TEXT_FIELDS else n for n in _NAMES)
+_ROW_BYTES='+'.join('octet_length('+n+')::bigint' for n in _TEXT_FIELDS)
+
+def _read_sql(where,descending=False):
+    order='DESC' if descending else 'ASC'
+    return ('WITH selected AS (SELECT '+_PROJECT+' FROM conversation_activities WHERE '+where+
+            ' ORDER BY id '+order+' LIMIT $3), sized AS (SELECT *, '+_ROW_BYTES+' AS row_bytes FROM selected), '+
+            'checked AS (SELECT *, MAX(row_bytes) OVER() <= $4 AND SUM(row_bytes) OVER() <= $5 AS permitted FROM sized) '+
+            'SELECT '+_MASKED+' FROM checked ORDER BY id '+order)
+
+
+def _bounded_rows(rows,limits,maximum):
+    if len(rows)>maximum:raise ActivityUnavailable('Activity read exceeds bound')
+    total=0
+    for row in rows:
+        if len(row)!=12:raise ActivityUnavailable('Activity read unavailable')
+        values=[row[i] for i in (1,2,3,4,6)]
+        if any(type(v)is not str for v in values):raise ActivityUnavailable('Activity read exceeds bound')
+        size=sum(len(v.encode('utf-8')) for v in values);total+=size
+        if size>limits.row_bytes or total>limits.page_bytes:raise ActivityUnavailable('Activity read exceeds bound')
+
+
 
 def _id(value,name='conversation id',positive=True):
     try:value=int64(value,name)
@@ -103,8 +138,13 @@ def _scan(row):
 
 
 class ConversationActivityStore:
-    def __init__(self,executor,conversation_id):
-        self.executor=executor;self.conversation_id=_id(conversation_id)
+    def __init__(self,executor,conversation_id,*,read_limits=ActivityReadLimits()):
+        if type(read_limits)is not ActivityReadLimits:raise ValueError('Explicit activity read bounds required')
+        read_limits.validate()
+        self.executor=executor;self.conversation_id=_id(conversation_id);self.read_limits=read_limits;self._read_limits=read_limits
+    def _read_bounds(self):
+        if self.read_limits is not self._read_limits:raise ActivityUnavailable('Activity read bounds changed')
+        self._read_limits.validate();return self._read_limits
 
     def append(self,activity):
         if not isinstance(activity,Activity):raise ActivityInvalid('Activity required')
@@ -154,21 +194,26 @@ WHERE id=$1""",(self.conversation_id,title_if_default)))
             return ids
 
     def list(self,since_id=0,limit=500):
-        since_id=_id(since_id,'since id',False);limit=_limit(limit,500)
-        rows=self.executor.fetch_all(Query('SELECT '+COLUMNS+' FROM conversation_activities WHERE conversation_id=$1 AND id>$2 ORDER BY id LIMIT $3',
-                                           (self.conversation_id,since_id,limit)))
+        since_id=_id(since_id,'since id',False);limit=_limit(limit,500);bounds=self._read_bounds()
+        rows=self.executor.fetch_all(Query(_read_sql('conversation_id=$1 AND id>$2'),
+                                           (self.conversation_id,since_id,limit,bounds.row_bytes,bounds.page_bytes)))
+        self._read_bounds();_bounded_rows(rows,bounds,limit)
         items=[_scan(row) for row in rows]
         return items,max([since_id]+[item.id for item in items])
 
     def page(self,before=0,limit=200):
-        before=_id(before,'before id',False);limit=_limit(limit,200)
-        rows=self.executor.fetch_all(Query('SELECT '+COLUMNS+''' FROM conversation_activities
-WHERE conversation_id=$1 AND ($2 <= 0 OR id < $2)
-ORDER BY id DESC LIMIT $3''',(self.conversation_id,before,limit+1)))
+        before=_id(before,'before id',False);limit=_limit(limit,200);bounds=self._read_bounds()
+        rows=self.executor.fetch_all(Query(_read_sql('conversation_id=$1 AND ($2 <= 0 OR id < $2)',True),
+                                           (self.conversation_id,before,limit+1,bounds.row_bytes,bounds.page_bytes)))
+        self._read_bounds();_bounded_rows(rows,bounds,limit+1)
         has_more=len(rows)>limit
         return [_scan(row) for row in reversed(rows[:limit])],has_more
 
     def detail(self,id):
-        id=_id(id,'activity id')
-        rows=self.executor.fetch_all(Query('SELECT detail FROM conversation_activities WHERE id=$1 AND conversation_id=$2',(id,self.conversation_id)))
-        return rows[0][0] or '' if rows else ''
+        id=_id(id,'activity id');bounds=self._read_bounds()
+        rows=self.executor.fetch_all(Query("SELECT CASE WHEN octet_length(COALESCE(detail,'')) <= $3 THEN COALESCE(detail,'') ELSE NULL END FROM conversation_activities WHERE id=$1 AND conversation_id=$2",(id,self.conversation_id,bounds.detail_bytes)))
+        self._read_bounds()
+        if not rows:return ''
+        if len(rows)!=1 or len(rows[0])!=1 or type(rows[0][0])is not str or len(rows[0][0].encode('utf-8'))>bounds.detail_bytes:
+            raise ActivityUnavailable('Activity detail exceeds bound')
+        return rows[0][0]

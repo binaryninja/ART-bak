@@ -9,6 +9,7 @@ from urllib.parse import parse_qs,urlsplit
 from .core import json_response,error_response
 from .disclosure import DisclosureResponse
 from ..db.conversations import Conversation
+from ..db.conversation_activity import ActivityUnavailable
 from ..agent.chat import ChatUnavailable
 
 
@@ -88,6 +89,6 @@ def read_conversation_activity(service,request,raw_id,seq=None,transport=None,tr
                 if transport(request)is not True:raise PermissionError()
             except Exception:return error_response(403,'Conversation access denied')
         if isinstance(error,PermissionError):return error_response(403,'Conversation access denied')
-        if isinstance(error,ChatUnavailable):return error_response(503,'Conversation access or activity storage unavailable')
+        if isinstance(error,(ChatUnavailable,ActivityUnavailable)):return error_response(503,'Conversation access or activity storage unavailable')
         if isinstance(error,(ValueError,TypeError)):return error_response(400,'Invalid message query')
         return error_response(500,'Conversation activity read failed')

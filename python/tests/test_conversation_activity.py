@@ -41,7 +41,7 @@ class ActivityTests(unittest.TestCase):
         db=Fake([[ROW,tuple(row2)],[]]);store=ConversationActivityStore(db,3)
         rows,cursor=store.list(8,1000)
         self.assertEqual([r.id for r in rows],[11,12]);self.assertEqual(cursor,12)
-        q=db.calls[0][1];self.assertEqual(q.params,(3,8,1000));self.assertIn('id>$2 ORDER BY id LIMIT $3',q.sql)
+        q=db.calls[0][1];self.assertEqual(q.params[:3],(3,8,1000));self.assertIn('id>$2 ORDER BY id ASC LIMIT $3',q.sql)
         self.assertNotIn('detail',q.sql)
         data=rows[0].to_dict();self.assertEqual(data['input_tokens'],0);self.assertNotIn('cache_read_tokens',data)
         self.assertEqual(data['created_at'],NOW.isoformat());self.assertNotIn('node_id',data);self.assertNotIn('detail',data)
@@ -52,7 +52,7 @@ class ActivityTests(unittest.TestCase):
         db=Fake([[row(14),row(13),row(12)],[row(11)],[]]);store=ConversationActivityStore(db,3)
         rows,more=store.page(20,2)
         self.assertEqual([r.id for r in rows],[13,14]);self.assertTrue(more)
-        self.assertEqual(db.calls[0][1].params,(3,20,3));self.assertIn('ORDER BY id DESC',db.calls[0][1].sql)
+        self.assertEqual(db.calls[0][1].params[:3],(3,20,3));self.assertIn('ORDER BY id DESC',db.calls[0][1].sql)
         self.assertNotIn('detail',db.calls[0][1].sql)
         rows,more=store.page(13,2);self.assertEqual([r.id for r in rows],[11]);self.assertFalse(more)
         self.assertEqual(store.page(),([],False))
@@ -60,15 +60,15 @@ class ActivityTests(unittest.TestCase):
     def test_nonpositive_defaults_negative_cursor_and_bounds(self):
         db=Fake([[],[]]);store=ConversationActivityStore(db,3)
         self.assertEqual(store.list(-4,0),([], -4));store.page(-2,-1)
-        self.assertEqual(db.calls[0][1].params,(3,-4,500));self.assertEqual(db.calls[1][1].params,(3,-2,201))
+        self.assertEqual(db.calls[0][1].params[:3],(3,-4,500));self.assertEqual(db.calls[1][1].params[:3],(3,-2,201))
         for action in (lambda:store.list(limit=10001),lambda:store.page(limit=True),lambda:store.list(since_id='1'),lambda:store.detail(0)):
             with self.assertRaises(ActivityInvalid):action()
         self.assertEqual(len(db.calls),2)
 
     def test_detail_missing_null_and_cross_parent_binding(self):
-        db=Fake([[('full',)],[(None,)],[]]);store=ConversationActivityStore(db,3)
+        db=Fake([[('full',)],[('',)],[]]);store=ConversationActivityStore(db,3)
         self.assertEqual(store.detail(11),'full');self.assertEqual(store.detail(12),'');self.assertEqual(store.detail(99),'')
-        self.assertEqual(db.calls[0][1].params,(11,3));self.assertIn('id=$1 AND conversation_id=$2',db.calls[0][1].sql)
+        self.assertEqual(db.calls[0][1].params[:2],(11,3));self.assertIn('id=$1 AND conversation_id=$2',db.calls[0][1].sql)
 
     def test_shared_dto_fields_omit_detail_and_preserve_optional_zero(self):
         metadata={'source':'fixture'}

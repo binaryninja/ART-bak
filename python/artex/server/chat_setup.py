@@ -31,7 +31,7 @@ from ..chat_dispatch import ChatDispatcher
 from ..chat_transcripts import ChatTranscriptAdapter
 from ..transcripts import TranscriptStore
 from ..db.conversations import ConversationStore, Conversation
-from ..db.conversation_activity import ConversationActivityStore
+from ..db.conversation_activity import ConversationActivityStore,ActivityReadLimits
 from ..sidequestion import Model
 from .runtime_setup import RuntimeBundle
 from .chat import ChatResources, ChatService
@@ -53,7 +53,7 @@ class ChatRuntimeBundle:
 def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
                                authorize, gate, tools, system_prompt, single_process,
                                workers=1, capacity=4, max_receipts=10000,
-                               capture=None, limits=Limits(), compaction=None):
+                               capture=None, limits=Limits(), compaction=None, activity_read_limits=ActivityReadLimits()):
     """Return an unregistered service and explicit owned dispatcher.
 
     authorize(request, conversation)->True is required for every live resource
@@ -62,6 +62,8 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
     profile_runtime must use the same authorized database deployment as executor.
     Construction reads no conversation or private profile and calls no provider.
     """
+    if type(activity_read_limits)is not ActivityReadLimits:raise ValueError('Explicit activity read limits required')
+    activity_read_limits.validate()
     if compaction is not None and not isinstance(compaction,ChatCompaction):
         raise ValueError('Explicit valid compaction configuration required')
     if single_process is not True:
@@ -86,7 +88,7 @@ def build_conversation_runtime(executor, profile_runtime, *, transcript_root,
     salt = os.urandom(32)  # local opaque identity, not an account credential
 
     def activities(identifier):
-        return ConversationActivityStore(executor, identifier)
+        return ConversationActivityStore(executor, identifier,read_limits=activity_read_limits)
 
     def model_for(conversation):
         store = profile_runtime.profile_store
@@ -162,7 +164,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
                            transport_factory, health, transcript_root,
                            authorize, gate, tools, agent_available, system_prompt,
                            single_process, workers=1, capacity=4, max_receipts=10000,
-                           capture=None, limits=Limits(), compaction=None, application_options=None,
+                           capture=None, limits=Limits(), compaction=None, application_options=None, activity_read_limits=ActivityReadLimits(),
                            catalog_store=None, catalog_prompt=None, catalog_detail_defaults=None):
     """Opt-in complete configuration/conversation WSGI wiring, without listening.
 
@@ -190,6 +192,8 @@ def build_chat_application(executor, signing_key, password_codec, *,
         raise ValueError('Explicit agent registry and prompt resolver required')
     if single_process is not True or not callable(authorize) or not callable(gate):
         raise ValueError('Explicit conversation authority and gate required')
+    if type(activity_read_limits)is not ActivityReadLimits:raise ValueError('Explicit activity read limits required')
+    activity_read_limits.validate()
     options = dict(application_options or {})
     reserved = {'conversation_running', 'conversation_agent_available', 'conversation_profile_available'}
     if reserved & options.keys():
@@ -252,7 +256,7 @@ def build_chat_application(executor, signing_key, password_codec, *,
         chat = build_conversation_runtime(executor, profiles,
             transcript_root=transcript_root, authorize=authorize, gate=gate, tools=tools,
             system_prompt=prompt, single_process=single_process, workers=workers,
-            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits, compaction=compaction)
+            capacity=capacity, max_receipts=max_receipts, capture=capture, limits=limits, compaction=compaction,activity_read_limits=activity_read_limits)
         state['chat'] = chat
         chat.service.register(profiles.application.router)
         if catalog is not None:catalog.register(profiles.application.router)
