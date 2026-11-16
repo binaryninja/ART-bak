@@ -1172,9 +1172,11 @@ class TaskManager:
                 or key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key) or slot.get('credit') is not None):raise TaskConflict('Exact clean suspended replacement required')
             owner=slot['owner'];handle=slot['old_handle'];token=slot['old_token'];cap=slot['cap']
             if not self._continuation_identity(owner) or type(handle) is not BootstrapHandle or not token.cancelled:raise TaskConflict('Original cancelled suspension required')
-            credit=_ContinuationCredit(controller,claim,get_ident(),key,cap,handle,token)
-            record={'pins':(controller,claim,cap,handle,token),'thread':get_ident(),'key':key,'slot':slot,'used':False}
-            self._continuation_credits[credit]=record;slot['credit']=credit
+            with owner._lock:
+                if owner._resume_sealed:raise RuntimeUnavailable('Resume admission sealed')
+                credit=_ContinuationCredit(controller,claim,get_ident(),key,cap,handle,token)
+                record={'pins':(controller,claim,cap,handle,token),'thread':get_ident(),'key':key,'slot':slot,'used':False}
+                self._continuation_credits[credit]=record;slot['credit']=credit
         try:
             self._continuation_binding(owner)
             rec=TaskContinuationOwner._record(owner,cap)
@@ -1204,7 +1206,7 @@ class TaskManager:
                 and self._suspensions.get(credit.task_id) is slot and slot.get('credit') is credit
                 and slot['phase']=='paused' and slot['cap'] is credit.cap and slot['old_handle'] is credit.handle
                 and slot['old_token'] is credit.token and credit.token.cancelled and credit.task_id not in self._runs
-                and self._continuation_identity(slot['owner']) and row is not None and row.get('paused') is True
+                and self._continuation_identity(slot['owner']) and not slot['owner']._resume_sealed and row is not None and row.get('paused') is True
                 and row.get('queued') is False and row.get('status')=='running' and row.get('timeout_seconds')==0)
     def release_continuation_admission(self,credit):
         with self._lock:
@@ -1220,14 +1222,26 @@ class TaskManager:
             key,row=self._require(task_id);slot=self._suspensions.get(key)
             if slot is None or slot['phase']!='paused' or slot['owner'] is not self._continuation_owner or key in self._runs or row.get('paused') is not True or row.get('queued') is not False or row.get('status')!='running' or self._has_cleanup(key):raise TaskConflict('Exact clean suspension required')
             if key in self._deadline_slots or key in self._unstamped_slots:raise TaskConflict('Timed/terminal ownership prevents continuation')
+            # Seal and claim are serialized before any run/credit mutation.
+            from .agent.task_continuation import TaskContinuationOwner
+            owner=slot['owner'];cap=slot['cap']
+            if not self._continuation_identity(owner):
+                slot['phase']='quarantined'
+                TaskContinuationOwner.quarantine(owner,cap)
+                raise RuntimeUnavailable('Continuation binding changed')
+            # Validate credits first, then issue the callback-free invocation.
             credit=slot.get('credit')
             if credit is not None:
                 record=self._continuation_credits.get(credit)
                 if record is None:raise TaskConflict('Replacement reservation lost')
                 self._credit_identity(credit,record)
                 if credit.thread!=get_ident() or record['used']:raise TaskConflict('Replacement belongs to another admission')
-                record['used']=True
-            run=_Run();self._runs[key]=run;slot['new_run']=run;slot['phase']='resuming';snapshot=deepcopy(row)
+            # Prepare inert allocations before issuing an invocation receipt.
+            # They must not leak an active receipt if copying the snapshot fails.
+            run=_Run();snapshot=deepcopy(row)
+            attempt=TaskContinuationOwner._begin_resume(owner,cap)
+            if credit is not None:record['used']=True
+            self._runs[key]=run;slot['new_run']=run;slot['phase']='resuming'
             owner=slot['owner'];cap=slot['cap']
         handle=None
         try:
@@ -1256,7 +1270,9 @@ class TaskManager:
                 if handle is not None:run.handle=handle
             self._continuation_methods[1][5](cap)
             raise RuntimeUnavailable('Resume outcome requires reconciliation; owners retained') from None
-        finally:run.ready.set()
+        finally:
+            run.ready.set()
+            TaskContinuationOwner._end_resume(owner,cap,attempt)
 
     def control_task(self, task_id, action):
         if action == 'pause':

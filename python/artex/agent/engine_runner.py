@@ -455,9 +455,9 @@ class EngineRunner:
     def install_continuation(self,owner):
         from .task_continuation import TaskContinuationOwner
         if type(owner) is not TaskContinuationOwner or self._host is None or owner.runner is not self or owner.host is not self._host or owner.manager is not self._host_manager:raise RuntimeUnavailable('Exact continuation owner required')
-        names=('reserve_pause','confirm_pause','prepare_resume','commit_resume','confirm_installed','quarantine','retained','validate_bindings')
+        names=('reserve_pause','confirm_pause','prepare_resume','commit_resume','confirm_installed','quarantine','retained','seal_resume','wait_resumes','_begin_resume','_end_resume','_resume_open','validate_bindings')
         methods=tuple(getattr(owner,n) for n in names)
-        if any(getattr(m,'__func__',None) is not getattr(TaskContinuationOwner,n) for n,m in zip(names,methods)):raise RuntimeUnavailable('Original continuation methods required')
+        if any(getattr(m,'__self__',None) is not owner or getattr(m,'__func__',None) is not getattr(TaskContinuationOwner,n) for n,m in zip(names,methods)):raise RuntimeUnavailable('Original continuation methods required')
         owner.validate_bindings();self.claim_host(self._host)
         with self._lock:
             if self._continuation_owner is not None:
@@ -484,7 +484,10 @@ class EngineRunner:
         with self._lock:
             key=handle.task_id
             if self._handles.get(key) is not old or key in self._frontier:raise TaskConflict('Original runner ownership changed')
-            self._handles[key]=handle
+            # Atomic with irreversible sealing. No policy/SQL under these locks.
+            with owner._lock:
+                if owner._resume_sealed:raise RuntimeUnavailable('Resume admission sealed')
+                self._handles[key]=handle
         return True
 
     def _retire_cancelled(self, key, handle):

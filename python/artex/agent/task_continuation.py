@@ -5,7 +5,8 @@ or terminal task. Ambiguous effects retain both generation references.
 """
 from dataclasses import dataclass,asdict
 from copy import deepcopy
-from threading import RLock
+from threading import RLock,Condition,get_ident
+import math
 import json
 from ..db.task_continuation import ContinuationPersistence
 
@@ -38,6 +39,36 @@ class TaskContinuationOwner:
         self._pins=(application,self.host,self.manager,self.runner,self.runtime,self.runtime.executor,authorize,self.runtime.coordinator,self.runtime.coordinator.guard)
         self._methods=(self.runtime.validate_bindings,self.runtime._bootstrap_current,self.runtime.engine_factory)
         self._db=ContinuationPersistence(self.runtime.executor);self._lock=RLock();self._records={}
+        self._resume_condition=Condition(self._lock);self._resume_sealed=False;self._resume_attempts={}
+    def seal_resume(self):
+        """Irreversible admission fence; never releases suspension ownership."""
+        self.validate_bindings()
+        with self._resume_condition:
+            self._resume_sealed=True;self._resume_condition.notify_all()
+        return True
+    def wait_resumes(self,timeout):
+        if type(timeout) not in (int,float) or not math.isfinite(timeout) or timeout<0:raise ValueError('Finite resume drain timeout required')
+        self.validate_bindings()
+        with self._resume_condition:
+            if not self._resume_sealed:raise ContinuationUnavailable('Seal resume admission before drain')
+            if any(thread==get_ident() for cap,thread in self._resume_attempts.values()):return False
+            return self._resume_condition.wait_for(lambda:not self._resume_attempts,timeout)
+    def _begin_resume(self,cap):
+        """Callback-free; called under manager lock before lifecycle mutation."""
+        with self._resume_condition:
+            rec=self._records.get(cap)
+            if self._resume_sealed:raise ContinuationUnavailable('Resume admission sealed')
+            if type(cap) is not Suspension or cap.owner is not self or rec is None or rec['state']!='paused' or rec['failed'] or any(c is cap for c,t in self._resume_attempts.values()):raise ContinuationUnavailable('Exact paused resume claim required')
+            attempt=object();self._resume_attempts[attempt]=(cap,get_ident());return attempt
+    def _end_resume(self,cap,attempt):
+        """Release only this issued outer invocation, never its task owners."""
+        with self._resume_condition:
+            if self._resume_attempts.get(attempt)!=(cap,get_ident()):raise ContinuationUnavailable('Original resume invocation required')
+            del self._resume_attempts[attempt];self._resume_condition.notify_all()
+    def _resume_open(self):
+        with self._lock:
+            if self._resume_sealed:raise ContinuationUnavailable('Resume admission sealed')
+
     def validate_bindings(self):
         a,h,m,r,t,e,grant,c,g=self._pins
         if any(x is not y for x,y in zip((self.application,self.host,self.manager,self.runner,self.runtime,self.authorize,a.host,a.manager,a.runner,a.runtime,t.executor,t.coordinator,c.guard,m.repository.executor),(a,h,m,r,t,grant,h,m,r,t,e,c,g,e))):raise ContinuationUnavailable('Continuation resources changed')
@@ -55,10 +86,13 @@ class TaskContinuationOwner:
         if old._receipt is not rec['receipt'] or _json(asdict(old._receipt))!=rec['receipt_values'] or old._configuration!=rec['configuration'] or _json([asdict(old.model),*old._configuration[1:]])!=rec['configuration_values'] or old._factory!=self._methods[2] or old.coordinator is not self._pins[7]:raise ContinuationUnavailable('Prepared suspension changed')
         return rec
     def _allow(self,cap,action):
+        if action=="resume":self._resume_open()
         rec=self._record(cap);old=rec['old'];receipt=rec['receipt']
         if self._methods[1](receipt.task_id,receipt.exploration_id,old.policy_revision) is not True:raise ContinuationUnavailable('Original configuration revoked')
         if self._pins[6](ContinuationProposal(receipt.task_id,receipt.exploration_id,receipt.run_id,old.policy_revision,action)) is not True:raise ContinuationUnavailable('Continuation denied')
-        self._record(cap);return rec
+        self._record(cap)
+        if action=="resume":self._resume_open()
+        return rec
     def _registry(self,cap,phase,*,new_handle=None,new_token=None):
         from ..manager import TaskManager
         rec=self._record(cap)
@@ -168,7 +202,14 @@ class TaskContinuationOwner:
             with self._pins[5].transaction() as tx:self._db.check(tx,r,paused=False,stamp=rec['resume_stamp'])
         self._record(cap)
         if not self.manager.owns_generation(new_handle.task_id,new_handle.token,new_handle):raise ContinuationUnavailable('Activation ownership changed')
-        rec['state']='consumed';return rec['receipt']
+        # Activation admission linearizes with sealing only after final SQL and
+        # identity checks. Already admitted engine work still needs host cancel.
+        with self._lock:
+            if self._resume_sealed:raise ContinuationUnavailable('Resume admission sealed')
+            if self._records.get(cap) is not rec or rec['failed'] or rec['state']!='installed' or rec['new'] is not new_handle:
+                raise ContinuationUnavailable('Activation record changed')
+            rec['state']='consumed'
+        return rec['receipt']
     def quarantine(self,cap):
         with self._lock:
             rec=self._records.get(cap)

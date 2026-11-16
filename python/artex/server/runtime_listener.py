@@ -232,6 +232,11 @@ _SKILL_APPLICATION_CHECK=_SkillReadApplication._check
 _RUNTIME_SKILL_METHODS=(_RuntimeSkillView.__init__,_RuntimeSkillView.__call__,_RuntimeSkillView.validate)
 
 
+from ..agent.task_continuation import TaskContinuationOwner
+_CONTINUATION_NAMES=('seal_resume','wait_resumes','validate_bindings')
+_CONTINUATION_METHODS=tuple(getattr(TaskContinuationOwner,n) for n in _CONTINUATION_NAMES)
+
+
 class RuntimeListener:
     def __init__(self,bundle,owner,config=DevListenerConfig(),*,skill_reads=None):
         if type(bundle) is not TaskRuntimeApplication or type(owner) is not RuntimeResourceOwner or type(owner.pool) is not ExecutorPool or type(config) is not DevListenerConfig:
@@ -246,6 +251,11 @@ class RuntimeListener:
         self._auth_pins=(base,base.router,base.router.authorize,bundle.app.router)
         self._bundle=bundle;self._owner=owner;self._config=config;self._original_config=config
         self._pins=(bundle.runtime,bundle.app,bundle.pump,bundle.host,bundle.manager,owner.pool,owner.stop_admissions,owner.cancel_owned,owner.close_resources)
+        self._continuation=bundle.runner._continuation_owner
+        if self._continuation is not None:
+            if type(self._continuation) is not TaskContinuationOwner or self._continuation.application is not bundle or bundle.manager._continuation_owner is not self._continuation:
+                raise ValueError('Exact installed continuation owner required')
+            self._check_continuation()
         self._manual=bundle.manual_actions
         self._manual_names=('validate_bindings','stop_new_actions','cancel_active','wait','snapshot')
         self._manual_methods=None
@@ -263,8 +273,19 @@ class RuntimeListener:
             self._view=self._skill_view
         self._skill_binding=self._skill_view
         self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False
+    def _check_continuation(self):
+        owner=self._continuation
+        if self._bundle.runner._continuation_owner is not owner or self._bundle.manager._continuation_owner is not owner:
+            raise RuntimeError('Continuation shutdown owner changed')
+        if owner is not None:
+            for name,method in zip(_CONTINUATION_NAMES,_CONTINUATION_METHODS):
+                bound=getattr(owner,name)
+                if getattr(bound,'__self__',None) is not owner or getattr(bound,'__func__',None) is not method:
+                    raise RuntimeError('Continuation shutdown method changed')
+            owner.validate_bindings()
     def _check(self):
         b,o=self._bundle,self._owner
+        self._check_continuation()
         if b.manual_actions is not self._manual:raise RuntimeError('Manual action owner changed')
         if self._manual is not None:
             for name,(owner,method) in zip(self._manual_names,self._manual_methods):
@@ -319,6 +340,9 @@ class RuntimeListener:
         # never run under the listener lock. Concurrent/reentrant stops observe
         # shutdown_busy, and retained manual invocations can finish independently.
         try:
+            if self._continuation is not None:
+                if self._continuation.seal_resume() is not True:return ListenerStop(False,'resume_admission_unresolved')
+                self._check()
             if self._manual is not None:
                 if self._manual.stop_new_actions() is not True:return ListenerStop(False,'manual_admission_unresolved')
                 self._check()
@@ -341,6 +365,9 @@ class RuntimeListener:
             # may still be unwinding after its terminal SQL commit.
             if self._manual is not None:
                 if self._manual.wait(remaining()).drained is not True:return ListenerStop(False,'manual_actions_unresolved')
+                self._check()
+            if self._continuation is not None:
+                if self._continuation.wait_resumes(remaining()) is not True:return ListenerStop(False,'resume_actions_unresolved')
                 self._check()
             if not self._resources_closed:
                 if self._pins[8]() is not True:return ListenerStop(False,'resources_unresolved')
