@@ -136,6 +136,12 @@ class DeadlineSettlement:
     task_id: str
 
 
+@dataclass(frozen=True, eq=False)
+class EarlyCompletion:
+    """Exact original-owner terminal reservation, not execution authority."""
+    task_id: str
+
+
 @dataclass
 class _DeadlineSlot:
     reservation: DeadlineReservation
@@ -154,7 +160,7 @@ class _DeadlineSlot:
     lease: DeadlineLease | None = None
     freeze: DeadlineFreeze | None = None
     assessment: DeadlineAssessment | None = None
-    settlement: DeadlineSettlement | None = None
+    settlement: DeadlineSettlement | EarlyCompletion | None = None
     settlement_store: object = None
 
 
@@ -283,7 +289,7 @@ class TaskManager:
             if allow_cancelled:
                 return True
             deadline=self._deadline_slots.get(key)
-            if deadline is not None and deadline.state in ('freezing','drained','assessing','settling','quarantined'):return False
+            if deadline is not None and deadline.state in ('freezing','drained','assessing','settling','early_settling','quarantined'):return False
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
@@ -591,6 +597,70 @@ class TaskManager:
                 slot.state='quarantined';self._deadline_slots[cap.task_id]=slot
             raise
         return result
+
+    def reserve_early_completion(self,store):
+        from .db.early_completion import EarlyCompletionStore
+        if type(store) is not EarlyCompletionStore:raise TaskConflict('Exact early completion store required')
+        store.validate_reservation()
+        d=store.deadline;key=str(d.receipt.task_id)
+        with self._lock:
+            slot=self._deadline_slots.get(key)
+            if slot is None or slot.store is not d or slot.lease is not store.lease or slot.state!='attached' or slot.settlement is not None or self._has_cleanup(key):
+                raise TaskConflict('Attached clean original owner required')
+            self._deadline_binding(slot)
+            if not self.owns_generation(key,slot.token,slot.handle):raise TaskConflict('Execution owner unavailable')
+            cap=EarlyCompletion(key);slot.settlement=cap;slot.settlement_store=store;slot.state='early_settling'
+        # Never wait or invoke handle methods under the registry lock. Reservation
+        # already fences new execution; in-flight work is not silently cancelled.
+        try:
+            if slot.handle.wait(0) is not True or slot.handle.unresolved is not False:raise TaskConflict('Owner is not drained')
+            if not self.validate_early_completion(cap,store):raise TaskConflict('Early owner changed')
+        except BaseException:
+            self.quarantine_early_completion(cap,store);raise
+        return cap
+
+    def validate_early_completion(self,cap,store):
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(cap,'task_id',None))
+            if type(cap) is not EarlyCompletion or slot is None or slot.settlement is not cap or slot.settlement_store is not store or slot.state!='early_settling' or self._has_cleanup(cap.task_id):return False
+            try:self._deadline_binding(slot)
+            except (TaskConflict,AttributeError):return False
+            row=self._tasks.get(cap.task_id);run=self._runs.get(cap.task_id)
+            return (row is not None and row.get('status')=='running' and row.get('paused') is False and row.get('queued') is False
+                and row.get('deleted_at') is None and row.get('archived_at') is None and run is not None
+                and run.handle is slot.handle and run.token is slot.token and run.started and not run.uncertain and not slot.token._event.is_set())
+
+    def quarantine_early_completion(self,cap,store):
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(cap,'task_id',None))
+            if slot is None or slot.settlement is not cap or slot.settlement_store is not store:raise TaskConflict('Exact early completion required')
+            slot.state='quarantined'
+
+    def confirm_early_completion(self,cap,store,evidence):
+        from .db.early_completion import EarlyCompletionStore
+        if type(store) is not EarlyCompletionStore or not self.validate_early_completion(cap,store):raise TaskConflict('Early completion unavailable')
+        result=store.consume_evidence(cap,evidence)
+        with self._lock:
+            if not self.validate_early_completion(cap,store):raise TaskConflict('Early completion owner changed')
+            slot=self._deadline_slots[cap.task_id]
+            if result.task_id!=int(cap.task_id) or result.status!='done' or result.reason!='frontier_drained':raise TaskConflict('Early result mismatch')
+            self._tasks[cap.task_id].update(status='done',completed_at=result.completed_at.isoformat())
+            self._runs.pop(cap.task_id,None);del self._deadline_slots[cap.task_id]
+        # Retain private cancellation bookkeeping, but invoke no callbacks while
+        # the caller holds its permit acknowledgement lock.
+        store._retired_slot=slot
+        return result
+
+    def finish_early_completion_cancellation(self,cap,store):
+        from .db.early_completion import EarlyCompletionStore
+        if type(store) is not EarlyCompletionStore or cap is not store._cap:raise TaskConflict('Exact early retirement required')
+        slot=getattr(store,'_retired_slot',None)
+        if slot is None or slot.settlement is not cap or slot.settlement_store is not store:raise TaskConflict('Early retirement unavailable')
+        try:slot.token.cancel('frontier_drained')
+        except BaseException:
+            with self._lock:slot.state='quarantined';self._deadline_slots[cap.task_id]=slot
+            raise
+        store._retired_slot=None
 
     def validate_deadline_owner(self,lease,operation='read'):
         """Lease-only read capability; never permits providers/tools/completion.

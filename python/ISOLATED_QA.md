@@ -1341,3 +1341,31 @@ Isolation: existing approved outer user/network namespace, loopback only; creden
 Fixture corrections only: OwnedWorkResult does not expose action directly, so the first harness now verifies the actual persisted intent instead; the default-refusal harness now catches the expected BootstrapUnresolved before asserting retained state. Original failed fixture logs preserved. No product files changed.
 
 Limits: this is explicitly installed component coverage, not Bash availability in the application, OS process cleanup validation, broad runtime parity, or default tool enablement. No actual subprocess was started or terminated.
+
+## Stage 103: revised scoped-permit acceptance
+
+Exact frozen scoped-permit checkpoint; readonly copied snapshot, no live overlays. Manifest SHA256 `e4bf0a01ae6cf02f16cc96dd21eb1f33c2430e32156275fbda7134456dc24e33`.
+
+Nine actual PostgreSQL 17.11 groups and 25 unchanged focused tests pass. No fixture correction needed during this run.
+
+Explicit API migration: the prior unpublished Boolean policy was replaced by one exact `EarlyCompletionGrant(deadline.receipt)` passed to the store and returned by its authorization callback. Denials now revoke that permit. The original final-write callback database-drift trigger and expected non-retirement remain unchanged in substance. Original stage103 failed source manifest, report and logs remain separately preserved; this is not an unchanged-harness claim.
+
+Actual database coverage:
+- Empty frontier, abandoned goal with paused intent, and met goal without proof settle atomically with reason frontier_drained; actual manager retirement and no replay. These are Go frontier semantics, not achievement/proof claims.
+- Open goal refuses and retains quarantined owner.
+- Actual receipt-insert trigger failure rolls back task and receipt.
+- Fifth/final write authorization revokes permit after commit: durable done retained, owner quarantined.
+- Real transaction commit followed by injected acknowledgement error: no false rollback or replay.
+- Original defect regression: fifth/final write callback changes actual task to failed. Fresh final SQL verification rejects retirement and quarantines owner.
+- Third/fourth complete receipt readback boundaries revoke the permit, retaining done SQL but quarantining owner. First verification is on the transaction-bound executor, so these are pool-level readbacks two/three.
+- At token-cancellation boundary another thread revokes permit and reads actual manager done state successfully; neither permit nor registry lock remains held. Acknowledged retirement precedes this later revocation.
+- Injected cancellation failure leaves committed done/receipt and quarantined ownership, with no automatic retry or second cancellation.
+
+The 25 focused tests additionally exercise permit-lock concurrent revoke ordering, copied/wrong-scope permits, operation restrictions, and external callback lock exclusions.
+
+Isolation reused approved user/network namespace, loopback-only disposable PostgreSQL, credentialless bwrap with readonly snapshot and cached trusted dependencies. No external model or target, real user data, schema installation outside disposable DB, or OS security change.
+
+Scope: original natural zero-timeout bootstrap produces a genuine prepared owner; explicitly synthetic private positive prepared pins plus matching local task row install the component clock. No positive public admission, full timed application, engine hook, expiry fabrication, or final model execution is claimed. Only explicit fresh additive early receipt schema was installed alongside original/bootstrap schemas.
+
+Original failing stage103 manifest (not relabeled as passing):
+`9b7a681f6092dd64e07bdb9b7da1f2388589dfed5822038efec9726018fa2880`.
