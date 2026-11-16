@@ -1,5 +1,7 @@
 "use client";
 
+import { assetSummaryDisplay } from "@/lib/legacy-display-text";
+
 import * as React from "react";
 
 import {
@@ -133,7 +135,7 @@ function Chips({ items, mono }: { items: string[]; mono?: boolean }) {
 
 function SourceCell({ asset }: { asset: Asset }) {
   const source = firstText([asset.task_source], "legacy");
-  const summary = firstText([asset.task_source_summary], "Migrated from a historical task-asset association; no further provenance available");
+  const summary = firstText([assetSummaryDisplay(asset.task_source_summary ?? "")], "Migrated from a historical task-asset association; no further provenance available");
   return (
     <Tooltip>
       <TooltipTrigger asChild>

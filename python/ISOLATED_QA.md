@@ -1473,3 +1473,19 @@ Actual original JWT WSGI authorizer wraps explicitly supplied detail service alo
 Missing JWT, denied global/raw grants and malformed selectors all refuse before any detail SQL query. Revocation inside start_response raises before body emission after one already-issued200; no fake replacement403 is claimed. Literal, dynamic HEAD and overlapping generic dynamic route conflicts reject atomically with original route list unchanged.
 
 Only explicit optional route composition tested; no default registration, execution decision, mutation, retry/send or browser/frontend claim. Approved credentialless namespace+bwrap, readonly source, fresh loopback PostgreSQL and cached dependencies. No external model/target, commands, production data or public listener.
+
+## Stage 111: standalone judge configuration read
+
+Exact frozen judge-config source; manifest SHA256 `d9673e6ee7aa8a12d8d8a4e3744d1dfc34d374e01bc1e47a5f2e500d9dccbb1f`. Snapshot includes exact `intercept/prompt.go` as read-only test data, not executed Go. No moving overlays or product changes.
+
+Five real PostgreSQL17.11 groups and twelve unchanged owner/review tests pass, no fixture corrections.
+
+- Absent seven settings give source defaults and exact default English prompt+output contract; unrelated synthetic auth setting never appears.
+- Actual settings preserve prompt whitespace and source Boolean/int/choice parsing; signed profile ID, positive timeout, integer overflow, case and Go whitespace fallback verified.
+- Actual cumulative multibyte byte cap returns SQL NULL for selected values before raw transfer and refuses disclosure. Original settings.value is NOT NULL, so stored SQL NULL is not fabricated by weakening schema; NULL result handling is exercised via real overflow sentinel and focused reader fixtures.
+- One seven-key SQL snapshot remains internally consistent when a second connection changes prompt after fetch; subsequent DB query confirms newer value.
+- Raw authority revocation after actual fetch and config authority revocation during final serialization both return403.
+
+Focused tests compare default prompt to original source constants. Prompt text is configuration data only: no model invocation, tool permission, policy activation, provider/profile-secret join, or route registration.
+
+Approved credentialless namespace/bwrap, readonly exact source/cached dependencies, fresh disposable loopback PostgreSQL. No external targets/providers, real credentials, command execution, user data or production writes.

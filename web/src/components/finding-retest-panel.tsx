@@ -1,5 +1,7 @@
 "use client";
 
+import { retestErrorDisplay } from "@/lib/legacy-display-text";
+
 import * as React from "react";
 
 import Link from "next/link";
@@ -148,7 +150,7 @@ export function FindingRetestPanel({
                   <p className="whitespace-pre-wrap break-words text-sm">{item.summary}</p>
                 ) : null}
                 {item.error ? (
-                  <p className="whitespace-pre-wrap break-words text-destructive text-sm">{item.error}</p>
+                  <p className="whitespace-pre-wrap break-words text-destructive text-sm">{retestErrorDisplay(item.error)}</p>
                 ) : null}
                 {item.notes ? (
                   <p className="whitespace-pre-wrap break-words text-muted-foreground text-xs">

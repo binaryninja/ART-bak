@@ -1,5 +1,7 @@
 "use client";
 
+import { assetSummaryDisplay } from "@/lib/legacy-display-text";
+
 import * as React from "react";
 
 import {
@@ -469,7 +471,7 @@ function WorkerAssetBadge({ assets }: { assets: IntentAsset[] }) {
                 {taskAssetTypeLabel(asset.type)} · {taskAssetSourceLabel(asset.source)}
                 {asset.inherited ? ` · Source task #${asset.source_task_id}` : ""}
               </div>
-              <div className="mt-0.5 [overflow-wrap:anywhere] text-xs">{asset.source_summary}</div>
+              <div className="mt-0.5 [overflow-wrap:anywhere] text-xs">{assetSummaryDisplay(asset.source_summary)}</div>
             </div>
           ))}
         </div>
