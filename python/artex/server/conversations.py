@@ -25,7 +25,11 @@ class ConversationService:
             ('GET','/api/conversations','list'),('POST','/api/conversations','create'),
             ('PATCH','/api/conversations/{id}','patch'),('PATCH','/api/conversations/{id}/profile','profile'),
             ('DELETE','/api/conversations/{id}','delete'),('POST','/api/conversations/delete/batch','delete_batch')):
-            router.add(method,path,lambda request,params,action=action:self._handle(action,request,params))
+            if action=='list':
+                from .conversation_list_read import bind_conversation_list
+                router.add(method,path,bind_conversation_list(self,router))
+            else:
+                router.add(method,path,lambda request,params,action=action:self._handle(action,request,params))
     def _profile(self,value):
         if value is None:return
         identifier(value)
