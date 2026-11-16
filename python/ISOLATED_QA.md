@@ -1765,3 +1765,16 @@ Original133 used ExecutorPool. Revised acceptance uses a real owned PostgresExec
 ExecutorPool is unsupported by this new capability and rejected at construction; this is not a pooled-support fix. Original133 failure and manifest remain separately preserved. No product corrections during revised execution.
 
 Configuration/cache acceptance only: no Guard installation, real tool execution, providers, pending decision persistence or durable audit. Approved credentialless filesystem/network isolation and fresh temporary original-schema PostgreSQL; generated metadata only.
+
+
+# Stage135: scoped interception decision store only
+
+Exact reviewed module SHA256 `ee290c4036018d2ddc2954f6577fd5529d3bec253dfeb88a74d26077b34c4fcc`, two owner/review modules and status over stable stage133-fix. Full immutable manifest `d2b4fee40f2da37ad43372d7e2261796b20c133c6eadb06f6d4ac95a7196a4c3`.
+
+Four actual PostgreSQL17.11 groups and18 focused tests pass:
+- Original-schema task+exploration versus conversation XOR scope: pending insert/read preserves nested JSON null, SQL NULL audit/decided_at, model source; terminal conversation record preserves supplied audit. Cross-parent lookup returns no row. Pending resolution updates once; later resolution cannot overwrite.
+- Foreign exploration parent denied; write grant denied before SQL; read grant revoked after actual fetch withholds data; oversized UTF8 reason fails bounded read.
+- Simulated acknowledgment loss after actual committed insert quarantines store, persistent row exists, repeated create denied without SQL.
+- Two independent transaction/store instances synchronized at a barrier race allow/deny on one pending row: exactly one True and one False, bounded thread joins, final status one winner. No shared test lifecycle lock serializes the calls.
+
+Initial fixture omitted required task.goal and failed before product execution. Corrected only generated INSERT to include harmless goal; failure log preserved. No product edits or driver normalization. No runtime Context, Guard, reviewer, approval UI, tool/model execution or HTTP registration claim. Approved credentialless namespace+bubblewrap and isolated-loopback temporary original-schema DB only.

@@ -285,6 +285,10 @@ class BoundedAgent:
             raise RunStopped('permission_denied')
         try:
             grant = self.gate(context, action)
+        except EffectUncertain:
+            # Gate-side persistence/admission effects may already have happened.
+            # Retain owning claims, as for uncertainty from tool callbacks.
+            raise
         except RunStopped:
             raise
         except Exception:
