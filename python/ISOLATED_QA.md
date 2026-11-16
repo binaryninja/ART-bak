@@ -1195,3 +1195,39 @@ Three actual PG17 authenticated application scenarios passed, each in a fresh di
 No synthetic positive fixture was needed or used in this stage. This is genuine zero-timeout application acceptance only. Earlier synthetic positive clock component evidence remains separate and does not establish public timed admission. Goals are not timing-dispatched, timing grants are not inferred, and no deadline default activation, observer scheduling, final assessment or production behavior is claimed.
 
 No product edits or fixture corrections were required. Artifacts: manifest, harness and three logs.
+
+## Stage 95: explicit intercept configuration read overlay
+
+Manifest SHA-256: `c89c75e79a483142ab76c85f8d96c331764483080db5e1d4e2da3fb9229e6cc4`.
+Source composition: frozen timing36 Python tree with exactly these three frozen intercept37 files overlaid, no moving-tree source:
+- python/artex/server/intercept_config_read.py
+- python/tests/test_intercept_config_read.py
+- python/tests/test_intercept_config_read_review.py
+
+Three actual temporary PostgreSQL 17 groups and all 15 focused tests passed in the established credential-free filesystem/network isolation. No HTTP route registration or runtime enforcement was performed. The new bound SELECT was parsed and executed by real PostgreSQL against the actual original settings schema, establishing its SQL syntax and parameter/column compatibility rather than merely string inspection.
+
+1. Missing setting returns ordered defaults. Malformed JSON, non-array and non-string-array values return empty list. JSON null remains null, null array element becomes empty string, unknown names/order/duplicates remain intact. Escaped unpaired surrogates become replacement characters and valid pair becomes the expected Unicode character.
+2. Actual multibyte setting exceeds 65,536 bytes. PostgreSQL returns only the NULL sentinel (observed result [(None,)]), service returns redacted500, and oversized text is not transferred. More than1000 elements is refused rather than truncated.
+3. Original read grant revoked immediately after actual fetch yields403 without the private marker. Already denied read skips SQL. Original guard exit revocation also yields403 without metadata.
+
+No source edits, fixture corrections, model calls, targets, actual credentials, application wiring, tool permissions or enforcement changes. Focused tests additionally cover serialization/policy identity behavior; this is a bounded metadata-reader check, not blanket authorization assurance.
+
+## Stage 96: global tool-input rule metadata reader
+
+Manifest SHA-256: `5f0e042ddff05bee4e28c84f370c535b3c797a3f5aeec5f15a43a35a1ba33314`.
+Base: exact stage95 config37 composition (timing36 plus its three intercept config files). Added only the reviewed db/server tool_intercept_read files, owner and independent review tests, and TOOL_INTERCEPT_READ_STATUS.md. No evolving finalization source included.
+
+### Review and correction
+
+Source Go db/intercept.go confirms the same fourteen fields, disabled-rule retention and priority DESC/id order. Original schema text columns are NOT NULL, making the cumulative byte expression appropriate. No matcher or regex execution is introduced.
+
+Independent standard ZoneInfo UTC datetime regression initially failed500 because the reader accepted only exact datetime.timezone. Author corrected support to exact stdlib timezone or ZoneInfo while retaining rejection of arbitrary formatter subclasses. The unchanged three review cases now pass together with six owner tests (nine total). This runtime's actual PostgreSQL connection returned datetime with datetime.timezone; ZoneInfo support is separately verified by the focused regression, not misreported as the observed driver mapping.
+
+### Actual PG17 acceptance
+
+Three groups passed in the approved credential-free disposable filesystem/network isolation:
+- Original schema, actual timestamps, fourteen source fields, disabled state, descending priority/stable ID ordering, negative timeout integer, raw invalid-regex pattern/message preservation, microsecond RFC3339 output. Query parsed and executed with actual parameter binding.
+- Oversized cumulative UTF8 text caused every text projection to return SQL NULL before transfer (three actual rows inspected). Entire response refused500, no truncated policy. Row cap overflow separately refused.
+- Original grant revoked after actual fetch or at final guard exit returned403 without raw marker. Already denied read skipped SQL.
+
+No product edits by QA beyond separate regression tests; no HTTP registration, model/provider/target access, regex matching, cache activation, mutation route, or production claim. Temporary fixture inserts/updates only. No integration harness correction required.
