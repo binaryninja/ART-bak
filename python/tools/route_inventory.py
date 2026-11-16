@@ -341,7 +341,8 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     ('python/artex/server/task_report_setup.py', '_ReportApplication.__init__'),
                 }
                 intent_control_optional = relative == 'python/artex/server/intent_control_setup.py' and owner == '_Application.__init__'
-                optional = owner.endswith('.register') or metadata_optional or reader_bundle_optional or intent_control_optional
+                skill_usage_optional = relative == 'python/artex/server/skill_usage_setup.py' and owner == '_SkillUsageApplication.__call__'
+                optional = owner.endswith('.register') or metadata_optional or reader_bundle_optional or intent_control_optional or skill_usage_optional
                 dependencies = 'Injected auth store, password codec, signing key; deployer-supplied transport/listener'
                 if metadata_optional:
                     dependencies = 'Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation'
@@ -349,6 +350,8 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     dependencies = 'Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation'
                 elif intent_control_optional:
                     dependencies = 'Explicit same-host owned intent control and original JWT/request/proposal grants; pause/resume subset only, no cancellation/deletion/rerun or invented inspection endpoint; no default activation'
+                elif skill_usage_optional:
+                    dependencies = 'Explicit global skill-usage scope and bounded ledger reader; original JWT application and immutable request selection through final disclosure grants; no skill loading/execution or default activation'
                 elif owner == 'TaskReportService.register':
                     dependencies = 'Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing'
                 elif owner == 'TaskCategoryService.register':

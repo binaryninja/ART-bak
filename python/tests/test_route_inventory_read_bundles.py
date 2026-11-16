@@ -33,3 +33,9 @@ class ReadBundles(unittest.TestCase):
         self.assertEqual(rows[0]['registration_mode'],'optional explicit service registration')
         self.assertFalse(rows[0]['public'])
         self.assertIn('pause/resume subset',rows[0]['dependencies'])
+    def test_skill_usage_is_explicit_metadata_only(self):
+        rows=fixture.Tests().scan("        staged.add('GET','/api/skills/{name}/usage',handler)",file='skill_usage_setup.py',owner='_SkillUsageApplication',method='__call__')
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['registration_mode'],'optional explicit service registration')
+        self.assertFalse(rows[0]['public'])
+        self.assertIn('no skill loading/execution',rows[0]['dependencies'])

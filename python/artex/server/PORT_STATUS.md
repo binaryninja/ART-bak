@@ -29,8 +29,8 @@ expiration mandatory, signing keys at least 32 bytes, only explicit public route
 Password changes retain upstream behavior: already-issued tokens are NOT revoked.
 
 Current scope supersedes the original five-route prototype: the static inventory
-records **180 unique method/path registrations** (200 declarations for the reviewed
-stage 79 composition target, pending its generated report checkpoint), not 180 live or behaviorally equivalent endpoints. Optional
+records **193 unique method/path registrations** (214 declarations, including
+15 alternatives), not 193 live or behaviorally equivalent endpoints. Optional
 services require explicit adapters, grants and lifecycle ownership; absence may
 mean an unregistered route or a fail-closed 503. See `ROUTE_PARITY.md` and
 `DYNAMIC_TASK_READ_STATUS.md` for current composition and evidence.
@@ -40,6 +40,7 @@ filesystem/multipart operations now have separate tests and optional composition
 The historical statement that no routes beyond auth/health exist is obsolete.
 These additions do not establish complete Go ServeMux semantics, WebSockets,
 production listener/CORS/CSRF/rate-limit configuration, credential deployment,
-full frontend parity, positive runtime deadlines or recovery. No deployment or
+full frontend parity or restart recovery. Explicit manual-observer timed profiles
+have separate original-schema acceptance; see TIMED_ADMISSION_CANDIDATE_STATUS.md. No deployment or
 live-provider readiness is inferred. See the component status documents for
 specific tested boundaries. Do not use the test codec as password storage.

@@ -1890,3 +1890,46 @@ Legacy reused fixture log labels say 'positive INSERT'/'manual lifecycle registe
 Approved credentialless isolation and temporary original-schema PostgreSQL only. Inert provider returns fixed tool requests; no external targets, real process or model. This is same-process initialized zero-timeout continuation, not restart recovery or positive-timeout resume.
 
 Additional unchanged-source positive run included a separate preexisting paused intent. It remains paused through task pause/resume and new worker completion: no bulk intent reopening. This added fixture assertion passes.
+
+
+# Stage142: standalone skill usage reads
+
+Exact snapshot manifest SHA256: `9d7ab7a31f89f8b3b121bb645f84309eaa6d14ae9d6c9e9d9cee69fe0aa3cd31`.
+Base: stage141 immutable snapshot, adding reviewed db/server skill_usage_read modules and two dedicated test modules. No moving source executed.
+
+Approved credentialless disposable user/network namespace and filesystem isolation; PostgreSQL17.11 fresh original packaged schema; psycopg real driver, isolated loopback only. No skills/filesystem execution, providers, external targets or real data.
+
+Three actual PostgreSQL groups passed:
+1. Found-only exact skill selection, newest-first ordering, limit/default handling, null agent/task/session wire mapping and fractional timestamp format. One SQL statement on basic read.
+2. UTF-8 oversized dimensions produce actual SQL NULL sentinels before transfer and reject output.
+3. Literal-True global grant, postfetch request revoke, serializer/global revoke, guard-exit revoke, final current callback revoking HTTP grant, and mutable request target denial before SQL.
+
+14 focused owner/unchanged independent tests also passed in isolated snapshot. No source or fixture corrections during this run. Prior independent failures were fixed before this snapshot; their evidence remains in reviewer tests.
+
+Scope: standalone service only, no route registration/JWT integration, skill loading, filesystem access, archive merge, execution authorization or universal concurrent-race guarantee. Synthetic metadata only.
+
+
+# Stage143: optional initialized continuation helper
+
+Manifest SHA256 `90648c17f4547798753c0e884548a19e37017714f2e5e5670444285bf4a2a3a7`.
+Stage141 base plus reviewed helper and two dedicated tests. Helper SHA256 `2791f6a1210d4a6dd71270ce6b914d7792742dd7631a96b3bc0e7d187516efd0`. Initial expected older hash failed before snapshot/execution; final reviewer-supplied hash matched. No executable overlay after freeze.
+
+Two isolated fresh PostgreSQL17.11 runs passed using original schema, actual JWT/TaskRuntimeApplication and canonical JSONL, inert provider only:
+- Explicit capacity2: helper installed before first use, original protected control route unchanged; missing JWT401 and denied proposal refuse. Initial task INSERT timeout0, clocksNULL. Actual blocked worker pauses via HTTP200, canonical exact claim reopens, unrelated paused intent unchanged. HTTP resume200 allocates fresh token/handle without provider invocation. First owned advance reuses original receipt and creates engine without goals replay, later normal ticks complete worker.
+- Explicit capacity1: same actual pause succeeds; original JWT resume503 before resume UPDATE, task stays paused and original suspended owner retained. No capacity bypass.
+
+11 helper owner/review tests passed isolated. Broader reviewer20 count includes neighboring tests, not rerun as part of this stage.
+
+No source/fixture corrections during run. Historical fixture log labels say positive INSERT/manual lifecycle; actual assertions are initial timeout0, NULL clocks and no timed lifecycle installation. This is same-process zero-timeout continuation only, not timed/queued/restart recovery or new routes. Source validators are not mocked; no timed admission claimed. No real commands/providers/targets. Same previously approved credentialless filesystem/network namespace; only isolated loopback PG.
+
+
+# Stage144: explicit skill usage JWT read composition
+
+Manifest SHA256 `7d792d0d239ef8e058c158a155b50cbad3da0ec73061f91860fb7b95e0aa6acc`.
+Exact stage142 base plus reviewed skill_usage_setup.py and dedicated owner/review tests. No moving overlays or source edits.
+
+Two actual PostgreSQL17.11 groups passed with original schema and real original AuthService JWT validation:
+- Original app retains404; absentJWT401 before SQL; explicit overlay GET preserves exact sample/limit1 selections and newest/null-dimension row. HEAD400 before SQL; outer global denial403 before SQL.
+- After start_response reports200, revoking outer global, request, source global, final current-to-request grant, or replacing originalJWT authority each raises and withholds body. No false replacement status after headers.
+
+26 combined standalone/setup owner/review tests passed in isolated snapshot. No corrections during execution. Same approved credentialless disposable filesystem/network namespace, fresh synthetic skill_usage rows, isolated-loopback PostgreSQL only. No filesystem/skill execution, mutation, default route activation, browser or arbitrary policy fixed-point guarantee. Route conflicts have focused test evidence, not an extra actualPG conflict scenario.
