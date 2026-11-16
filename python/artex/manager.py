@@ -20,12 +20,22 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
-from threading import Event, RLock
+from threading import Event, RLock, get_ident
 from time import monotonic
 from typing import Mapping, Protocol
 
 from .db.task_categories import CategoryTaskNotFound
 
+
+@dataclass(frozen=True,eq=False)
+class _ContinuationCredit:
+    controller:object
+    claim:object
+    thread:int
+    task_id:str
+    cap:object
+    handle:object
+    token:object
 
 class RuntimeUnavailable(RuntimeError):
     pass
@@ -244,6 +254,7 @@ class TaskManager:
         self._unstamped_slots: dict[str, _UnstampedSlot] = {}
         self._suspensions = {}
         self._continuation_owner = None
+        self._continuation_credits = {}
         self._continuation_runner = None
         self._continuation_methods = None
 
@@ -1142,11 +1153,80 @@ class TaskManager:
                     return slot['old_handle']
             raise TaskConflict('Suspension unavailable')
 
+    def _credit_identity(self,credit,record):
+        if type(credit) is not _ContinuationCredit or any(a is not b for a,b in zip((credit.controller,credit.claim,credit.cap,credit.handle,credit.token),record['pins'])) or type(credit.thread) is not int or credit.thread!=record['thread'] or type(credit.task_id) is not str or credit.task_id!=record['key']:raise TaskConflict('Original replacement credit required')
+    def reserve_continuation_admission(self,controller,task_id):
+        from .agent.admission import AdmissionController
+        from .agent.task_continuation import TaskContinuationOwner
+        from .agent.bootstrap_handle import BootstrapHandle
+        from .agent.engine_runner import EngineRunner
+        key=_id(task_id)
+        if type(controller) is not AdmissionController or controller._manager is not self or controller._runner is not self.runner or getattr(controller._continuation_claim,'__func__',None) is not AdmissionController._continuation_claim:raise TaskConflict('Original admission controller required')
+        claim=AdmissionController._continuation_claim(controller,task_id)
+        with self._lock:
+            slot=self._suspensions.get(key)
+            if slot is None:return None
+            row=self._tasks.get(key)
+            if (slot['phase']!='paused' or key in self._runs or row is None or row.get('status')!='running' or row.get('paused') is not True or row.get('queued') is not False
+                or type(row.get('timeout_seconds')) is not int or row['timeout_seconds']!=0 or row.get('deleted_at') is not None or row.get('archived_at') is not None
+                or key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key) or slot.get('credit') is not None):raise TaskConflict('Exact clean suspended replacement required')
+            owner=slot['owner'];handle=slot['old_handle'];token=slot['old_token'];cap=slot['cap']
+            if not self._continuation_identity(owner) or type(handle) is not BootstrapHandle or not token.cancelled:raise TaskConflict('Original cancelled suspension required')
+            credit=_ContinuationCredit(controller,claim,get_ident(),key,cap,handle,token)
+            record={'pins':(controller,claim,cap,handle,token),'thread':get_ident(),'key':key,'slot':slot,'used':False}
+            self._continuation_credits[credit]=record;slot['credit']=credit
+        try:
+            self._continuation_binding(owner)
+            rec=TaskContinuationOwner._record(owner,cap)
+            if rec['state']!='paused' or rec['old'] is not handle:raise TaskConflict('Original paused evidence required')
+            if getattr(handle.wait,'__func__',None) is not BootstrapHandle.wait or BootstrapHandle.wait(handle,0) is not True or handle.unresolved or handle._child is None or handle._child._intent_control is not None:raise TaskConflict('Clean cancelled replacement required')
+            if type(self.runner) is not EngineRunner or getattr(self.runner.handles,'__func__',None) is not EngineRunner.handles:raise TaskConflict('Original runner inventory required')
+            handles=EngineRunner.handles(self.runner)
+            if sum(h is handle for h in handles)!=1 or any(h is not handle and getattr(h,'task_id',None)==key for h in handles):raise TaskConflict('Original single pending handle required')
+            if not self.validate_continuation_admission(credit):raise TaskConflict('Replacement ownership changed')
+            return credit
+        except BaseException:
+            self.release_continuation_admission(credit);raise
+    def validate_continuation_admission(self,credit):
+        from .agent.admission import AdmissionController
+        from .agent.engine_runner import EngineRunner
+        with self._lock:
+            rec=self._continuation_credits.get(credit)
+            if rec is None:return False
+            self._credit_identity(credit,rec)
+            controller=credit.controller
+        if (getattr(controller._continuation_claim,'__func__',None) is not AdmissionController._continuation_claim
+            or AdmissionController._continuation_claim(controller,credit.task_id) is not credit.claim):return False
+        if not any(h is credit.handle for h in EngineRunner.handles(self.runner)):return False
+        with self._lock:
+            slot=rec['slot'];row=self._tasks.get(credit.task_id)
+            return (self._continuation_credits.get(credit) is rec and not rec['used'] and credit.thread==get_ident()
+                and self._suspensions.get(credit.task_id) is slot and slot.get('credit') is credit
+                and slot['phase']=='paused' and slot['cap'] is credit.cap and slot['old_handle'] is credit.handle
+                and slot['old_token'] is credit.token and credit.token.cancelled and credit.task_id not in self._runs
+                and self._continuation_identity(slot['owner']) and row is not None and row.get('paused') is True
+                and row.get('queued') is False and row.get('status')=='running' and row.get('timeout_seconds')==0)
+    def release_continuation_admission(self,credit):
+        with self._lock:
+            rec=self._continuation_credits.get(credit)
+            if rec is None:raise TaskConflict('Replacement credit already released')
+            self._credit_identity(credit,rec)
+            if credit.thread!=get_ident():raise TaskConflict('Original credit thread required')
+            if rec['slot'].get('credit') is credit:rec['slot'].pop('credit')
+            self._continuation_credits.pop(credit)
+            return True
     def resume_suspended(self,task_id):
         with self._lock:
             key,row=self._require(task_id);slot=self._suspensions.get(key)
             if slot is None or slot['phase']!='paused' or slot['owner'] is not self._continuation_owner or key in self._runs or row.get('paused') is not True or row.get('queued') is not False or row.get('status')!='running' or self._has_cleanup(key):raise TaskConflict('Exact clean suspension required')
             if key in self._deadline_slots or key in self._unstamped_slots:raise TaskConflict('Timed/terminal ownership prevents continuation')
+            credit=slot.get('credit')
+            if credit is not None:
+                record=self._continuation_credits.get(credit)
+                if record is None:raise TaskConflict('Replacement reservation lost')
+                self._credit_identity(credit,record)
+                if credit.thread!=get_ident() or record['used']:raise TaskConflict('Replacement belongs to another admission')
+                record['used']=True
             run=_Run();self._runs[key]=run;slot['new_run']=run;slot['phase']='resuming';snapshot=deepcopy(row)
             owner=slot['owner'];cap=slot['cap']
         handle=None

@@ -56,11 +56,15 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):enable_task_continuation(self.app,authorize=lambda p:True)
         self.assertIs(self.app.manager._continuation_owner,self.enabled.owner)
 
-    def test_full_capacity_denies_before_resume_sql(self):
+    def test_full_capacity_replaces_exact_paused_generation(self):
         self.capacity=1;self.prepare();self.assertEqual(self.f.request('/api/tasks/5/control',{'action':'pause'})[0],200)
-        before=len([q for q in self.f.f.db.calls if q.sql.startswith("UPDATE tasks SET paused=false,queued=false,queued_at=NULL,queue_mode=''")])
+        writes=[];db=self.f.f.db;original=db.fetch_all
+        def observed(q):
+            if q.sql.startswith("UPDATE tasks SET paused=false,queued=false,queued_at=NULL,queue_mode=''"):writes.append(q)
+            return original(q)
+        db.fetch_all=observed
         status,payload=self.f.request('/api/tasks/5/control',{'action':'resume'})
-        self.assertEqual(status,503,payload)
-        self.assertEqual(self.app.manager._suspensions['5']['phase'],'paused')
-        after=len([q for q in self.f.f.db.calls if q.sql.startswith("UPDATE tasks SET paused=false,queued=false,queued_at=NULL,queue_mode=''")])
-        self.assertEqual(after,before)
+        self.assertEqual(status,200,payload)
+        self.assertNotIn('5',self.app.manager._suspensions)
+        self.assertEqual(len(self.app.runner.handles()),1)
+        self.assertEqual(len(writes),1)

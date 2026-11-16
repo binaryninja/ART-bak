@@ -26,13 +26,15 @@ class Review(unittest.TestCase):
         before=list(f.f.f.db.calls)
         self.assertEqual(f.f.request('/api/tasks/5/control',{'action':'pause'},False)[0],401)
         self.assertEqual(f.f.f.db.calls,before);self.assertFalse(f.handle.token.cancelled)
-    def test_capacity_denial_preserves_original_pause_and_no_resume_grants(self):
+    def test_capacity_one_resume_requires_original_grants_and_replaces_handle(self):
         f=owner.Tests();f.setUp();self.addCleanup(f.doCleanups);f.capacity=1;f.prepare()
         self.assertEqual(f.f.request('/api/tasks/5/control',{'action':'pause'})[0],200)
         before=len(f.grants)
-        self.assertEqual(f.f.request('/api/tasks/5/control',{'action':'resume'})[0],503)
-        self.assertEqual(len(f.grants),before)
-        self.assertTrue(f.handle.token.cancelled);self.assertEqual(f.app.manager._suspensions['5']['phase'],'paused')
+        self.assertEqual(f.f.request('/api/tasks/5/control',{'action':'resume'})[0],200)
+        self.assertGreater(len(f.grants),before)
+        self.assertTrue(f.handle.token.cancelled)
+        new,=f.app.runner.handles();self.assertIsNot(new,f.handle)
+        self.assertFalse(f.app.manager._continuation_credits)
     def test_foreign_facade_bundle_cannot_install_owner(self):
         f,app=self.raw()
         hosted=replace(app.bootstrap.hosted,facade=SimpleNamespace(host=app.host))

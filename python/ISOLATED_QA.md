@@ -1933,3 +1933,44 @@ Two actual PostgreSQL17.11 groups passed with original schema and real original 
 - After start_response reports200, revoking outer global, request, source global, final current-to-request grant, or replacing originalJWT authority each raises and withholds body. No false replacement status after headers.
 
 26 combined standalone/setup owner/review tests passed in isolated snapshot. No corrections during execution. Same approved credentialless disposable filesystem/network namespace, fresh synthetic skill_usage rows, isolated-loopback PostgreSQL only. No filesystem/skill execution, mutation, default route activation, browser or arbitrary policy fixed-point guarantee. Route conflicts have focused test evidence, not an extra actualPG conflict scenario.
+
+## Exact continuation capacity replacement (November 16, 2026)
+
+Final isolated capacity-credit snapshot manifest SHA-256:
+`aeb68d7ca06024688a8a37267562af5ec2eccb2336e88ebe3e0aade9de9a7ac0`.
+Two fresh disposable PostgreSQL runs passed under unprivileged UID 1000 in a
+separate user/network namespace with loopback only, no external route, no host
+workspace/home mount and no credentials. Provider responses were inert local
+fixtures. No real provider or target was contacted.
+
+- With capacity one from application construction, original authenticated task
+  creation used zero timeout from the first INSERT. Goals and a worker ran;
+  authenticated pause cancelled/drained the worker and reopened only its owned
+  intent. Resume returned 200, replaced the old cancelled generation with a fresh
+  token/handle, and retained the exact prepared receipt without rerunning goals.
+  The new worker subsequently completed its original intent; an unrelated paused
+  intent remained paused.
+- A separate fresh database admitted two genuine task handles at capacity two,
+  then deliberately lowered the admission limit to one. Resuming the paused task
+  returned 503, retained both handles and the original paused suspension, released
+  the transient credit, and made no model call. This proves the exact replacement
+  credit does not hide the other task's occupancy under a reduced limit; it is not
+  a claim that two tasks can naturally be admitted at a limit of one.
+
+Ten new credit unit tests cover copying/forgery/staleness, wrong task, foreign
+thread/nested admission, missing runner entry, configuration revocation,
+post-CAS response loss, installation failure, extra-occupancy arithmetic and
+cleanup error preservation. Together with setup and admission tests, 35 focused
+checks pass; all 44 continuation-named checks also pass. These synthetic negative
+fixtures complement, rather than replace, the actual PostgreSQL happy-path and
+occupancy checks. Timed, queued, restart and shutdown-release continuation remain
+unsupported. This is not an exhaustive concurrency or security audit.
+
+The matching frozen Python sources with their required original Go/frontend
+reference files passed all 3,639 tests (full snapshot manifest
+`fe0e38bb22b01e8d408e808a42c5e6e760b8ae6b4968b399037ea645fa375d01`).
+Earlier Python-only/full-reference packaging attempts failed respectively with
+15 and one missing-reference-file errors; those logs were retained, and the
+missing files were added only in new snapshots. They were not behavior failures.
+A later combined worktree check including concurrent independent tests passed
+3,641 tests and parsed 520 unique SQL statements with zero syntax failures.

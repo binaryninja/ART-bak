@@ -14,21 +14,27 @@ calls the shared task facade/admission controller, which reaches the explicitly
 installed same-process continuation. Default absence remains unchanged. Queued,
 timed, restart and terminal continuations remain unsupported.
 
-## Important capacity limitation
+## Exact retained-generation capacity replacement
 
-The current shared admission controller counts the retained cancelled paused
-handle as pending capacity. At capacity 1, HTTP resume is therefore refused before
-resume SQL. No bypass or broad subtraction was added. The limited successful
-HTTP fixture explicitly uses capacity 2 with one paused task. Supporting resume
-at otherwise full capacity requires a separate exact same-suspension replacement
-reservation, not ignoring all paused or cancelled handles.
+The admission controller still counts every retained handle, including a clean
+cancelled paused generation. For resume only, it may reserve one private credit
+for that exact zero-timeout suspension and its original cancelled token/handle.
+The credit belongs to the current controller admission claim and thread. A
+successful resume replaces the old entry rather than adding execution capacity.
+Other tasks, queued starts, unknown handles and ordinary cancellations cannot
+borrow the credit. Full capacity therefore permits this one-for-one replacement,
+not an extra task. Concurrent or nested admission remains blocked.
 
-Nine initial owner/independent tests pass, including actual existing JWT
-pause→resume→new engine with unchanged prepared receipt/no goals replay, capacity1
-prewrite refusal, unauthorized JWT, default absence, duplicate install, replaced
-installer and a forged bundle carrying a foreign pump. The latter reproduced a
-missing composition check and is now refused by original app/pump checks. Fresh
-independent clearance and actual PostgreSQL helper acceptance now pass (below).
+The existing continuation grant and persisted paused/version/configuration checks
+still run before resume SQL. Failure releases only the transient credit, retaining
+any quarantined old/new generation owners. If release itself fails while an
+operation is failing, admission is quarantined without masking the original error.
+
+The startup helper remains inert and explicit. Original setup coverage includes
+JWT denial, default absence, duplicate install, replaced installer, foreign pump,
+foreign facade and replaced JWT rejection. New tests separately cover private
+credit identity, copying, staleness, wrong task, concurrent consumption, other
+occupancy, changed configuration, response loss and installation failure.
 
 Clean paused suspensions still intentionally prevent host all_settled and pool
 shutdown. This helper neither relinquishes them nor enables recovery after closing
@@ -47,5 +53,14 @@ pass; evidence remains separate from the core continuation checkpoint.
 Stage143 passes two fresh PostgreSQL runs through original JWT task control:
 explicit capacity two permits fresh engine-only continuation without goals replay;
 capacity one returns 503 before resume UPDATE and retains paused ownership.
-Eleven focused helper tests pass. See ISOLATED_QA.md for immutable evidence.
-This does not solve same-generation replacement capacity or shutdown release.
+That is historical pre-credit evidence. The subsequent capacity-credit acceptance
+below supersedes the capacity-one refusal, but not the shutdown limitation.
+
+## Capacity-credit acceptance
+
+Twenty-one focused setup and credit tests pass, plus fourteen admission tests
+(35 total). The single-row unit fixture models extra occupancy explicitly; it
+does not pretend to have admitted another real database task. Genuine PostgreSQL
+acceptance and its two-task occupancy case are recorded separately in
+ISOLATED_QA.md. No automatic scheduling, shutdown release, timed continuation or
+restart recovery is added.

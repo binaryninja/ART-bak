@@ -17,9 +17,10 @@ cannot account for work hidden by a violating custom factory. Deadlines remain
 unsupported/deferred as in LocalHostAdapter. No automatic recovery of a lost host.
 """
 from contextlib import contextmanager
-from threading import Lock
+from threading import Lock,get_ident
 from weakref import WeakKeyDictionary
 from math import isfinite
+from sys import exc_info
 from .host import AgentHost,PollResult
 from .engine_runner import EngineRunner
 from ..manager import RuntimeUnavailable
@@ -35,6 +36,7 @@ class AdmissionController:
         if type(limit) is not int or not 1<=limit<=host.runner.max_pending:raise ValueError('Bounded capacity must not exceed runner capacity')
         self.host,self._manager,self._runner=host,host.manager,host.runner
         self.limit=limit;self._lock=Lock();self._busy=False;self._quarantined=False
+        self._active_claim=None;self._active_thread=None;self._operation=None;self._task=None
         self._claim=object();self._adapter=LocalHostAdapter(host,single_process=True)
         with _owners_lock:
             if host in _owners:raise RuntimeUnavailable('Host already has a capacity authority')
@@ -44,14 +46,22 @@ class AdmissionController:
             raise RuntimeUnavailable('Admission host identity changed')
         with _owners_lock:
             if _owners.get(self.host) is not self._claim:raise RuntimeUnavailable('Admission authority changed')
-    def _reserve(self,*,reconcile=False):
+    def _reserve(self,*,reconcile=False,operation=None,task_id=None):
         self._identity()
         with self._lock:
             if self._busy or (self._quarantined and not reconcile):return False
-            self._busy=True;return True
+            self._busy=True;self._active_claim=object();self._active_thread=get_ident();self._operation=operation;self._task=task_id;return True
     def _release(self,*,quarantine=False):
         with self._lock:
-            self._quarantined=quarantine;self._busy=False
+            self._quarantined=quarantine;self._busy=False;self._active_claim=None;self._active_thread=None;self._operation=None;self._task=None
+    def _continuation_claim(self,task_id):
+        """Original current-thread resume admission identity; no policy calls."""
+        self._identity()
+        with self._lock:
+            if (not self._busy or self._quarantined or self._active_thread!=get_ident()
+                or self._operation!='resume' or str(self._task)!=str(task_id)
+                or self._active_claim is None):raise RuntimeUnavailable('Original resume admission claim required')
+            return self._active_claim
     def _poll_owned(self):
         self._identity();state=self.host.poll();self._identity()
         if type(state) is not PollResult or type(state.busy) is not bool or state.busy:
@@ -64,14 +74,24 @@ class AdmissionController:
         if operation not in ('create','start','resume','queued'):raise ValueError('Unknown admission operation')
         if (operation=='create' and task_id is not None) or (operation!='create' and (type(task_id) not in (str,int) or not str(task_id).isascii() or not str(task_id).isdecimal() or not 0<int(task_id)<2**63)):
             raise ValueError('Exact task identity required')
-        if not self._reserve():raise RuntimeUnavailable('Admission capacity authority is busy or quarantined')
-        entered=False;inspected=False;quarantine=False
+        if not self._reserve(operation=operation,task_id=task_id):raise RuntimeUnavailable('Admission capacity authority is busy or quarantined')
+        entered=False;inspected=False;quarantine=False;credit=None
         try:
             state=self._poll_owned();inspected=True
-            if state.running+state.pending>=self.limit:raise RuntimeUnavailable('Task capacity exhausted')
+            if operation=='resume':
+                from ..manager import TaskManager
+                if type(self._manager) is not TaskManager or getattr(self._manager.reserve_continuation_admission,'__func__',None) is not TaskManager.reserve_continuation_admission:raise RuntimeUnavailable('Original replacement admission manager required')
+                credit=TaskManager.reserve_continuation_admission(self._manager,self,task_id)
+            replacement=0
+            if credit is not None:
+                if state.pending<1 or self._manager.validate_continuation_admission(credit) is not True:raise RuntimeUnavailable('Exact pending replacement required')
+                replacement=1
+            if state.running+state.pending-replacement>=self.limit:raise RuntimeUnavailable('Task capacity exhausted')
+            if credit is not None and self._manager.validate_continuation_admission(credit) is not True:raise RuntimeUnavailable('Replacement changed before admission')
             entered=True
             yield True
         finally:
+            active_error=exc_info()[0] is not None
             # Reconcile on successful, failed and cancelled hosted mutation.
             # Do not mask the original failure; quarantine remains observable.
             try:
@@ -80,7 +100,13 @@ class AdmissionController:
                 quarantine=True
             except BaseException:
                 quarantine=True;raise
-            finally:self._release(quarantine=quarantine or not inspected)
+            finally:
+                try:
+                    if credit is not None:self._manager.release_continuation_admission(credit)
+                except BaseException:
+                    quarantine=True
+                    if not active_error:raise
+                finally:self._release(quarantine=quarantine or not inspected)
     def reconcile(self):
         """Explicitly retry bounded host settlement/inventory after uncertainty."""
         if not self._reserve(reconcile=True):raise RuntimeUnavailable('Admission reconciliation is busy')
