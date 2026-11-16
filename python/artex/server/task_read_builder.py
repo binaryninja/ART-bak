@@ -11,6 +11,8 @@ from .task_activity import TaskActivityService
 from .main_sessions import MainSessionsService
 from .task_goal_reads import TaskGoalReads
 from .task_coverage_reads import TaskCoverageReads
+from .task_intent_assets import TaskIntentAssetsService
+from ..db.task_intent_assets import TaskIntentAssetsStore
 from ..db.main_sessions import MainSessionsStore
 from ..db.task_coverage import TaskCoverageStore,CoverageScope
 from ..db.task_findings import TaskFindingsStore
@@ -23,6 +25,7 @@ class TaskReadServices:
     main_sessions:MainSessionsService | None = None
     goals:TaskGoalReads | None = None
     coverage:TaskCoverageReads | None = None
+    intent_assets:TaskIntentAssetsService | None = None
 
 class TaskReadBuilder:
     def __init__(self,executor,*,request_authorize,context_authorize,asset_authorize,
@@ -31,7 +34,8 @@ class TaskReadBuilder:
                  max_rows=500,max_bytes=1048576,max_batches=20,max_polls=3,
                  main_sessions_authorize=None,main_sessions_request_authorize=None,
                  goal_authorize=None,goal_request_authorize=None,
-                 coverage_authorize=None,coverage_request_authorize=None,coverage_asset_authorize=None,coverage_connector_authorize=None):
+                 coverage_authorize=None,coverage_request_authorize=None,coverage_asset_authorize=None,coverage_connector_authorize=None,
+                 intent_assets_authorize=None,intent_assets_request_authorize=None):
         policies=(request_authorize,context_authorize,asset_authorize,runtime_snapshot,
                   activity_authorize,activity_raw_authorize,activity_request_authorize,stream_authorize,stream_wait)
         if any(not callable(f) for f in policies[:-1]) or stream_wait is not None and not callable(stream_wait):raise ValueError('Explicit independent task read grants required')
@@ -44,6 +48,10 @@ class TaskReadBuilder:
         coverage_policies=(coverage_authorize,coverage_request_authorize,coverage_asset_authorize,coverage_connector_authorize)
         if any(f is not None for f in coverage_policies) and (any(not callable(f) for f in coverage_policies[:3]) or coverage_connector_authorize is not None and not callable(coverage_connector_authorize)):
             raise ValueError('Independent coverage source/request/asset grants required')
+        intent_policies=(intent_assets_authorize,intent_assets_request_authorize)
+        if (intent_assets_authorize is None)!=(intent_assets_request_authorize is None) or any(f is not None and not callable(f) for f in intent_policies):
+            raise ValueError('Independent intent-asset source and request grants required')
+        self._intent_asset_policies=intent_policies;self._original_intent_asset_policies=intent_policies
         self._coverage_policies=coverage_policies;self._original_coverage_policies=coverage_policies
         self._goal_policies=(goal_authorize,goal_request_authorize)
         self._original_goal_policies=self._goal_policies
@@ -54,7 +62,7 @@ class TaskReadBuilder:
         self._original_policies=policies;self._original_bounds=self._bounds
     def validate_bindings(self):
         if (self.executor is not self._executor or self._policies is not self._original_policies
-                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies):raise ValueError('Read builder configuration changed')
+                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies):raise ValueError('Read builder configuration changed')
         return True
     def build(self,scope,*,current,lifecycle_guard):
         self.validate_bindings()
@@ -107,4 +115,14 @@ class TaskReadBuilder:
                 asset_authorize=lambda s,selection,ids:grant(casset,scope,selection,ids),
                 connector_authorize=None if cconnector is None else lambda s,k,v:grant(cconnector,scope,k,v),
                 current=live,lifecycle_guard=guard,max_rows=rows,max_bytes=bytes_)
-        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads)
+        intent_assets=None
+        isource,irequest=self._intent_asset_policies
+        if isource is not None:
+            # Independent raw anchor-metadata authority, not implicit reuse of
+            # findings, coverage, generic task or execution grants.
+            icontext=TaskCoverageStore(self.executor,CoverageScope(*identity),
+                authorize=lambda s,t,e:grant(isource,scope,t,e),current=live,lifecycle_guard=guard,
+                max_rows=rows,max_bytes=bytes_)
+            intent_assets=TaskIntentAssetsService(TaskIntentAssetsStore(icontext),
+                authorize=lambda req,s:grant(irequest,req,scope))
+        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets)

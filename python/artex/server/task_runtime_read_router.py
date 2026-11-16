@@ -37,6 +37,7 @@ class TaskRuntimeReadRouter:
     def _operation(path):
         match=re.fullmatch(r'/api/tasks/([^/]+)/(coverage|coverage-graph|asset-refs)',path)
         if match:return {'coverage':'coverage','coverage-graph':'coverage_graph','asset-refs':'coverage_refs'}[match[2]],{'id':match[1]}
+        if re.fullmatch(r'/api/tasks/[^/]+/intent-assets',path):return 'intent_assets',{'id':path.split('/')[-2]}
         if re.fullmatch(r'/api/tasks/[^/]+/goals',path):return 'goals',{'id':path.split('/')[-2]}
         if path=='/api/exploration/main-sessions':return 'main_sessions',{}
         if path=='/api/llm/profiles':return 'profiles',{}
@@ -49,7 +50,7 @@ class TaskRuntimeReadRouter:
         if type(application) is not WSGIApplication or type(application.router) is not Router:raise ValueError('One original authenticated application required')
         self.validate_bindings();base=application.router;auth=base.authorize;owner=self
         protected=Router(auth)
-        for path in ('/api/tasks/{id}/coverage','/api/tasks/{id}/coverage-graph','/api/tasks/{id}/asset-refs','/api/tasks/{id}/goals','/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
+        for path in ('/api/tasks/{id}/intent-assets','/api/tasks/{id}/coverage','/api/tasks/{id}/coverage-graph','/api/tasks/{id}/asset-refs','/api/tasks/{id}/goals','/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
             protected.add('GET',path,lambda req,params:owner._read(req,base,auth))
         class Overlay:
             def dispatch(self,request):
@@ -87,7 +88,7 @@ class TaskRuntimeReadRouter:
             raw=params['id'] if 'id' in params else q.get('task',[''])[0]
             if not re.fullmatch('[1-9][0-9]{0,18}',raw) or int(raw)>=2**63:raise ValueError()
             task_id=int(raw)
-            if op in ('task','goals','coverage','coverage_graph') and q:raise ValueError()
+            if op in ('task','goals','coverage','coverage_graph','intent_assets') and q:raise ValueError()
             selector(task_id)
             task=self._pins[0].get(task_id)
             selector(task_id)
@@ -116,6 +117,23 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1)''',(task_id,scope.
             if op in ('coverage','coverage_graph','coverage_refs'):
                 if services.coverage is None:return error_response(503,'Coverage read capability unavailable')
                 response=services.coverage.handle({'coverage':'coverage','coverage_graph':'graph','coverage_refs':'refs'}[op],request)
+            elif op=='intent_assets':
+                if services.intent_assets is None:return error_response(503,'Intent-asset read capability unavailable')
+                def transport_disclosure():
+                    auth_binding()
+                    if auth(request) is not True:raise ReadDenied()
+                    selector(task_id)
+                    current(scope)
+                    auth_binding()
+                    if auth(request) is not True:raise ReadDenied()
+                def transport_authentication():
+                    # Authority-only selector sweep after every current/source
+                    # observer; do not call current(scope) again here.
+                    selector(task_id)
+                    auth_binding()
+                    if auth(request) is not True:raise ReadDenied()
+                    auth_binding()
+                response=services.intent_assets.handle(request,{'id':str(task_id)},transport_disclosure=transport_disclosure,transport_authentication=transport_authentication)
             elif op=='goals':
                 if services.goals is None:return error_response(503,'Goal read capability unavailable')
                 response=services.goals.handle(request)

@@ -17,9 +17,19 @@ class TaskIntentAssetsStore:
         if c is not self._coverage or any(a is not b for a,b in zip((c.executor,c.scope,c.guard,c.authorize,c.current),p)) or self.executor is not p[0] or self.scope is not p[1] or self.guard is not p[2]:raise CoverageDenied('Intent asset binding changed')
         c._check()
         if any(a is not b for a,b in zip((c.executor,c.scope,c.guard,c.authorize,c.current),p)):raise CoverageDenied('Intent asset binding changed')
-    def list(self,*,disclosure=None,with_disclosure_receipt=False):
+    def list(self,*,disclosure=None,with_disclosure_receipt=False,final_request_authorize=None):
         if disclosure is not None and not callable(disclosure):raise ValueError("Invalid disclosure policy")
+        if final_request_authorize is not None and not callable(final_request_authorize):raise ValueError('Invalid final request authority')
         self._check();c=self.coverage
+        authority,current,guard=c.authorize,c.current,c.guard
+        scope_identity=(c.scope.task_id,c.scope.exploration_id,c.scope.revision)
+        def pure():
+            if (self.coverage is not c or c is not self._coverage or self.executor is not self._pins[0]
+                    or self.scope is not self._pins[1] or self.guard is not self._pins[2]
+                    or c.executor is not self._pins[0] or c.scope is not self._pins[1]
+                    or c.authorize is not authority or c.current is not current or c.guard is not guard
+                    or (c.scope.task_id,c.scope.exploration_id,c.scope.revision)!=scope_identity):
+                raise CoverageDenied('Intent asset receipt binding changed')
         with c._context() as (tx,ids,exps,enabled):
             self._check()
             sql="""WITH context AS (
@@ -70,5 +80,14 @@ FROM bounded ORDER BY inherited,intent_id DESC,asset_id LIMIT $4"""
                 if disclosure is not None and disclosure() is not True:raise CoverageDenied('Disclosure denied')
                 self._check()
             self._check()
+            # All callback-bearing current/guard work precedes this finite
+            # authority-only sweep. No current() observation follows the grants.
+            pure()
+            if final_request_authorize is not None and final_request_authorize() is not True:
+                raise CoverageDenied('Final request denied')
+            pure()
+            for exp,task in contexts:
+                if authority(c.scope,task,exp) is not True:raise CoverageDenied('Final source denied')
+                pure()
         final_disclosure()
         return (result,final_disclosure) if with_disclosure_receipt else result

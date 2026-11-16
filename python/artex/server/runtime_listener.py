@@ -140,6 +140,10 @@ class _AuthenticatedView:
                         if len(pending)!=1:raise RuntimeError('Missing response headers')
                         start_response(*pending[0]);started=True
                     self.check()
+                    from .disclosure import DisclosureBody
+                    if type(result) is DisclosureBody:
+                        DisclosureBody.validate_disclosure(result)
+                        self.check()
                     yield chunk
                 self.check()
                 if not started:

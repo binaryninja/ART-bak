@@ -14,6 +14,7 @@ from http import HTTPStatus
 import re
 from .core import Request, error_response
 from .streaming import StreamingResponse, ClosingIterator
+from .disclosure import DisclosureResponse, DisclosureBody
 
 _TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
 _HOP_BY_HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
@@ -76,7 +77,7 @@ class WSGIApplication:
         if no_body_status or str(environ.get('REQUEST_METHOD', '')).upper() == 'HEAD':
             if streaming is not None: streaming.close()
             return []
-        return streaming if streaming is not None else [response.body]
+        return streaming if streaming is not None else DisclosureBody(response) if type(response) is DisclosureResponse else [response.body]
 
     def _handle(self, environ):
         try:
