@@ -9,6 +9,9 @@ Use tick() for a synchronous owned step, or explicitly start_pump()/stop_pump().
 Stopping the pump is not task cancellation or successful drain: inspect host.drain
 and retain unresolved handles/deadline owners before closing storage. Existing
 positive timeout, recovery, live progress and frontend limitations remain intact.
+Explicit track_manual_actions creates an inert exact-host registry, not observers,
+finalizers or timers. Hosts must register their original manual components before
+first use; unregistered components are not automatically discovered or tracked.
 """
 from dataclasses import dataclass
 import math
@@ -23,6 +26,7 @@ class TaskRuntimeApplication:
     bootstrap: BootstrapApplication
     pump: EnginePump
     read_app: object = None
+    manual_actions: object = None
 
     @property
     def app(self):return self.read_app if self.read_app is not None else self.bootstrap.app
@@ -39,6 +43,11 @@ class TaskRuntimeApplication:
 
     def _check(self):
         self.runtime.validate_bindings()
+        if self.manual_actions is not None:
+            from ..agent.manual_action_owner import ManualActionOwner
+            if type(self.manual_actions) is not ManualActionOwner or self.manual_actions.host is not self.host or self.manual_actions._application is not self:
+                raise RuntimeUnavailable('Manual action application ownership changed')
+            self.manual_actions.validate_bindings()
         if (self.pump.host is not self.host or self.pump.runner is not self.runner
                 or self.pump.manager is not self.manager
                 or self.admission.host is not self.host
@@ -55,9 +64,12 @@ class TaskRuntimeApplication:
 def build_task_runtime_application(runtime, signing_key, password_codec, *,
         live_last_activity, profile_available=None, capacity=1, max_pending=64,
         single_process=False, application_options=None, pump_interval=1.0,
-        pump_max_per_tick=8, pump_clock=monotonic, read_services=None, read_router=None):
+        pump_max_per_tick=8, pump_clock=monotonic, read_services=None, read_router=None,
+        track_manual_actions=False, manual_action_capacity=1024):
     # Component type import stays local to avoid a setup/component import cycle.
     from ..agent.task_runtime import TaskRuntimeAssembly
+    if type(track_manual_actions) is not bool or type(manual_action_capacity) is not int or not 1<=manual_action_capacity<=10000:
+        raise ValueError('Explicit manual tracking opt-in and bounded capacity required')
     if type(runtime) is not TaskRuntimeAssembly:
         raise ValueError('Actual task runtime component assembly required')
     if (isinstance(pump_interval,bool) or not isinstance(pump_interval,(int,float))
@@ -96,4 +108,11 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         read_app=read_router.bind(bootstrap.app)
     pump=EnginePump(bootstrap.host,interval=pump_interval,
         max_per_tick=pump_max_per_tick,clock=pump_clock)
-    return TaskRuntimeApplication(runtime,bootstrap,pump,read_app)
+    manual=None
+    if track_manual_actions:
+        from ..agent.manual_action_owner import ManualActionOwner
+        manual=ManualActionOwner(bootstrap.host,max_components=manual_action_capacity)
+    bundle=TaskRuntimeApplication(runtime,bootstrap,pump,read_app,manual)
+    if manual is not None:manual.claim_application(bundle)
+    bundle._check()
+    return bundle

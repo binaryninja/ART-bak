@@ -57,6 +57,7 @@ class OwnedFinalization:
         t=plan.transcript;self._transcript=(t.store,t.store.root,t.agent_id,t.recovery_guard,t.store.max_bytes)
         self._lock=Lock();self._cancel=Event();self._active=False;self._used=False;self._failed=False
         self._handoff=None;self.journal=None;self.runner=None;self.outcome=None;self.settlement=None;self.result=None;self._owned_journal=None;self._owned_runner=None;self._owned_settlement=None
+        self._tracking_lock=Lock();self._manual_owner=None;self._manual_owner_pin=None;self._manual_started=False
     def _validate(self):
         if self.observer is not self._observer or self.plan is not self._plan or any(getattr(self.plan,f.name) is not value for f,value in zip(fields(self.plan),self._pins)) or self.plan.configuration.digest!=self._digest:
             raise FinalizationUnavailable('Final plan changed')
@@ -78,6 +79,16 @@ class OwnedFinalization:
         if runner is not None:runner.cancel()
         return True
     def run_once(self):
+        from .manual_action_owner import ManualActionUnavailable
+        with self._tracking_lock:
+            owner=self._manual_owner_pin
+            if self._manual_owner is not owner or self._observer._manual_owner_pin is not owner or self._observer._manual_owner is not owner:
+                raise ManualActionUnavailable('Finalizer must share original observer tracking')
+            self._manual_started=True;receipt=None if owner is None else owner._enter(self,'run_once')
+        try:return self._run_once()
+        finally:
+            if owner is not None:owner._leave(receipt)
+    def _run_once(self):
         with self._lock:
             if self._active or self._used or self._failed or self._cancel.is_set():raise FinalizationUnavailable('Final action unavailable for replay')
             self._active=True;self._thread=get_ident()

@@ -8,7 +8,10 @@ provider callbacks. The stop timeout bounds cooperative waits, not those calls.
 stop_admissions must persistently fence ALL external admission paths, not only
 HTTP; cancel_owned must use that host's lifecycle authority. Unresolved shutdown
 retains the bundle/pool/owner for explicit reconciliation, never automatic retry.
-The HTTP connection cap is separate from task admission capacity.
+The HTTP connection cap is separate from task admission capacity. If an explicit
+manual-action owner is attached, shutdown seals it before callbacks and waits for
+both active outer invocations and unresolved inventory before closing resources.
+This does not discover untracked manual calls or resolve quarantined actions.
 """
 from dataclasses import dataclass
 import math,socket,threading,time
@@ -165,10 +168,24 @@ class RuntimeListener:
         self._auth_pins=(base,base.router,base.router.authorize,bundle.app.router)
         self._bundle=bundle;self._owner=owner;self._config=config;self._original_config=config
         self._pins=(bundle.runtime,bundle.app,bundle.pump,bundle.host,bundle.manager,owner.pool,owner.stop_admissions,owner.cancel_owned,owner.close_resources)
+        self._manual=bundle.manual_actions
+        self._manual_names=('validate_bindings','stop_new_actions','cancel_active','wait','snapshot')
+        self._manual_methods=None
+        if self._manual is not None:
+            methods=tuple(getattr(self._manual,n) for n in self._manual_names)
+            if any(getattr(m,'__self__',None) is not self._manual or getattr(m,'__func__',None) is not getattr(type(self._manual),n) for n,m in zip(self._manual_names,methods)):
+                raise ValueError('Original manual action operations required')
+            self._manual_methods=tuple((m.__self__,m.__func__) for m in methods)
         self._view=_AuthenticatedView(bundle.app,self._check)
         self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False
     def _check(self):
         b,o=self._bundle,self._owner
+        if b.manual_actions is not self._manual:raise RuntimeError('Manual action owner changed')
+        if self._manual is not None:
+            for name,(owner,method) in zip(self._manual_names,self._manual_methods):
+                current=getattr(self._manual,name)
+                if getattr(current,'__self__',None) is not owner or getattr(current,'__func__',None) is not method:
+                    raise RuntimeError('Manual action operation changed')
         if any(a is not v for a,v in zip((b.runtime,b.app,b.pump,b.host,b.manager,o.pool,o.stop_admissions,o.cancel_owned,o.close_resources),self._pins)) or b.runtime.executor is not o.pool:
             raise RuntimeError('Runtime listener ownership changed')
         base,router,auth,outer=self._auth_pins
@@ -205,25 +222,40 @@ class RuntimeListener:
             try:self._check()
             except Exception:return ListenerStop(False,'ownership_changed')
             self._shutdown_active=True
-            try:
-                if self._pins[6]() is not True:return ListenerStop(False,'admission_unresolved')
+        # External shutdown/cancellation callbacks and cooperative waits must
+        # never run under the listener lock. Concurrent/reentrant stops observe
+        # shutdown_busy, and retained manual invocations can finish independently.
+        try:
+            if self._manual is not None:
+                if self._manual.stop_new_actions() is not True:return ListenerStop(False,'manual_admission_unresolved')
                 self._check()
-                if self._server is not None:
-                    self._server.shutdown();self._server.server_close()
-                    if not self._server.quiesce(remaining()):return ListenerStop(False,'http_unresolved')
-                    self._thread.join(remaining())
-                    if self._thread.is_alive():return ListenerStop(False,'listener_unresolved')
-                if self._bundle.stop_pump(remaining()) is not True:return ListenerStop(False,'pump_unresolved')
-                if self._pins[7]() is not True:return ListenerStop(False,'cancellation_unresolved')
+            if self._pins[6]() is not True:return ListenerStop(False,'admission_unresolved')
+            self._check()
+            if self._server is not None:
+                self._server.shutdown();self._server.server_close()
+                if not self._server.quiesce(remaining()):return ListenerStop(False,'http_unresolved')
+                self._thread.join(remaining())
+                if self._thread.is_alive():return ListenerStop(False,'listener_unresolved')
+            if self._bundle.stop_pump(remaining()) is not True:return ListenerStop(False,'pump_unresolved')
+            if self._manual is not None:
+                self._manual.cancel_active();self._check()
+            if self._pins[7]() is not True:return ListenerStop(False,'cancellation_unresolved')
+            self._check()
+            drain=self._bundle.host.drain(remaining())
+            if drain.all_settled is not True:return ListenerStop(False,'runtime_unresolved')
+            self._check()
+            # A retired manager owner is not enough: the outer manual invocation
+            # may still be unwinding after its terminal SQL commit.
+            if self._manual is not None:
+                if self._manual.wait(remaining()).drained is not True:return ListenerStop(False,'manual_actions_unresolved')
                 self._check()
-                drain=self._bundle.host.drain(remaining())
-                if drain.all_settled is not True:return ListenerStop(False,'runtime_unresolved')
+            if not self._resources_closed:
+                if self._pins[8]() is not True:return ListenerStop(False,'resources_unresolved')
+                self._resources_closed=True
                 self._check()
-                if not self._resources_closed:
-                    if self._pins[8]() is not True:return ListenerStop(False,'resources_unresolved')
-                    self._resources_closed=True
-                    self._check()
-                if self._owner.pool.close(timeout=remaining()).drained is not True:return ListenerStop(False,'pool_unresolved')
-                self._closed=True;return ListenerStop(True,'closed')
-            except BaseException:return ListenerStop(False,'shutdown_unresolved')
-            finally:self._shutdown_active=False
+            if self._owner.pool.close(timeout=remaining()).drained is not True:return ListenerStop(False,'pool_unresolved')
+            with self._lock:self._closed=True
+            return ListenerStop(True,'closed')
+        except BaseException:return ListenerStop(False,'shutdown_unresolved')
+        finally:
+            with self._lock:self._shutdown_active=False

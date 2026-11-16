@@ -32,6 +32,7 @@ class OwnedExpiryObserver:
         self._pins=(host,generation_clock,store,store.manager,store.handle,store.handle.token,
                     authorize_observation,authorize_freeze)
         self._lock=Lock();self._lease=None;self._freeze=None;self._failed=False;self._transfer=None;self._final_owner=None
+        self._tracking_lock=Lock();self._manual_owner=None;self._manual_owner_pin=None;self._manual_started=False
     def _check(self):
         h,k,s,m,handle,token,read,freeze=self._pins
         if (self.host is not h or self.clock is not k or k.store is not s or s.manager is not m
@@ -46,7 +47,18 @@ class OwnedExpiryObserver:
         self._check()
         if callback(self._pins[2].receipt) is not True:raise ExpiryUnavailable('Expiry observation denied')
         self._check()
+    def _manual_enter(self,operation):
+        from .manual_action_owner import ManualActionUnavailable
+        with self._tracking_lock:
+            if self._manual_owner is not self._manual_owner_pin:raise ManualActionUnavailable('Manual owner changed')
+            self._manual_started=True;owner=self._manual_owner_pin
+            return (owner,None if owner is None else owner._enter(self,operation))
     def tick(self):
+        owner,receipt=self._manual_enter('tick')
+        try:return self._tick()
+        finally:
+            if owner is not None:owner._leave(receipt)
+    def _tick(self):
         if not self._lock.acquire(False):return ExpiryObservation('busy')
         try:
             self._check()
@@ -79,6 +91,11 @@ class OwnedExpiryObserver:
         finally:self._lock.release()
 
     def claim_finalization(self,coordinator,plan):
+        owner,receipt=self._manual_enter('claim_finalization')
+        try:return self._claim_finalization(coordinator,plan)
+        finally:
+            if owner is not None:owner._leave(receipt)
+    def _claim_finalization(self,coordinator,plan):
         """Exact one-shot owner handoff; no caller-created readiness authority."""
         from threading import get_ident
         from .owned_finalization import OwnedFinalization,FinalizationPlan,FinalizationHandoff,FinalizationResult,FinalizationUnavailable

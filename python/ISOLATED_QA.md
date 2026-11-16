@@ -1278,3 +1278,38 @@ Six actual integration groups passed:
 6. Actual persisted timeout metadata drift from0 to10 changes runtime configuration digest and refuses the old prepared scope before further provider work. Only initial goals2 occurred; no timed engine was advanced or gate bypassed.
 
 Twenty-six focused wrapper/timeout-identity owner and independent tests passed on this exact snapshot. No product edits, harness corrections or live network/model targets. Read wrapper explicitly mounted only in this disposable fixture. This is not production registration or positive-duration runtime support. Synthetic persisted timeout drift is a negative configuration test, not permitted entry. No listener/browser/frontend claim or arbitrary policy fixed-point guarantee.
+
+## Stage 100: standalone notification delivery history
+
+Manifest SHA-256: `d5bc8e592c23035073b9dd63999d705eb15b5e533eebb97be551a8fb399858d8`.
+Base: frozen judge40 Python; only db/server notification_history, owner test, new independent review test, and NOTIFICATION_HISTORY_STATUS.md overlaid. No evolving runtime/registration source.
+
+Source review matched ListNotificationDeliveries and notifyDeliveryDTO: event-joined total, channel-joined newest-first page, string finding ID, nullable batch/sent omission, title/name-vulnclass fallback, raw diagnostic field and source effective pagination cap with original requested-size echo. One statement provides a shared count/page snapshot. Original channel foreign key remains enforced; no fake orphan or disabled constraints were introduced. The distinct source join semantics are inspected and focused-test covered; actual integration verifies total retained on an empty offset page, not a manufactured missing-channel row.
+
+Ten focused tests passed (seven owner, three independent). Added exact final raw callback revoking read grant, final serializer replacing raw-policy callback, and filtered/nonmonotonic row refusal regressions. No product fixes required.
+
+Three real temporary PG17 groups passed within approved credential-free isolation:
+- Actual channels/events/deliveries joins and filters, newest-first pagination, empty page with nonzero total, page_size201 echo/effective50, null JSON snapshot, title fallback and null severity, absent sent/batch fields, exact bigint finding string and timestamp microseconds. Secret synthetic channel config and full snapshot never returned.
+- Cumulative multibyte page overflow returned NULL for all six text projections before transfer; response500 rather than truncation. Restoring only fixture text restored200.
+- Original raw grant revoked after actual fetch yields403 without diagnostics; denied initial read performs no SQL.
+
+No routes registered, messages sent, delivery states claimed/retried, background jobs started, real credentials used or production data read. No source or integration-fixture correction needed. No blanket reader or concurrent race coverage claimed.
+
+## Stage 101: exact lifetime44, separated application and component evidence
+
+Manifest SHA-256: `1ee6be29889e57e7f64a31c104d0172dc995171f9e5d6d708678f3721b6d2d07`.
+Frozen lifetime44 Python only, no moving overlays. Approved credential-free disposable filesystem/network isolation with actual PG17, temporary canonical transcripts and inert providers. Four actual integration groups and 40 focused owner/review/listener tests passed. No product edits or fixture corrections.
+
+### Natural application evidence
+
+Actual authenticated zero-timeout TaskRuntimeApplication creates/prepares a task; explicit manual registry belongs to the exact host/application/pool. A real zero-timeout unstamped observer registers and ticks inertly. RuntimeListener shutdown (without starting an HTTP listener) seals before external stop-admissions callback, cancels/drains existing zero-timeout work and closes owned resources. Direct registered observer calls after seal refuse; repeated stop is idempotent. Separate no-tracking/default application keeps manual_actions absent and orderly stop still succeeds.
+
+### Narrower actual-PG finalization component evidence
+
+A genuine original manual-bootstrap host uses explicitly synthetic positive prepared pins, not the full persisted-role application. Its actual ManualActionOwner registers the original observer/finalizer. Real final settlement retires the manager owner while a deterministic Event blocks the invocation's return tail. Registry still reports active=1 and not drained after sealing; storage remains usable. Only after releasing the tail and actual outer return does wait report drained. Sealed direct observer/finalizer calls refuse.
+
+A separate truly blocked inert final provider is cancelled through the sealed registry from another thread. After release, canonical cancellation leaves active=0/unresolved=1, registry never reports drained, task remains running, manager quarantined, storage usable and no provider replay.
+
+### Limits
+
+These are deliberately separate scopes. Full persisted-role positive-timeout application finalization cannot naturally pass current timeout/configuration guards; none were weakened, and no fake active flags or application ownership replacement was used. The positive component tests do not themselves exercise RuntimeListener against that timed application. Listener refusal/retention during post-retirement active tail is covered by the 40 focused SQL-double tests, not misrepresented as a full same-app positive PG path. No new actual socket was needed or started. No public timed admission, automatic observers/finalizers, production shutdown, arbitrary network-provider interruption, crash recovery or real targets claimed.
