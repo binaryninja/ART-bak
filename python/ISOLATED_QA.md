@@ -1504,3 +1504,27 @@ Four actual PostgreSQL17.11/JWT groups and 43 focused test executions pass (39 r
 Fixture correction only: original JWT callback belongs to application.router.authorize, not application.authorize. Initial AttributeError log preserved; corrected exact boundary then all tests pass.
 
 Credentialless approved namespace/bwrap, readonly snapshot, cached dependencies and fresh loopback-only PostgreSQL. No default registration, settings mutations outside fixtures, providers, profile-secret join, commands, production data or external target.
+
+## Stage 113: actual persisted-role registration blocked
+
+Exact frozen registration/task-read source, manifest `2ecb2361137af4f9ad725eeb3b9b05bde72317904a8aedd986642a5868ee3005` (same source as 114). No overlays/product changes.
+
+Actual full registration positive acceptance is BLOCKED, not passed. Genuine JWT zero-timeout task/bootstrap executes two inert goals responses. Test-only prepared handle/manager timeout pins plus actual SQL timeout10 injection at child construction invalidate the persisted-role configuration digest. BootstrapConflict occurs before permit issuance; runner records failed attempt. No receipt identity or configuration guard was rewritten to force success.
+
+A second negative acceptance run verifies failed owner stays installed, next owned tick refuses, host drain false, no additional model call, no stamp/dispatch grants, and both actual clock timestamps NULL. One real-PG negative group passes. The original positive attempt log is preserved separately.
+
+Twenty focused owner/registration/review tests pass, but use SQL doubles. Partial capacity, invalid permit, cancellation/seal products and exact observer/frontier registration remain focused-fixture evidence, NOT real-PG full-application evidence.
+
+Standalone manual-factory composition cannot legitimately substitute here: PreparedTimedLifecycle requires the exact TaskRuntimeApplication + TaskRuntimeAssembly and original runtime/configuration authority. No forged application or weaker current callback was supplied. Earlier standalone component evidence remains separate. No actual listener/pool shutdown-retention acceptance claimed; this run proves host ownership retention and usable local fixture database only.
+
+Approved credentialless namespace/bwrap and disposable loopback PostgreSQL17.11, immutable snapshot/cached dependencies/inert providers. No public positive admission, external targets or real process/model execution.
+
+## Stage 114: standalone task intercept path read
+
+Exact frozen registration/task-read source, manifest `2ecb2361137af4f9ad725eeb3b9b05bde72317904a8aedd986642a5868ee3005`. No moving overlays, fixture corrections or product changes.
+
+Three real PostgreSQL17.11 groups plus 13 focused owner/review tests pass.
+
+Actual text task007 differs from7 with no active/numeric fallback. Legacy unpaged items/total and paged source rule/model filters return actual joined conversation/rule metadata and exact page contract. max_rows+1 rejects oversized unpaged result rather than returning partial rows; aggregate UTF8 SQL bound refuses oversized diagnostics. Postfetch raw revocation, guard-exit raw revocation and final serialization current revocation all withhold rows.
+
+Service invoked directly; no route registration, decisions, execution, mutation or default activation. Disposable fixtures only, approved credentialless namespace/bwrap/readonly source and fresh loopback PostgreSQL. No targets/providers/real commands or production data.

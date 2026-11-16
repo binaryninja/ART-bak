@@ -27,6 +27,7 @@ class TaskRuntimeApplication:
     pump: EnginePump
     read_app: object = None
     manual_actions: object = None
+    timed_lifecycle: object = None
 
     @property
     def app(self):return self.read_app if self.read_app is not None else self.bootstrap.app
@@ -48,6 +49,11 @@ class TaskRuntimeApplication:
             if type(self.manual_actions) is not ManualActionOwner or self.manual_actions.host is not self.host or self.manual_actions._application is not self:
                 raise RuntimeUnavailable('Manual action application ownership changed')
             self.manual_actions.validate_bindings()
+        if self.timed_lifecycle is not None:
+            from ..agent.timed_lifecycle import PreparedTimedLifecycle
+            if type(self.timed_lifecycle) is not PreparedTimedLifecycle or self.timed_lifecycle.application is not self:
+                raise RuntimeUnavailable('Original timed lifecycle composition required')
+            self.timed_lifecycle.validate_bindings()
         if (self.pump.host is not self.host or self.pump.runner is not self.runner
                 or self.pump.manager is not self.manager
                 or self.admission.host is not self.host
@@ -65,7 +71,7 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         live_last_activity, profile_available=None, capacity=1, max_pending=64,
         single_process=False, application_options=None, pump_interval=1.0,
         pump_max_per_tick=8, pump_clock=monotonic, read_services=None, read_router=None,
-        track_manual_actions=False, manual_action_capacity=1024):
+        track_manual_actions=False, manual_action_capacity=1024, timed_lifecycle_policy=None):
     # Component type import stays local to avoid a setup/component import cycle.
     from ..agent.task_runtime import TaskRuntimeAssembly
     if type(track_manual_actions) is not bool or type(manual_action_capacity) is not int or not 1<=manual_action_capacity<=10000:
@@ -79,6 +85,15 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         raise ValueError('Explicit bounded pump configuration required')
     if runtime.validate_bindings() is not True:
         raise ValueError('Task runtime bindings unavailable')
+    if timed_lifecycle_policy is not None:
+        from ..agent.timed_lifecycle import TimedLifecyclePolicy
+        from ..agent.engine_runner import EngineRunner
+        from ..agent.host import AgentHost
+        if type(timed_lifecycle_policy) is not TimedLifecyclePolicy or track_manual_actions is not True:
+            raise ValueError('Exact timed lifecycle policy and explicit manual tracking required')
+        timed_lifecycle_policy.validate_runtime(runtime)
+        if not callable(getattr(EngineRunner,'install_timed_lifecycle',None)) or not callable(getattr(AgentHost,'owns_work',None)):
+            raise RuntimeUnavailable('Post-prepare registration capability unavailable')
     if read_router is not None:
         from .task_runtime_read_router import TaskRuntimeReadRouter
         if read_services is not None or (isinstance(application_options,dict) and application_options.get('task_activity_service') is not None):
@@ -114,5 +129,12 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         manual=ManualActionOwner(bootstrap.host,max_components=manual_action_capacity)
     bundle=TaskRuntimeApplication(runtime,bootstrap,pump,read_app,manual)
     if manual is not None:manual.claim_application(bundle)
+    if timed_lifecycle_policy is not None:
+        from ..agent.timed_lifecycle import PreparedTimedLifecycle
+        lifecycle=PreparedTimedLifecycle(bundle,timed_lifecycle_policy)
+        # Complete the one-shot self-owned bundle before exposing it to callers.
+        object.__setattr__(bundle,'timed_lifecycle',lifecycle)
+        lifecycle.validate_bindings()
+        bundle.runner.install_timed_lifecycle(lifecycle)
     bundle._check()
     return bundle

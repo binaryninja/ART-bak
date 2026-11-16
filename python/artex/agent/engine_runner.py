@@ -46,6 +46,7 @@ class EngineRunner:
         self.max_pending=max_pending
         self._lock=RLock(); self._handles={}; self._host=None; self._host_executor=None; self._host_manager=None
         self._frontier={};self._host_settlement_check=None
+        self._timed_lifecycle=None;self._timed_methods=None;self._timed_attempts={};self._host_work_check=None
 
     def claim_host(self, host):
         """One lifecycle fence for this runner, retained even on setup failure.
@@ -69,6 +70,7 @@ class EngineRunner:
                 raise RuntimeUnavailable('Engine runner already has lifecycle ownership')
             self._host=host
             self._host_settlement_check=host.owns_settlement
+            self._host_work_check=host.owns_work
             self._host_executor=executor
             self._host_manager=host.manager
 
@@ -133,6 +135,42 @@ class EngineRunner:
             if len(self._handles)>=self.max_pending and key not in self._handles:
                 raise RuntimeUnavailable('Engine capacity exhausted')
         return True
+
+    def install_timed_lifecycle(self, binder):
+        """Install one exact existing-application binder before any admission."""
+        from .timed_lifecycle import PreparedTimedLifecycle
+        if type(binder) is not PreparedTimedLifecycle or self._host is None:
+            raise RuntimeUnavailable('Exact hosted timed lifecycle required')
+        binder.validate_bindings()
+        app=binder.application
+        if app.runner is not self or app.host is not self._host or app.manager is not self._host_manager or app.runtime.executor is not self._host_executor:
+            raise RuntimeUnavailable('Original timed application required')
+        names=('validate_bindings','register_prepared','failed','registered','actions')
+        methods=tuple(getattr(binder,n) for n in names)
+        if any(getattr(m,'__func__',None) is not getattr(PreparedTimedLifecycle,n) for n,m in zip(names,methods)):
+            raise RuntimeUnavailable('Original lifecycle methods required')
+        with self._lock:
+            if self._timed_lifecycle is not None or self._handles:
+                raise TaskConflict('Timed lifecycle installation requires unused runner')
+            self._timed_lifecycle=binder;self._timed_methods=methods
+
+    def _timed_binding(self):
+        binder=self._timed_lifecycle
+        if binder is None:return None
+        names=('validate_bindings','register_prepared','failed','registered','actions')
+        if tuple(getattr(binder,n) for n in names)!=self._timed_methods:
+            raise RuntimeUnavailable('Timed lifecycle methods changed')
+        self._timed_methods[0]()
+        return binder
+
+    def _timed_blocked(self,handle):
+        binder=self._timed_binding()
+        if binder is None:return False
+        with self._lock:state=self._timed_attempts.get(handle)
+        if state in ('registering','failed'):return True
+        if isinstance(handle,BootstrapHandle) and handle.scope is not None and handle.prepared_timeout_seconds>0:
+            return state!='registered' or binder.failed(handle) or not binder.registered(handle)
+        return False
 
     def bind_frontier_completion(self, handle, component):
         """Explicit prepared timed generation only; no default policy/admission.
@@ -224,6 +262,7 @@ class EngineRunner:
         """Detach execution only after manager acknowledgement; never release a lease."""
         with self._lock:
             if key in self._frontier:return False
+        if self._timed_blocked(handle):return False
         if handle.unresolved or not handle.token.cancelled or handle.wait(0) is not True:
             return False
         manager=self._host_manager
@@ -289,7 +328,34 @@ class EngineRunner:
         with self._lock:
             handle=self._handles.get(str(task_id))
             if handle is None or handle.token is not token:raise TaskConflict('Engine generation not owned')
-        return handle.advance(now)
+        binder=self._timed_binding()
+        if binder is None:return handle.advance(now)
+        if (self._host.owns_work!=self._host_work_check or self._host_work_check(self) is not True):
+            raise TaskConflict('Timed registration requires original owned-work slot')
+        if self._timed_blocked(handle):raise TaskConflict('Timed registration retained or missing; no replay')
+        if isinstance(handle,BootstrapHandle) and handle.scope is not None and handle.prepared_timeout_seconds>0:
+            if binder.actions(handle).finalizer is None:
+                raise RuntimeUnavailable('Explicit finalization configuration is incomplete')
+        result=handle.advance(now)
+        if getattr(result,'action',None)=='bootstrap_prepared':
+            with self._lock:
+                if self._handles.get(str(task_id)) is not handle or handle in self._timed_attempts:
+                    raise TaskConflict('Prepared registration cannot adopt or retry')
+                self._timed_attempts[handle]='registering'
+            try:
+                self._timed_binding()
+                if self._host_work_check(self) is not True:raise TaskConflict('Owned-work slot lost')
+                binder.register_prepared(handle)
+                self._timed_binding()
+                if handle.prepared_timeout_seconds>0 and not binder.registered(handle):
+                    raise RuntimeUnavailable('Prepared actions not retained')
+                with self._lock:
+                    if self._handles.get(str(task_id)) is not handle:raise TaskConflict('Prepared owner changed')
+                    self._timed_attempts[handle]='registered'
+            except BaseException:
+                with self._lock:self._timed_attempts[handle]='failed'
+                raise
+        return result
 
     def settle_completed(self, complete):
         if not callable(complete):raise ValueError('Completion callback required')
@@ -300,9 +366,11 @@ class EngineRunner:
             inventory=tuple(self._handles.items());frontier=tuple(self._frontier.items())
         bound_keys={key for key,entry in frontier}
         for key,entry in frontier:
+            if self._timed_blocked(entry[0]):continue
             if self._settle_frontier(key,entry):settled.append(key)
         for key,handle in inventory:
             if key in bound_keys:continue
+            if self._timed_blocked(handle):continue
             if isinstance(handle,BootstrapHandle) and handle.prepared_timeout_seconds>0 and not handle.token.cancelled:
                 # A positive generation cannot fall back to zero-engine completion.
                 continue

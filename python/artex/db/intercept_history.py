@@ -48,7 +48,7 @@ class InterceptHistoryStore:
             if any(a is not b for a,b in zip((self.authorize,self.raw,self.current,),policies)):raise InspectionDenied()
             self._check()
             if any(a is not b for a,b in zip((self.authorize,self.raw,self.current,),policies)):raise InspectionDenied()
-        if kind not in ('pending','one','history'):raise ValueError('Unsupported projection')
+        if kind not in ('pending','one','history','task_all'):raise ValueError('Unsupported projection')
         if status not in ('','pending','allowed','denied','timeout') or decision_source not in ('','model','rule','unknown'):raise ValueError('Invalid filter')
         if type(page) is not int or type(size) is not int:raise ValueError('Integer page required')
         page=max(1,page);size=min(100,20 if size<=0 else size)
@@ -56,11 +56,14 @@ class InterceptHistoryStore:
             if int64(id,'request ID')<=0:raise ValueError('Positive ID required')
             size=1
         elif id is not None:raise ValueError('Unexpected ID')
+        if kind=='task_all':
+            if self._scope.task_key is None or status or decision_source:raise ValueError('Exact unfiltered task scope required')
+            size=self.max_rows+1;page=1
         if kind=='pending':status='pending';size=self.max_rows+1;page=1
-        if size>self.max_rows and kind!='pending' or (page-1)*size>1000000:raise ValueError('Page exceeds bound')
+        if size>self.max_rows and kind not in ('pending','task_all') or (page-1)*size>1000000:raise ValueError('Page exceeds bound')
         selection=(kind,id,page,size,status,decision_source)
         sql="""WITH filtered AS (SELECT ip.id,ip.rule_id,ip.conversation_id,ip.task_id,ip.agent_name,ip.tool_name,
-ip.tool_input,ip.status,ip.reason,ip.decided_at,ip.created_at,"""+(_SOURCE if kind=='history' else 'ip.decision_source')+""" AS decision_source,
+ip.tool_input,ip.status,ip.reason,ip.decided_at,ip.created_at,"""+(_SOURCE if kind in ('history','task_all') else 'ip.decision_source')+""" AS decision_source,
 COALESCE(c.title,'') AS conv_title,COALESCE(c.agent_key,'') AS conv_agent_key,COALESCE(ir.name,'') AS rule_name
 FROM intercept_pending ip LEFT JOIN conversations c ON c.id=ip.conversation_id LEFT JOIN intercept_rules ir ON ir.id=ip.rule_id
 WHERE ($1::text IS NULL OR ip.task_id=$1) AND ($2::bigint IS NULL OR ip.id=$2)
@@ -90,7 +93,7 @@ SELECT (SELECT count(*) FROM filtered),"""+','.join(('CASE WHEN bytes<=$7 THEN b
                 row=dict(zip(_FIELDS,values))
                 if any(row[f] is None for f in _TEXT if f!='task_id'):raise InspectionUnavailable()
                 if self._scope.task_key is not None and row['task_id']!=self._scope.task_key:raise InspectionUnavailable()
-                if kind!='history':
+                if kind not in ('history','task_all'):
                     for f in ('conv_title','conv_agent_key','rule_name'):row.pop(f)
                 out.append(row)
             return out,total

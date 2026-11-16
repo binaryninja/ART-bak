@@ -93,10 +93,18 @@ class AgentHost:
         self._settling = False
         self._settlement_thread = None
         self._working = False
+        self._working_thread = None
         claim=getattr(runner,'claim_host',None)
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
             claim(self)
+
+    def owns_work(self, runner):
+        """Callback-free proof of this thread's original owned-work slot."""
+        with self._condition:
+            return (runner is self._original_runner and self.runner is runner
+                    and self.manager is self._original_manager and self.manager.runner is runner
+                    and self._working and self._working_thread == get_ident())
 
     def owns_settlement(self, runner):
         """Callback-free check of this thread's original settlement reservation."""
@@ -223,7 +231,7 @@ class AgentHost:
         with self._condition:
             if self._mutations or self._settling or self._draining or self._working:
                 return OwnedWorkResult(True)
-            self._working=True;self._mutations+=1
+            self._working=True;self._working_thread=get_ident();self._mutations+=1
         try:
             self._identity()
             try:value=callback()
@@ -231,7 +239,7 @@ class AgentHost:
             return OwnedWorkResult(False,value)
         finally:
             with self._condition:
-                self._working=False;self._mutations-=1
+                self._working=False;self._working_thread=None;self._mutations-=1
                 self._condition.notify_all()
 
     def poll(self):

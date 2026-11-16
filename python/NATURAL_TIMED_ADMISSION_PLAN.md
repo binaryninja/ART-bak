@@ -1,4 +1,35 @@
-# Natural opt-in timed HTTP admission: remaining work
+# Natural opt-in timed HTTP admission: current map and historical inventory
+
+## Current status (supersedes the historical inventory below)
+
+Completed prerequisites now include per-task timeout configuration identity,
+standalone stamped early and unstamped ordinary-frontier stores, exact revocable
+permit acknowledgement, tracked ManualActionOwner with post-retirement tails,
+and the released-lock host settlement slot. Standalone frontier controller has
+independent/PG108 acceptance. The new actual runner hook/accessor is a separate
+candidate awaiting its fresh acceptance; do not conflate those stages.
+
+Remaining blockers are concrete: typed same-application per-generation action
+registration after prepare; explicit read-only schema compatibility checks;
+final planner-profile binding to restricted journal authority; one exact positive
+admission capability through runner/bootstrap construction; positive engine SQL
+snapshot/clock validation; normal budget-expiry cleanup progression; and an
+explicit independent observation/finalization cadence with tracked shutdown.
+No gates are open, and fixture mutations do not establish natural admission.
+
+`TIMED_APPLICATION_COMPOSITION_NEXT.md` is the governing next implementation
+proposal. It composes the existing ONE runtime/host/registry after actual prepare,
+not another abstract runtime owner. Automatic changes wait for hook/process QA.
+
+## Historical design inventory (not current completion status)
+
+The following earlier analysis is retained for provenance. Its statements that
+timeout identity, early-completion stores or manual tracking are absent are now
+superseded by the status above. Its proof-only early completion proposal is also
+superseded by source-compatible frontier_drained semantics in
+EARLY_TIMED_COMPLETION_PLAN.md. Unsupported final-phase proof semantics remain a
+separate limitation, not an ordinary completion requirement.
+
 
 Source-only inventory after the manual finalization candidate. No gates changed.
 Existing component tests mutate prepared pins explicitly; they do not establish
