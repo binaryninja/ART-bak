@@ -1,7 +1,8 @@
 # Notification overview read port
 
-Standalone, unregistered `GET /api/notify/meta` reader and service. Seven synthetic
-unit tests pass. Independent review and real PostgreSQL acceptance are pending.
+Standalone `GET /api/notify/meta` reader and service: independent review cleared
+13 focused tests, and frozen PostgreSQL acceptance PG120 passed five actual SQL
+groups plus those 13 tests. Optional composition below is a separate next slice.
 No delivery, retry, notifier, timer, channel mutation, listener or default route
 is constructed by this component.
 
@@ -46,9 +47,22 @@ negative ages, both grants, guard/serialization revocation, SQL sentinel/type
 failure, the three-key-only projection, and rejection of mutations/unknown query.
 No actual user settings, database, external endpoint or secret was accessed.
 
-## Standalone acceptance
+## Optional metadata overlay
 
-Six independent review tests passed. PostgreSQL stage 120 passed five actual
-database/service groups and thirteen focused tests, including session-midnight
-counters, future negative age and SQL byte bounds. No HTTP registration or sends
-were tested or enabled. See ISOLATED_QA.md.
+`bind_metadata_reads(notification_meta_service=...)` explicitly installs protected
+GET `/api/notify/meta`, returning `bundle.notification_meta`. An exact original
+service/reader, shared executor, bounded settings and unchanged channel metadata
+are required. No default service is inferred. Existing routes remain unchanged;
+conflicting GET/HEAD declarations are rejected before callbacks or storage reads.
+
+The outer original JWT/global grant chain invokes the independent operational
+and configuration disclosure grants with current/resource checks before and after
+serialization, before headers, and after `start_response`. Late revocation aborts
+body delivery; it cannot replace already-emitted headers. No credential values,
+network send, model invocation, mutation, or notification timer is enabled.
+
+Four new synthetic composition tests and two strict scanner tests pass; together
+with selected standalone/older overlay tests, 27 pass. Five independent review
+tests passed. PostgreSQL stage 121 passed four actual SQL/JWT groups and 22
+focused executions. The scanner accepts only the
+exact protected optional declaration, not arbitrary new routes. The route inventory is generated from the reviewed frozen snapshot.

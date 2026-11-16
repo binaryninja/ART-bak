@@ -27,6 +27,8 @@ from . import intercept_task_read as _task_history
 from ..db.intercept_history import InterceptHistoryStore
 from . import intercept_detail_read as _detail
 from ..db.intercept_detail_read import InterceptDetailReader
+from .notification_meta import NotificationMetaReadService
+from ..db.notification_meta import NotificationMetaReader
 from .judge_config_read import JudgeConfigReadService
 from ..db.judge_config_read import JudgeConfigReader
 from . import judge_usage_read as _judge
@@ -34,11 +36,12 @@ from . import notification_history as _history
 from ..db.judge_usage_read import JudgeUsageReader
 from ..db.notification_history import NotificationHistoryReader,DeliverySelection
 
-_PATHS={'/api/intercept/judge':'judge_config','/api/intercept/tool-config':'config','/api/intercept/rules':'rules',
+_PATHS={'/api/notify/meta':'notification_meta','/api/intercept/judge':'judge_config','/api/intercept/tool-config':'config','/api/intercept/rules':'rules',
         '/api/intercept/judge/usage':'judge_usage','/api/notify/deliveries':'notification_history'}
 _PARSERS=(_judge.parse_request,_history.parse_request,_detail.parse_request,_task_history.parse_request,_execution.parse_request)
 _REQUEST_STATE=ContextVar('metadata_read_request_state',default=None)
-_TYPES={'execution':(_execution.InterceptExecutionReadService,InterceptExecutionReader),
+_TYPES={'notification_meta':(NotificationMetaReadService,NotificationMetaReader),
+        'execution':(_execution.InterceptExecutionReadService,InterceptExecutionReader),
         'task_history':(_task_history.TaskInterceptReadService,InterceptHistoryStore),
         'judge_config':(JudgeConfigReadService,JudgeConfigReader),
         'detail':(_detail.InterceptDetailReadService,InterceptDetailReader),
@@ -87,6 +90,7 @@ class MetadataReadBundle:
     judge_config:object=None
     task_history:object=None
     execution:object=None
+    notification_meta:object=None
 
 class _InterceptReadApplication:
     def __init__(self,application,services,authorize_global):
@@ -106,6 +110,7 @@ class _InterceptReadApplication:
         self._path_pins=tuple(self._paths.items())
         self._base_routes=tuple(base._routes)
         staged=Router(auth)
+        if 'notification_meta' in services:staged.add('GET','/api/notify/meta',lambda r,p:self._handle(r,'notification_meta'))
         if 'judge_config' in services:staged.add('GET','/api/intercept/judge',lambda r,p:self._handle(r,'judge_config'))
         if 'config' in services:staged.add('GET','/api/intercept/tool-config',lambda r,p:self._handle(r,'config'))
         if 'rules' in services:staged.add('GET','/api/intercept/rules',lambda r,p:self._handle(r,'rules'))
@@ -144,9 +149,14 @@ class _InterceptReadApplication:
         scope_args=(service.reader.scope,) if kind=='detail' else ()
         if service.current(*scope_args) is not True:raise PermissionError()
         self._check()
-        args=(request,service.reader.scope,selection) if kind=='detail' else (request,) if kind in ('config','rules','judge_config') else (request,selection)
+        args=(request,service.reader.scope,selection) if kind=='detail' else (request,) if kind in ('config','rules','judge_config','notification_meta') else (request,selection)
         if service.authorize(*args) is not True:raise PermissionError()
         self._check()
+        if kind=='notification_meta':
+            if service.config_authorize(*args) is not True:raise PermissionError()
+            self._check()
+            if service.authorize(*args) is not True:raise PermissionError()
+            self._check()
         if kind in ('notification_history','detail','judge_config'):
             if service.raw_authorize(*args) is not True:raise PermissionError()
             self._check()
@@ -226,7 +236,7 @@ class _InterceptReadApplication:
         return body
 
 def bind_metadata_reads(application,*,authorize_global,config_service=None,rules_service=None,
-                        judge_usage_service=None,notification_history_service=None,detail_service=None,judge_config_service=None,task_history_service=None,execution_service=None):
+                        judge_usage_service=None,notification_history_service=None,detail_service=None,judge_config_service=None,task_history_service=None,execution_service=None,notification_meta_service=None):
     """Typed optional metadata routes. No defaults, mutation, or generic handlers.
 
     Each selected service retains its independent read/raw/current grants. The
@@ -237,7 +247,7 @@ def bind_metadata_reads(application,*,authorize_global,config_service=None,rules
     base=application.router;auth=base.authorize;owner=getattr(auth,'__self__',None)
     if type(owner) is not AuthService or getattr(auth,'__func__',None) is not AuthService.authorized:
         raise ValueError('Original AuthService JWT authorizer required')
-    services={kind:service for kind,service in (('execution',execution_service),('config',config_service),('rules',rules_service),
+    services={kind:service for kind,service in (('notification_meta',notification_meta_service),('execution',execution_service),('config',config_service),('rules',rules_service),
         ('judge_usage',judge_usage_service),('notification_history',notification_history_service),('detail',detail_service),('judge_config',judge_config_service),('task_history',task_history_service)) if service is not None}
     if not services or not callable(authorize_global):raise ValueError('Explicit metadata services and global grant required')
     executor=None
@@ -278,7 +288,7 @@ def bind_metadata_reads(application,*,authorize_global,config_service=None,rules
             raise ValueError('Original read service methods required')
         service._check()
     view=_InterceptReadApplication(application,services,authorize_global);view._check()
-    return MetadataReadBundle(view,config_service,rules_service,judge_usage_service,notification_history_service,detail_service,judge_config_service,task_history_service,execution_service)
+    return MetadataReadBundle(view,config_service,rules_service,judge_usage_service,notification_history_service,detail_service,judge_config_service,task_history_service,execution_service,notification_meta_service)
 
 def bind_intercept_reads(application,*,config_service,rules_service,authorize_global):
     """Compatibility entrypoint for the original two explicit intercept reads."""

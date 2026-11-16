@@ -1616,3 +1616,10 @@ Five actual PostgreSQL/service groups and 13 focused executions passed. Actual t
 Two fixture corrections preserved: notification_events requires finding_id (added synthetic44); psycopg3 RawCursor constructor must be `psycopg.RawCursor(connection)`, not connection.cursor(cursor_factory=...). Neither is a product defect. Final fresh run passes without product changes.
 
 Same proven credentialless disposable bwrap/user/network namespace, fresh PG17.11, psycopg3.3.9, Python3.13. Loopback only; no provider/network destinations/delivery attempts. In-process standalone service only, no HTTP route registration or runtime mutation claims. Settings and counters are separate source queries, not a crossquery transactional snapshot guarantee. Exact snapshot excludes later validator fix.
+
+## Stage 121 notification metadata optional JWT wrapper: PASS
+Exact frozen notification-route source; manifest SHA256 `f2dd0154b71d29dcdc89216d02ccd4158f73704e7233ab606cab9a0afd18534e`.
+
+Four actual PostgreSQL/JWT groups and 22 focused executions passed. Source has six channel kinds, not seven; fixture verifies exact source count. Real defaults, selected settings and counters exposed; unrelated setting and channel configuration credential markers excluded. Original app remains404, optional mixed intercept config still200. Missing JWT and global/operational/config/query denial precede SQL. After start_response200, config/operational/current/executor/originalJWT changes all withhold body without inventing replacement status. Literal/dynamic HEAD conflicts reject atomically.
+
+No fixture correction or product edit. Same approved isolated credentialless bwrap/user/network namespace with disposable PG17.11, psycopg3.3.9/Python3.13, no external destinations or notification sends. WSGI invoked in process, not actual listener/frontend. Counters need not share a snapshot with settings; no default registration or notification execution claim. SQL byte-bound actual evidence remains stage120, not repeated here. Logs/harness/manifest attached.
