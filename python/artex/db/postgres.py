@@ -113,6 +113,20 @@ class PostgresExecutor:
                     cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY', ())
                 yield self
 
+    def lock_intercept_settings(self):
+        """Exact settings CAS lock inside an already owned transaction only.
+
+        LOCK has no DML affected-row count. This deliberately accepts no SQL or
+        identifier argument and does not relax execute() rowcount guarantees.
+        The transaction owner retains the lock through commit/rollback.
+        """
+        with self._lock:
+            self._check_open()
+            if not self._depth:
+                raise RuntimeError('Intercept settings lock requires an active transaction')
+            with self._cursor_factory(self._connection) as cursor:
+                cursor.execute('LOCK TABLE settings IN SHARE ROW EXCLUSIVE MODE', ())
+
     @contextmanager
     def _operation(self):
         with self._lock:

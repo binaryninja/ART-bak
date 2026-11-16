@@ -1735,3 +1735,33 @@ Five actual PostgreSQL17.11 groups and26 focused tests pass:
 - After response headers, raw data grant revoke, originalJWT replacement, originalJWT clock callback revoking data grant at the preserved second-call boundary, and equal-valued int-to-float exploration scope mutation all abort body. One already-issued status is not falsely replaced. No active task fallback.
 
 No product or fixture corrections during execution. Initial snapshot preparation removed unrelated catalog overlay before final manifest or execution; only final manifest is acceptance evidence. Approved credentialless filesystem/network namespace and fresh isolated-loopback PG; generated task/graph/assets, dummyJWT, no provider/commands/external calls/default registration. Not a report execution, sanitization or arbitrary-policy atomicity claim.
+
+
+# Stage133: literal interceptor configuration, blocked acceptance
+
+Frozen manifest `0cf68780906ecade7fb9c0adcc56318a75fb6a36da1798db54fb8f42276e7077`. Committed base plus exactly three new configuration modules, two dedicated tests and status. Foundation confirmed stable before freezing. No source edits or descriptor/driver normalization.
+
+34 focused tests pass. Three actual PostgreSQL17.11 groups pass: literal create/update/stale-CAS/toggle/delete with actual Interceptor.match cache invalidation; pending/denied/modified-proposal preSQL refusal; committed INSERT with simulated acknowledgment loss stays quarantined and no replay.
+
+One actual group FAILS: enabled-tools configuration replacement. db/tool_intercept_config.py:_apply calls transaction.execute(LOCK TABLE settings IN SHARE ROW EXCLUSIVE MODE). Real PostgresExecutor.execute requires nonnegative affected row count; PostgreSQL LOCK returns no affected-row count, causing RuntimeError before settings write. Actual pool/executor stack is preserved in stage133-integration.log. This is a product adapter contract mismatch, not corrected in the fixture. Enabled-tools CAS/duplicate/empty acceptance cannot be claimed until a reviewed fix is frozen and rerun.
+
+Only approved fresh isolated-loopback PostgreSQL and synthetic literal metadata; no Guard installation, execution, provider, pending-decision or durable audit claim. Source documents those persistence gaps separately.
+
+
+# Stage133 revised: explicit owned-session settings lock
+
+Immutable manifest `8251a1391e920fc013f13cbdeeca8fcfed60ef90caedf100d02ba523b4dab186`. Stage133 base plus reviewed postgres.py exact lock method, config-store lock capability requirement/pinning, corresponding focused tests and status. Independent final guard clearance received before execution.
+
+Four actual PostgreSQL17.11 groups and41 focused tests pass:
+- Literal create/update/stale timestamp CAS/toggle/delete, original Interceptor.match cache lookup and invalidation.
+- Enabled-tools missing-setting CAS, duplicate-preserving replacement, stale digest rejection, empty replacement and actual cache reload.
+- Pending approval, denied grant and altered immutable proposal reject before SQL.
+- Actual committed rule insertion followed by simulated lost acknowledgment quarantines owner/store, refuses replay without SQL and fails closed on lookup.
+
+## Explicit fixture migration and limitation
+
+Original133 used ExecutorPool. Revised acceptance uses a real owned PostgresExecutor session, with the existing observation/ACK fixture wrapper explicitly delegating the exact no-argument lock capability both outside and inside its transaction. Behavioral assertions remain unchanged, but the harness is NOT byte-identical. The fixed command executes only LOCK TABLE settings IN SHARE ROW EXCLUSIVE MODE inside an active transaction, without interpreting rowcount; normal DML rowcount checks remain strict.
+
+ExecutorPool is unsupported by this new capability and rejected at construction; this is not a pooled-support fix. Original133 failure and manifest remain separately preserved. No product corrections during revised execution.
+
+Configuration/cache acceptance only: no Guard installation, real tool execution, providers, pending decision persistence or durable audit. Approved credentialless filesystem/network isolation and fresh temporary original-schema PostgreSQL; generated metadata only.
