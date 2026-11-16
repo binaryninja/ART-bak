@@ -1313,3 +1313,14 @@ A separate truly blocked inert final provider is cancelled through the sealed re
 ### Limits
 
 These are deliberately separate scopes. Full persisted-role positive-timeout application finalization cannot naturally pass current timeout/configuration guards; none were weakened, and no fake active flags or application ownership replacement was used. The positive component tests do not themselves exercise RuntimeListener against that timed application. Listener refusal/retention during post-retirement active tail is covered by the 40 focused SQL-double tests, not misrepresented as a full same-app positive PG path. No new actual socket was needed or started. No public timed admission, automatic observers/finalizers, production shutdown, arbitrary network-provider interruption, crash recovery or real targets claimed.
+
+## Stage 102: exact metadata45 typed optional JWT reads
+
+Manifest SHA-256: `b7d08e0e0d2556388b6350533b959e51cd2b99b37e09a82135ea0922d81548c5`.
+Frozen metadata45 Python only, no evolving manager/early-completion overlay. Three real PostgreSQL17 integration groups and49 focused metadata/intercept/judge/history owner/review cases pass. Approved credential-free filesystem/network isolation; original schema plus explicit recording schema installer, synthetic records only.
+
+Verified actual JWT judge usage and notification history conditional routes with exact days and immutable channel/state/page/page_size policy selection. Actual diagnostic fixture returned only when independent raw grant allowed. Unselected rules delegated to original404; original application remained404 for added routes; legacy two-intercept entrypoint still returned200. POST history405, no mutation/send behavior.
+
+Missing original JWT401, global deny403 and independent raw deny403 each performed zero database queries. Revoking raw grant inside start_response raised before returning body; observed one already-emitted200 status and no fictitious replacement response. No body bytes were delivered to the fixture caller after revocation.
+
+No source or fixture corrections, socket/listener/browser activity, default activation, real notifications, delivery claims/retries, live credentials or external targets. Optional wrapper bound only in this disposable fixture. Finite callback-fence evidence does not claim atomicity under arbitrary mutually mutating policies.

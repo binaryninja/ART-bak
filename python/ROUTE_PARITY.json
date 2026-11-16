@@ -5,12 +5,12 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 182,
-    "python_route_declarations": 202,
+    "python_offline_contract_routes": 184,
+    "python_route_declarations": 204,
     "python_alternative_route_groups": 14,
-    "python_optional_service_routes": 174,
-    "matched_offline_contract_routes": 182,
-    "go_routes_without_python_registration": 79
+    "python_optional_service_routes": 178,
+    "matched_offline_contract_routes": 184,
+    "go_routes_without_python_registration": 77
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -34,14 +34,14 @@
     "python/artex/server/inspection_setup.py": "4dad4b0b2682c609423df2799c032ee954ee1bb0fd5a9be8c1699a0d4b60aed9",
     "python/artex/server/intercept_config_read.py": "673f2b9a22cd37f043bce7bd596405fdb57b6ff6bdcd979a8b5b66029a5fe2d0",
     "python/artex/server/intercept_inspection.py": "99975e547b99bccaaa43ffade989e49a1fd114eeb63702de9c21acfc59746126",
-    "python/artex/server/intercept_read_setup.py": "4b04dc9863e431aadf4d9305e79260264ebdac54b36b9f3a595d538985c378c5",
+    "python/artex/server/intercept_read_setup.py": "23c7cd7c1937cf6ad009770d16560c716ec70400be6de5b02da125e67185486b",
     "python/artex/server/intercept_rules.py": "62849c6f92c7a2d5a8236fa1aadf9ac68525004d9f31ac4388d6759bdbd81222",
-    "python/artex/server/judge_usage_read.py": "eaaa1f3a4d8d01d01f23c54c62ec32109878b3e3108937469b85da2132a0a282",
+    "python/artex/server/judge_usage_read.py": "e4143b29a54ad960e2c655707ff8b0b59ecb41c18a43081a90f79f826f388dba",
     "python/artex/server/llm_records.py": "517bddaf11f765360eb4cba683d723ebb1b4d73ab63f12f644c9b3b04be94486",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/main_sessions.py": "193ec9b75cfe99472747cced3d9e9ae90369d989a342f2e58cf119b114cd4f85",
     "python/artex/server/mcp_catalog.py": "4c04081de65c31c7085e960a65202aa46067f4bddba9e34da6e8039999d6cd0e",
-    "python/artex/server/notification_history.py": "f589c5925931ccbfb2f6d1e6d4497c0120c561075e6c0844ec49f01f64c00e39",
+    "python/artex/server/notification_history.py": "21425122d6e5b78f13335318e4429c1703e36d446cb019c7bff4c721d0de1add",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/pool_health.py": "fee471d74dd3c09c9cf4b52f7a13327ab88ab58eb2a320f8964f4a0a8865ee94",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
@@ -4685,8 +4685,33 @@
       "expression": "\"GET /api/notify/deliveries\"",
       "method": "GET",
       "path": "/api/notify/deliveries",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/notify/deliveries",
+        "source": "python/artex/server/intercept_read_setup.py",
+        "line": 83,
+        "function": "_InterceptReadApplication.__init__",
+        "handler": "lambda r, p: self._handle(r, 'notification_history')",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
+        "declarations": [
+          {
+            "method": "GET",
+            "path": "/api/notify/deliveries",
+            "source": "python/artex/server/intercept_read_setup.py",
+            "line": 83,
+            "function": "_InterceptReadApplication.__init__",
+            "handler": "lambda r, p: self._handle(r, 'notification_history')",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
+          }
+        ]
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/notify/deliveries/{id}/retry",
@@ -7123,29 +7148,29 @@
         "method": "GET",
         "path": "/api/intercept/rules",
         "source": "python/artex/server/intercept_read_setup.py",
-        "line": 45,
+        "line": 81,
         "function": "_InterceptReadApplication.__init__",
         "handler": "lambda r, p: self._handle(r, 'rules')",
         "public": false,
-        "registration_mode": "auth router factory",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-        "status": "offline contract only; production integration unverified",
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
         "declarations": [
           {
             "method": "GET",
             "path": "/api/intercept/rules",
             "source": "python/artex/server/intercept_read_setup.py",
-            "line": 45,
+            "line": 81,
             "function": "_InterceptReadApplication.__init__",
             "handler": "lambda r, p: self._handle(r, 'rules')",
             "public": false,
-            "registration_mode": "auth router factory",
-            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-            "status": "offline contract only; production integration unverified"
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
           }
         ]
       },
-      "status": "offline contract only; production integration unverified"
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/intercept/rules",
@@ -7552,29 +7577,29 @@
         "method": "GET",
         "path": "/api/intercept/tool-config",
         "source": "python/artex/server/intercept_read_setup.py",
-        "line": 44,
+        "line": 80,
         "function": "_InterceptReadApplication.__init__",
         "handler": "lambda r, p: self._handle(r, 'config')",
         "public": false,
-        "registration_mode": "auth router factory",
-        "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-        "status": "offline contract only; production integration unverified",
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
         "declarations": [
           {
             "method": "GET",
             "path": "/api/intercept/tool-config",
             "source": "python/artex/server/intercept_read_setup.py",
-            "line": 44,
+            "line": 80,
             "function": "_InterceptReadApplication.__init__",
             "handler": "lambda r, p: self._handle(r, 'config')",
             "public": false,
-            "registration_mode": "auth router factory",
-            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-            "status": "offline contract only; production integration unverified"
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
           }
         ]
       },
-      "status": "offline contract only; production integration unverified"
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "PUT /api/intercept/tool-config",
@@ -7621,8 +7646,33 @@
       "expression": "\"GET /api/intercept/judge/usage\"",
       "method": "GET",
       "path": "/api/intercept/judge/usage",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/intercept/judge/usage",
+        "source": "python/artex/server/intercept_read_setup.py",
+        "line": 82,
+        "function": "_InterceptReadApplication.__init__",
+        "handler": "lambda r, p: self._handle(r, 'judge_usage')",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
+        "declarations": [
+          {
+            "method": "GET",
+            "path": "/api/intercept/judge/usage",
+            "source": "python/artex/server/intercept_read_setup.py",
+            "line": 82,
+            "function": "_InterceptReadApplication.__init__",
+            "handler": "lambda r, p: self._handle(r, 'judge_usage')",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
+          }
+        ]
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/conversations/{id}/side-questions",
@@ -9861,25 +9911,25 @@
       "method": "GET",
       "path": "/api/intercept/tool-config",
       "source": "python/artex/server/intercept_read_setup.py",
-      "line": 44,
+      "line": 80,
       "function": "_InterceptReadApplication.__init__",
       "handler": "lambda r, p: self._handle(r, 'config')",
       "public": false,
-      "registration_mode": "auth router factory",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-      "status": "offline contract only; production integration unverified",
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
       "declarations": [
         {
           "method": "GET",
           "path": "/api/intercept/tool-config",
           "source": "python/artex/server/intercept_read_setup.py",
-          "line": 44,
+          "line": 80,
           "function": "_InterceptReadApplication.__init__",
           "handler": "lambda r, p: self._handle(r, 'config')",
           "public": false,
-          "registration_mode": "auth router factory",
-          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-          "status": "offline contract only; production integration unverified"
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
         }
       ]
     },
@@ -9887,25 +9937,77 @@
       "method": "GET",
       "path": "/api/intercept/rules",
       "source": "python/artex/server/intercept_read_setup.py",
-      "line": 45,
+      "line": 81,
       "function": "_InterceptReadApplication.__init__",
       "handler": "lambda r, p: self._handle(r, 'rules')",
       "public": false,
-      "registration_mode": "auth router factory",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-      "status": "offline contract only; production integration unverified",
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
       "declarations": [
         {
           "method": "GET",
           "path": "/api/intercept/rules",
           "source": "python/artex/server/intercept_read_setup.py",
-          "line": 45,
+          "line": 81,
           "function": "_InterceptReadApplication.__init__",
           "handler": "lambda r, p: self._handle(r, 'rules')",
           "public": false,
-          "registration_mode": "auth router factory",
-          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-          "status": "offline contract only; production integration unverified"
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/intercept/judge/usage",
+      "source": "python/artex/server/intercept_read_setup.py",
+      "line": 82,
+      "function": "_InterceptReadApplication.__init__",
+      "handler": "lambda r, p: self._handle(r, 'judge_usage')",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/intercept/judge/usage",
+          "source": "python/artex/server/intercept_read_setup.py",
+          "line": 82,
+          "function": "_InterceptReadApplication.__init__",
+          "handler": "lambda r, p: self._handle(r, 'judge_usage')",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notify/deliveries",
+      "source": "python/artex/server/intercept_read_setup.py",
+      "line": 83,
+      "function": "_InterceptReadApplication.__init__",
+      "handler": "lambda r, p: self._handle(r, 'notification_history')",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/notify/deliveries",
+          "source": "python/artex/server/intercept_read_setup.py",
+          "line": 83,
+          "function": "_InterceptReadApplication.__init__",
+          "handler": "lambda r, p: self._handle(r, 'notification_history')",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
         }
       ]
     },
@@ -13861,25 +13963,49 @@
       "method": "GET",
       "path": "/api/intercept/tool-config",
       "source": "python/artex/server/intercept_read_setup.py",
-      "line": 44,
+      "line": 80,
       "function": "_InterceptReadApplication.__init__",
       "handler": "lambda r, p: self._handle(r, 'config')",
       "public": false,
-      "registration_mode": "auth router factory",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-      "status": "offline contract only; production integration unverified"
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "method": "GET",
       "path": "/api/intercept/rules",
       "source": "python/artex/server/intercept_read_setup.py",
-      "line": 45,
+      "line": 81,
       "function": "_InterceptReadApplication.__init__",
       "handler": "lambda r, p: self._handle(r, 'rules')",
       "public": false,
-      "registration_mode": "auth router factory",
-      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
-      "status": "offline contract only; production integration unverified"
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/intercept/judge/usage",
+      "source": "python/artex/server/intercept_read_setup.py",
+      "line": 82,
+      "function": "_InterceptReadApplication.__init__",
+      "handler": "lambda r, p: self._handle(r, 'judge_usage')",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notify/deliveries",
+      "source": "python/artex/server/intercept_read_setup.py",
+      "line": 83,
+      "function": "_InterceptReadApplication.__init__",
+      "handler": "lambda r, p: self._handle(r, 'notification_history')",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation",
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "method": "GET",

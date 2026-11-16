@@ -288,7 +288,37 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
             if isinstance(node, (ast.While, ast.Try, ast.With, ast.Match)) and has_route(node):
                 raise AuditError(f'Unsupported route control flow: {relative}:{node.lineno}')
             if isinstance(node, ast.If) and has_route(node):
-                raise AuditError(f'Conditional route registration needs explicit support: {relative}:{node.lineno}')
+                # This exact typed optional view is audited, not a general
+                # control-flow interpreter. Unknown guards/else/mounts fail.
+                permitted = {
+                    'config': '/api/intercept/tool-config',
+                    'rules': '/api/intercept/rules',
+                    'judge_usage': '/api/intercept/judge/usage',
+                    'notification_history': '/api/notify/deliveries',
+                }
+                test = node.test
+                key = test.left.value if isinstance(test, ast.Compare) and isinstance(test.left, ast.Constant) else None
+                call = node.body[0].value if len(node.body) == 1 and isinstance(node.body[0], ast.Expr) else None
+                allowed = (
+                    relative == 'python/artex/server/intercept_read_setup.py'
+                    and owner == '_InterceptReadApplication.__init__'
+                    and type(key) is str and key in permitted
+                    and len(test.ops) == len(test.comparators) == 1
+                    and isinstance(test.ops[0], ast.In)
+                    and isinstance(test.comparators[0], ast.Name)
+                    and test.comparators[0].id == 'services'
+                    and not node.orelse and isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id == 'staged' and call.func.attr == 'add'
+                    and len(call.args) == 3 and not call.keywords
+                    and isinstance(call.args[0], ast.Constant) and call.args[0].value == 'GET'
+                    and isinstance(call.args[1], ast.Constant) and call.args[1].value == permitted[key]
+                )
+                if not allowed:
+                    raise AuditError(f'Conditional route registration needs explicit support: {relative}:{node.lineno}')
+                walk(call, environment.copy(), owner)
+                return
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'add' and ast.unparse(node.func.value) in router_names:
                 if len(node.args) < 3:
                     raise AuditError('Router.add requires literal method/path and a handler')
@@ -299,9 +329,12 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                 for keyword in node.keywords:
                     if keyword.arg == 'public':
                         public = literal(keyword.value, environment)
-                optional = owner.endswith('.register')
+                metadata_optional = relative == 'python/artex/server/intercept_read_setup.py' and owner == '_InterceptReadApplication.__init__'
+                optional = owner.endswith('.register') or metadata_optional
                 dependencies = 'Injected auth store, password codec, signing key; deployer-supplied transport/listener'
-                if owner == 'TaskCategoryService.register':
+                if metadata_optional:
+                    dependencies = 'Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation'
+                elif owner == 'TaskCategoryService.register':
                     dependencies = ('Explicit TaskCategoryService.register(router) call; injected category repository for list/create; '
                                     'live task manager required for rename/delete/task assignment; missing adapters return 503')
                 elif owner == 'TaskService.register':

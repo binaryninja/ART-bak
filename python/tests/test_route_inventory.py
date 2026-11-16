@@ -98,3 +98,18 @@ class AlternativeGroupTests(unittest.TestCase):
             self.assertEqual(len(audit.group_python_routes(rows)),1)
             with self.assertRaises(audit.AuditError):
                 audit.group_python_routes(rows+[dict(rows[-1])])
+
+class MetadataConditionalInventoryTests(unittest.TestCase):
+    def scan(self,guard="'judge_usage' in services",path='/api/intercept/judge/usage',name='intercept_read_setup.py',owner='_InterceptReadApplication',tail=''):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);server=root/'python/artex/server';server.mkdir(parents=True)
+            (server/name).write_text(f"class {owner}:\n    def __init__(self,services):\n        staged=Router(auth)\n        if {guard}:staged.add('GET','{path}',handler)\n"+tail)
+            return audit.python_inventory(root)[0]
+    def test_exact_typed_condition_is_optional_not_default_route(self):
+        rows=self.scan();self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['registration_mode'],'optional explicit service registration')
+        self.assertIn('independent global/source/raw',rows[0]['dependencies'])
+    def test_unknown_condition_path_file_or_owner_fail_closed(self):
+        cases=[dict(guard='enabled'),dict(guard="'judge_usage' not in services"),dict(guard="'judge_usage' in other"),dict(guard="'unknown' in services"),dict(path='/other'),dict(name='foreign.py'),dict(owner='Other'),dict(tail="        else:staged.add('GET','/other',handler)\n")]
+        for case in cases:
+            with self.subTest(case=case),self.assertRaises(audit.AuditError):self.scan(**case)
