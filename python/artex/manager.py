@@ -130,6 +130,12 @@ class DeadlineAssessment:
     config_digest: str
 
 
+@dataclass(frozen=True, eq=False)
+class DeadlineSettlement:
+    """Exact terminal persistence reservation, never model/tool authority."""
+    task_id: str
+
+
 @dataclass
 class _DeadlineSlot:
     reservation: DeadlineReservation
@@ -148,6 +154,8 @@ class _DeadlineSlot:
     lease: DeadlineLease | None = None
     freeze: DeadlineFreeze | None = None
     assessment: DeadlineAssessment | None = None
+    settlement: DeadlineSettlement | None = None
+    settlement_store: object = None
 
 
 @dataclass
@@ -275,7 +283,7 @@ class TaskManager:
             if allow_cancelled:
                 return True
             deadline=self._deadline_slots.get(key)
-            if deadline is not None and deadline.state in ('freezing','drained','assessing','quarantined'):return False
+            if deadline is not None and deadline.state in ('freezing','drained','assessing','settling','quarantined'):return False
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
@@ -488,11 +496,63 @@ class TaskManager:
             slot=self._deadline_slots.get(assessment.task_id)
             if slot is None or slot.assessment is not assessment or slot.freeze is not freeze or slot.token is not token or slot.handle is not handle or slot.lease is not lease or assessment.config_digest!=config_digest:
                 return False
-            if slot.state not in (('assessing','quarantined') if inspection else ('assessing',)):return False
+            if slot.state not in (('assessing','settling','quarantined') if inspection else ('assessing','settling')):return False
             try:self._deadline_binding(slot)
             except (TaskConflict,AttributeError):return False
             row=self._tasks.get(assessment.task_id)
             return row is not None and row.get('deleted_at') is None and row.get('archived_at') is None and row.get('status') not in _TERMINAL
+
+    def reserve_deadline_settlement(self,store):
+        """Reserve only a code-owned, exact finalized assessment; no SQL here."""
+        from .db.final_settlement import FinalSettlementStore
+        if type(store) is not FinalSettlementStore:raise TaskConflict('Exact settlement store required')
+        store.validate_reservation()
+        j=store.journal;key=j.assessment.task_id
+        with self._lock:
+            slot=self._deadline_slots.get(key)
+            if slot is None or slot.assessment is not j.assessment or slot.freeze is not j.freeze or slot.lease is not j.lease or slot.token is not j.token or slot.handle is not j.handle:
+                raise TaskConflict('Final settlement owner changed')
+            self._deadline_binding(slot)
+            if slot.settlement is not None:raise TaskConflict('Settlement already reserved; inspect without retry')
+            if slot.state!='assessing':raise TaskConflict('Assessment owner unavailable')
+            slot.settlement=DeadlineSettlement(key);slot.settlement_store=store;slot.state='settling'
+            return slot.settlement
+
+    def validate_deadline_settlement(self,cap,store):
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(cap,'task_id',None))
+            if type(cap) is not DeadlineSettlement or slot is None or slot.settlement is not cap or slot.settlement_store is not store or slot.state!='settling':return False
+            try:self._deadline_binding(slot)
+            except (TaskConflict,AttributeError):return False
+            return True
+
+    def confirm_deadline_settlement(self,cap,store,evidence):
+        """Consume private committed evidence, then retire exact registry ownership.
+
+        Store/SQL callbacks never run under the registry lock. Caller handles any
+        uncertainty, including a commit followed by failure to synchronize here.
+        """
+        from .db.final_settlement import FinalSettlementStore
+        if type(store) is not FinalSettlementStore or not self.validate_deadline_settlement(cap,store):raise TaskConflict('Settlement ownership unavailable')
+        result=store.consume_evidence(cap,evidence)
+        with self._lock:
+            if not self.validate_deadline_settlement(cap,store):raise TaskConflict('Settlement owner changed after commit')
+            slot=self._deadline_slots[cap.task_id];row=self._tasks.get(cap.task_id)
+            if row is None or result.task_id!=int(cap.task_id) or result.status not in ('done','timeout'):
+                raise TaskConflict('Settlement metadata mismatch')
+            run=self._runs.get(cap.task_id)
+            if run is not None and (run.token is not slot.token or run.handle is not slot.handle):raise TaskConflict('Execution owner changed')
+            row.update(status=result.status,completed_at=result.completed_at.isoformat())
+            self._runs.pop(cap.task_id,None)
+            # Terminal metadata blocks new admission before old token cancellation.
+            token=slot.token
+            del self._deadline_slots[cap.task_id]
+        try:token.cancel('final_settlement')
+        except BaseException:
+            with self._lock:
+                slot.state='quarantined';self._deadline_slots[cap.task_id]=slot
+            raise
+        return result
 
     def validate_deadline_owner(self,lease,operation='read'):
         """Lease-only read capability; never permits providers/tools/completion.

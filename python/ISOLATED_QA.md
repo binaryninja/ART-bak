@@ -1101,3 +1101,16 @@ No public interface, forwarding, live model, real credentials or original fronte
 CLI execution. Same-origin dev transport only; no production deployment or arbitrary
 blocking-provider cancellation guarantee. Host shutdown callbacks are explicit
 fixture authority, not a generic inferred lifecycle policy.
+
+## Exact final-settlement prerequisite (stage 90)
+
+Manifest `48c5f128b5c17611ff67d6ee6b90c0ff147b50c7c781e9ba00fed10e8e6b92fa`
+passed five actual PostgreSQL groups and fourteen focused tests. Fresh local proof
+produces done; an open goal produces timeout. Task and settlement receipt persist
+atomically, followed by exact owner retirement. An actual receipt INSERT failure
+rolls back both. Final-policy changes to committed task status, receipt presence
+or assessment-journal revision retain quarantined ownership and report uncertainty
+rather than false retirement or rollback. Synthetic expired ownership is explicit
+private-pin setup, not ordinary positive-duration admission. Inherited/goalless
+settlement, external concurrent graph writers, recovery and live targets remain
+unsupported. Initial fixture plain text in JSONB was corrected in the harness only.

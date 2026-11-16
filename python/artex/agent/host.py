@@ -124,7 +124,7 @@ class AgentHost:
         self._identity()
         if (type(owners) is not tuple or len(owners)>100000
                 or any(type(o) is not DeadlineOwnerSnapshot or o.state not in
-                       ('reserved','attached','suspended','quarantined','freezing','drained','assessing')
+                       ('reserved','attached','suspended','quarantined','freezing','drained','assessing','settling')
                        or type(o.task_id) is not str or not o.task_id.isascii()
                        or not o.task_id.isdecimal() or not 0<int(o.task_id)<2**63
                        for o in owners)
