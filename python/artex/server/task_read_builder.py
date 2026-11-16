@@ -16,6 +16,7 @@ from .token_usage import TokenUsageService
 from .task_model_usage_read import TaskModelUsageRead
 from .task_scope_read import TaskScopeRead
 from .task_constraint_read import TaskConstraintRead
+from .task_intercept_rule_read import TaskInterceptRuleRead
 from ..db.token_usage import TokenUsageStore,UsageScope
 from ..db.task_intent_assets import TaskIntentAssetsStore
 from ..db.main_sessions import MainSessionsStore
@@ -35,6 +36,7 @@ class TaskReadServices:
     model_usage:TaskModelUsageRead | None = None
     scope:TaskScopeRead | None = None
     constraints:TaskConstraintRead | None = None
+    intercept_rules:TaskInterceptRuleRead | None = None
 
 class TaskReadBuilder:
     def __init__(self,executor,*,request_authorize,context_authorize,asset_authorize,
@@ -48,7 +50,8 @@ class TaskReadBuilder:
                  token_usage_workspace=None,token_usage_authorize=None,token_usage_request_authorize=None,
                  model_usage_authorize=None,model_usage_request_authorize=None,
                  scope_authorize=None,scope_request_authorize=None,
-                 constraint_authorize=None,constraint_request_authorize=None):
+                 constraint_authorize=None,constraint_request_authorize=None,
+                 intercept_rule_workspace=None,intercept_rule_authorize=None,intercept_rule_request_authorize=None):
         policies=(request_authorize,context_authorize,asset_authorize,runtime_snapshot,
                   activity_authorize,activity_raw_authorize,activity_request_authorize,stream_authorize,stream_wait)
         if any(not callable(f) for f in policies[:-1]) or stream_wait is not None and not callable(stream_wait):raise ValueError('Explicit independent task read grants required')
@@ -83,6 +86,12 @@ class TaskReadBuilder:
         if (constraint_authorize is None)!=(constraint_request_authorize is None) or any(f is not None and not callable(f) for f in constraint_policies):
             raise ValueError('Independent constraint source/request grants required')
         self._constraint_policies=constraint_policies;self._original_constraint_policies=constraint_policies
+        intercept_rule_policies=(intercept_rule_workspace,intercept_rule_authorize,intercept_rule_request_authorize)
+        if any(v is not None for v in intercept_rule_policies) and (type(intercept_rule_workspace) is not str
+                or not 1<=len(intercept_rule_workspace.encode())<=256 or not callable(intercept_rule_authorize)
+                or not callable(intercept_rule_request_authorize)):
+            raise ValueError('Explicit rule workspace and independent grants required')
+        self._intercept_rule_policies=intercept_rule_policies;self._original_intercept_rule_policies=intercept_rule_policies
         self._coverage_policies=coverage_policies;self._original_coverage_policies=coverage_policies
         self._goal_policies=(goal_authorize,goal_request_authorize)
         self._original_goal_policies=self._goal_policies
@@ -93,7 +102,7 @@ class TaskReadBuilder:
         self._original_policies=policies;self._original_bounds=self._bounds
     def validate_bindings(self):
         if (self.executor is not self._executor or self._policies is not self._original_policies
-                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies):raise ValueError('Read builder configuration changed')
+                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies or self._intercept_rule_policies is not self._original_intercept_rule_policies):raise ValueError('Read builder configuration changed')
         return True
     def build(self,scope,*,current,lifecycle_guard):
         self.validate_bindings()
@@ -193,4 +202,10 @@ class TaskReadBuilder:
             constraint_read=TaskConstraintRead(self.executor,scope,authorize=lambda s:grant(constraint_source,scope),
                 request_authorize=lambda req,s:grant(constraint_request,req,scope),current=live,lifecycle_guard=guard,
                 max_rows=rows,max_bytes=bytes_)
-        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read)
+        intercept_rule_read=None
+        rule_workspace,rule_source,rule_request=self._intercept_rule_policies
+        if rule_workspace is not None:
+            intercept_rule_read=TaskInterceptRuleRead(self.executor,scope,workspace=rule_workspace,
+                authorize=lambda s:grant(rule_source,scope),request_authorize=lambda req,s:grant(rule_request,req,scope),
+                current=live,lifecycle_guard=guard,max_rows=rows,max_bytes=bytes_)
+        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read,intercept_rule_read)
