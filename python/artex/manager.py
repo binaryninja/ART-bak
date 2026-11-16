@@ -617,6 +617,23 @@ class TaskManager:
                 raise TaskConflict('Deadline lease is not currently readable')
             return self._deadline_slots[lease.task_id].state
 
+    def validate_deadline_observation(self,task_id,token,handle,lease,freeze=None):
+        """Exact original-owner clock read only; returns current paused state."""
+        key=_id(task_id)
+        with self._lock:
+            slot=self._deadline_slots.get(key)
+            if slot is None or slot.token is not token or slot.handle is not handle or slot.lease is not lease:
+                raise TaskConflict('Exact expiry observation owner required')
+            self._deadline_binding(slot)
+            if freeze is None:
+                if slot.freeze is not None or not self.validate_deadline_owner(lease):raise TaskConflict('Clock owner unavailable')
+            elif type(freeze) is not DeadlineFreeze or slot.freeze is not freeze or slot.state not in ('freezing','drained'):
+                raise TaskConflict('Exact frozen clock owner required')
+            row=self._tasks.get(key)
+            if row is None or row.get('status')!='running' or row.get('deleted_at') is not None or row.get('archived_at') is not None or row.get('queued') is not False or type(row.get('paused')) is not bool:
+                raise TaskConflict('Observed task lifetime changed')
+            return row['paused']
+
     def acknowledge_deadline_retirement(self,task_id,token,handle):
         """Pure retirement fence; cancelled owners cannot create new reservations."""
         try:key=_id(task_id)

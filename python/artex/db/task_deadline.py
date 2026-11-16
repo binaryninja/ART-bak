@@ -256,3 +256,35 @@ AND run_id=$3 AND request_id=$4 AND config_digest=$5 AND owner_token=$6 AND revi
             self._authorize_exact(authorizer,expected.timeout_seconds,check)
             if check()!=phase:raise DeadlineConflict('Clock lease phase changed')
             return expected
+
+    def observe_expiry(self,lease,*,token,handle,freeze=None):
+        """Exact full-owner DB-clock observation, never stamp or final authority."""
+        if lease is None or lease is not self._lease or token is not self._token or handle is not self._handle:
+            raise DeadlineConflict('Original observation owner required')
+        r=self._receipt;c=lease.clock;authorizer=self.authorize
+        def check():
+            self._binding_check()
+            if self._lease is not lease or lease.receipt is not r or lease.clock is not c or handle.prepared_timeout_seconds!=c.timeout_seconds:
+                raise DeadlineConflict('Observed clock changed')
+            return self._manager.validate_deadline_observation(str(r.task_id),token,handle,lease,freeze)
+        paused=check()
+        self._authorize_exact(authorizer,c.timeout_seconds,check)
+        with self._guard(r.task_id,r.exploration_id):
+            if check()!=paused:raise DeadlineConflict('Observed pause changed')
+            with self._executor.transaction() as tx:
+                rows=tx.fetch_all(Query("""SELECT timeout_seconds,first_run_at,deadline_at,deadline_at<=clock_timestamp()
+FROM tasks WHERE id=$1 AND exploration_id=$2 AND status='running' AND paused=$3
+AND NOT queued AND deleted_at IS NULL AND archived_at IS NULL
+AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=$1) FOR SHARE""",(r.task_id,r.exploration_id,paused)))
+                if len(rows)!=1 or len(rows[0])!=4 or tuple(rows[0][:3])!=(c.timeout_seconds,c.first_run_at,c.deadline_at) or type(rows[0][3]) is not bool:
+                    raise DeadlineConflict('Observed persisted clock changed')
+                expired=rows[0][3]
+                rows=tx.fetch_all(Query("""SELECT 1 FROM public.artex_task_bootstrap WHERE task_id=$1 AND exploration_id=$2
+AND run_id=$3 AND request_id=$4 AND config_digest=$5 AND owner_token=$6 AND revision=$7 AND phase='prepared' FOR SHARE""",
+                    (r.task_id,r.exploration_id,r.run_id,r.request_id,r.config_digest,r.owner_token,r.revision)))
+                if rows!=[(1,)]:raise DeadlineConflict('Observed bootstrap changed')
+                if check()!=paused:raise DeadlineConflict('Observed pause changed')
+            self._authorize_exact(authorizer,c.timeout_seconds,check)
+        self._authorize_exact(authorizer,c.timeout_seconds,check)
+        if check()!=paused:raise DeadlineConflict('Observed pause changed')
+        return expired

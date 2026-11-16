@@ -40,6 +40,11 @@ class DispatchBudget:
     monotonic_deadline:float|None
     task_limited:bool
 
+@dataclass(frozen=True)
+class GenerationClockObservation:
+    lease:object
+    expired:bool
+
 class OwnedGenerationClock:
     """One original prepared owner shares one confirmed stamp across roles.
 
@@ -71,6 +76,20 @@ class OwnedGenerationClock:
             self._last_mono=now
             self._ceiling=candidate if self._ceiling is None else min(self._ceiling,candidate)
             return self._ceiling
+    def observe(self):
+        """Non-stamping original-clock snapshot; None means stamp currently busy."""
+        if not self._lock.acquire(False):return None
+        try:
+            self._check()
+            if self._failed:raise DispatchClockUncertain('Shared clock needs reconciliation')
+            if self._lease is None:return GenerationClockObservation(None,False)
+            now=self._mono_pin()
+            if isinstance(now,bool) or not isinstance(now,(int,float)) or not math.isfinite(now) or now<0 or self._last_mono is not None and now<self._last_mono:
+                raise DispatchClockUnavailable('Invalid observation clock')
+            self._last_mono=now;self._check()
+            return GenerationClockObservation(self._lease,self._ceiling is not None and now>=self._ceiling)
+        finally:self._lock.release()
+
     def read_or_stamp(self):
         if not self._lock.acquire(False):raise DispatchClockUnavailable('Shared clock dispatch already active')
         attempted=False

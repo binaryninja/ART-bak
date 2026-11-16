@@ -1164,3 +1164,19 @@ Three actual PostgreSQL 17 component groups passed in the existing credential-fr
 Fifty focused collected tests passed on the same snapshot: owned_generation_clock, task_deadline_provider and review, runtime_clock_review, runtime_deadline_clamp, provider_deadline and review. These include mocked HTTP duration/stream checks; no live HTTP model provider was used.
 
 Limitations: component-level opt-in only. Synthetic private prepared timeout pins remain necessary and do not establish natural positive-duration admission, default assembly wiring, first-goal deadline behavior, external transport preemption or deadline finalization. Distinct contexts share the same explicitly injected monotonic clock. Postcommit uncertainty is an injected acknowledgement failure after a real successful SQL write, not a simulated PostgreSQL server crash. No production credentials, infrastructure, external targets or source edits.
+
+## Stage 93: exact observer35 manual expiry component
+
+Source: exact frozen manual-observer checkpoint without later assembly changes.
+Manifest SHA-256: `75ecef3830b98db76924b9c74d66f1dbc572af8c079b5dc4b77dcd705dafb109`.
+
+Three actual PG17 integration groups and one intentional entry-refusal case passed in the existing credential-free network/filesystem isolation. Ten focused observer tests passed on the same snapshot. All fixtures local and disposable; fixed inert provider only for stamping. No product changes or guard bypasses.
+
+- Observer constructor/unstamped tick did not stamp. Actual shared dispatch stamped a synthetic prepared owned clock once. A conservative injected local monotonic ceiling expired before the actual database deadline: observer froze and drained the idle exact owner, returned waiting_database normally, then after actual database time elapsed returned ready. Persisted timestamps stayed identical, task stayed running, token remained uncancelled, no assessment allocated or final model/action performed.
+- Pausing the stamped original owner produced a suspended/cancelled owner. Actual database expiry was subsequently observed as ready without new stamp or reset.
+- Two final observation callback negatives (owner phase changed to quarantine; freeze grant revoked) refused readiness and retained quarantined ownership after actual SQL reads. These deliberate internal-phase fixture mutations test callback fences, not public mutation APIs.
+- An independently run genuine host→outer→engine fixture with synthetic positive prepared pin and actual positive timeout row was refused by the engine timeout_seconds=0 SQL guard before any provider or cleanup reservation. Therefore an actual blocked timed provider/independently ticking observer cannot naturally be reached in this checkpoint. No fake active flags or SQL-result overrides were used to force it.
+
+The focused ten tests include blocked-provider threading against SQL doubles; that is protocol evidence only, not real-PG timed execution. Normal positive-duration admission, default observer scheduling/threads, final assessment, production deadline support, arbitrary provider preemption, and recovery are not established. The real-PG observer tests use explicitly synthetic positive prepared ownership and a near-expiry persisted fixture clock. No external targets, credentials or user data.
+
+Artifacts: source manifest, actual component and refusal harnesses, two result logs. No fixture/product corrections were needed in this stage.
