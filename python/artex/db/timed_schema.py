@@ -99,14 +99,32 @@ SNAPSHOT_SQL="""WITH relations AS (
  JOIN pg_catalog.pg_namespace n ON n.oid=tc.relnamespace JOIN pg_catalog.pg_attribute a ON a.attrelid=tc.oid AND a.attnum=d.refobjsubid
  WHERE d.classid='pg_catalog.pg_class'::pg_catalog.regclass AND d.objid=c.oid AND d.deptype IN ('a','i')) AS owners
  FROM relations c JOIN pg_catalog.pg_sequence s ON s.seqrelid=c.oid JOIN pg_catalog.pg_type t ON t.oid=s.seqtypid
+), constraint_trigger_rows AS (
+ SELECT tn.nspname AS table_schema,tc.relname AS table_name,t.tgenabled AS enabled,t.tgtype::integer AS type,
+ t.tgdeferrable AS deferrable,t.tginitdeferred AS deferred,
+ pn.nspname AS function_schema,p.proname AS function_name,
+ CASE WHEN pg_catalog.octet_length(t.tgargs)<=4096 THEN pg_catalog.encode(t.tgargs,'hex') ELSE '[oversize]' END AS args,
+ CASE WHEN t.tgqual IS NULL THEN NULL WHEN pg_catalog.octet_length(pg_catalog.pg_get_expr(t.tgqual,t.tgrelid))<=4096 THEN pg_catalog.pg_get_expr(t.tgqual,t.tgrelid) ELSE '[oversize]' END AS condition,
+ k.contype AS constraint_kind,cn.nspname AS constraint_schema,
+ sn.nspname AS source_schema,sc.relname AS source_table,fn.nspname AS target_schema,fc.relname AS target_table,
+ (SELECT pg_catalog.jsonb_agg(a.attname ORDER BY x.n) FROM pg_catalog.unnest(k.conkey) WITH ORDINALITY x(id,n) JOIN pg_catalog.pg_attribute a ON a.attrelid=k.conrelid AND a.attnum=x.id) AS source_columns,
+ (SELECT pg_catalog.jsonb_agg(a.attname ORDER BY x.n) FROM pg_catalog.unnest(k.confkey) WITH ORDINALITY x(id,n) JOIN pg_catalog.pg_attribute a ON a.attrelid=k.confrelid AND a.attnum=x.id) AS target_columns,
+ k.confupdtype AS update_action,k.confdeltype AS delete_action,k.confmatchtype AS match_type
+ FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class tc ON tc.oid=t.tgrelid JOIN pg_catalog.pg_namespace tn ON tn.oid=tc.relnamespace
+ LEFT JOIN pg_catalog.pg_constraint k ON k.oid=t.tgconstraint LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=k.connamespace
+ LEFT JOIN pg_catalog.pg_class sc ON sc.oid=k.conrelid LEFT JOIN pg_catalog.pg_namespace sn ON sn.oid=sc.relnamespace
+ LEFT JOIN pg_catalog.pg_class fc ON fc.oid=k.confrelid LEFT JOIN pg_catalog.pg_namespace fn ON fn.oid=fc.relnamespace
+ JOIN pg_catalog.pg_proc p ON p.oid=t.tgfoid JOIN pg_catalog.pg_namespace pn ON pn.oid=p.pronamespace
+ WHERE t.tgisinternal AND ((sn.nspname=$1 AND sc.relname=ANY($3::text[])) OR (tn.nspname=$1 AND tc.relname=ANY($3::text[])))
 ), snapshot AS (SELECT pg_catalog.jsonb_build_object(
- 'database',pg_catalog.current_database(),'schema',$1::text,
+ 'database',pg_catalog.current_database(),'schema',$1::text,'replication_role',pg_catalog.current_setting('session_replication_role'),
  'temp_shadow_count',(SELECT count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace=pg_catalog.pg_my_temp_schema() AND c.relname=ANY($2::text[])),
  'search_path',CASE WHEN pg_catalog.octet_length(pg_catalog.current_setting('search_path'))<=4096 THEN pg_catalog.current_setting('search_path') ELSE NULL END,'version',pg_catalog.current_setting('server_version_num')::integer,
  'relations_count',(SELECT count(*) FROM relation_rows),'relations',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM relation_rows ORDER BY name LIMIT 10) x),
  'columns_count',(SELECT count(*) FROM column_rows),'columns',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM column_rows ORDER BY table_name,position LIMIT 128) x),
  'constraints_count',(SELECT count(*) FROM constraint_rows),'constraints',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM constraint_rows ORDER BY table_name,kind LIMIT 64) x),
  'indexes_count',(SELECT count(*) FROM index_rows),'indexes',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM index_rows ORDER BY table_name,primary_key LIMIT 32) x),
+ 'constraint_triggers_count',(SELECT count(*) FROM constraint_trigger_rows),'constraint_triggers',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM constraint_trigger_rows ORDER BY source_table,table_name,function_name LIMIT 512) x),
  'sequences_count',(SELECT count(*) FROM sequence_rows),'sequences',(SELECT pg_catalog.jsonb_agg(x) FROM (SELECT * FROM sequence_rows ORDER BY name LIMIT 3) x)) AS body)
 SELECT CASE WHEN pg_catalog.octet_length(body::text)<=$4 THEN body ELSE NULL END FROM snapshot"""
 
@@ -131,6 +149,17 @@ def _group(items,key):
         out.setdefault(item[key],[]).append(item)
     return out
 
+def _expected_fk_triggers():
+    expected_triggers=[]
+    for name in _TABLES:
+        refs=[('task_id','tasks','id'),('exploration_id','explorations','id')]
+        if name=='artex_final_settlement':refs.append(('attempt_id','artex_final_assessment','attempt_id'))
+        for column,target,key in refs:
+            base=dict(table_schema='public',enabled='O',deferrable=False,deferred=False,function_schema='pg_catalog',args='',condition=None,constraint_kind='f',constraint_schema='public',source_schema='public',source_table=name,target_schema='public',target_table=target,source_columns=[column],target_columns=[key],update_action='a',delete_action='a',match_type='s')
+            for table,typ,fn in ((name,5,'RI_FKey_check_ins'),(name,17,'RI_FKey_check_upd'),(target,9,'RI_FKey_noaction_del'),(target,17,'RI_FKey_noaction_upd')):
+                expected_triggers.append(dict(base,table_name=table,type=typ,function_name=fn))
+    return expected_triggers
+
 def validate_timed_schema(executor,*,expected_database,expected_schema='public',profile='extension-v1'):
     if type(expected_database) is not str or not expected_database or len(expected_database.encode())>256 or '\0' in expected_database or expected_schema!='public' or profile!='extension-v1':
         raise ValueError('Explicit database/public and extension-v1 required')
@@ -141,8 +170,9 @@ def validate_timed_schema(executor,*,expected_database,expected_schema='public',
         body=rows[0][0];_require(type(body) is dict,'snapshot')
         _require(body.get('database')==expected_database and body.get('schema')==expected_schema,'database identity')
         _require(type(body.get('temp_shadow_count')) is int and body['temp_shadow_count']==0 and type(body.get('search_path')) is str,'session resolution')
+        _require(body.get('replication_role')=='origin','constraint enforcement session')
         version=body.get('version');_require(type(version) is int and 170000<=version<180000,'PostgreSQL major')
-        for key,limit in (('relations',10),('columns',128),('constraints',64),('indexes',32),('sequences',3)):
+        for key,limit in (('relations',10),('columns',128),('constraints',64),('indexes',32),('sequences',3),('constraint_triggers',512)):
             count=body.get(key+'_count');items=body.get(key)
             _require(type(count) is int and type(items) is list and len(items)==count<=limit,'bounded '+key)
         numeric={'relations':('inheritance','triggers','rules','policies','dropped_columns'),'columns':('position','typmod','dimensions','custom_dependencies'),'constraints':('custom_dependencies',),'indexes':('key_count','total_count'),'sequences':('start','increment','maximum','minimum','cache')}
@@ -195,13 +225,16 @@ def validate_timed_schema(executor,*,expected_database,expected_schema='public',
                 _require(all(i[k] is True for k in ('unique_key','valid','ready','immediate','no_expressions','no_predicate')) and i['method']=='btree' and i['key_count']==i['total_count']==n and i['opclasses']==[['pg_catalog','int8_ops']]*n and i['options']==[0]*n and i['collations']==[0]*n,'index contract')
                 actual_indexes.append((i['primary_key'],keys))
             _require(sorted(actual_indexes)==expected_indexes,'index inventory')
+        expected_triggers=_expected_fk_triggers()
+        encode=lambda x:json.dumps(x,sort_keys=True,separators=(',',':'),allow_nan=False)
+        _require(sorted(map(encode,body['constraint_triggers']))==sorted(map(encode,expected_triggers)),'foreign key enforcement')
         seqs=_group(body['sequences'],'name');_require(set(seqs)==set(_SEQUENCES),'sequence inventory')
         for name,items in seqs.items():
             _require(len(items)==1,'sequence uniqueness');s=items[0]
             table,column=('artex_task_bootstrap','run_id') if name==_SEQUENCES[0] else ('artex_final_assessment','attempt_id')
             _require(s['type_name']=='int8' and s['start']==s['increment']==s['minimum']==s['cache']==1 and s['maximum']==2**63-1 and s['cycle'] is False and s['owners']==[['public',table,column,'a']],'sequence contract')
         canonical=dict(body)
-        for key in ('relations','columns','constraints','indexes','sequences'):
+        for key in ('relations','columns','constraints','indexes','sequences','constraint_triggers'):
             canonical[key]=sorted(body[key],key=lambda row:json.dumps(row,sort_keys=True,separators=(',',':'),allow_nan=False))
         encoded=json.dumps(canonical,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
         _require(len(encoded)<=_MAX_BYTES,'snapshot bytes')

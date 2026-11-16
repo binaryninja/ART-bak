@@ -1623,3 +1623,33 @@ Exact frozen notification-route source; manifest SHA256 `f2dd0154b71d29dcdc89216
 Four actual PostgreSQL/JWT groups and 22 focused executions passed. Source has six channel kinds, not seven; fixture verifies exact source count. Real defaults, selected settings and counters exposed; unrelated setting and channel configuration credential markers excluded. Original app remains404, optional mixed intercept config still200. Missing JWT and global/operational/config/query denial precede SQL. After start_response200, config/operational/current/executor/originalJWT changes all withhold body without inventing replacement status. Literal/dynamic HEAD conflicts reject atomically.
 
 No fixture correction or product edit. Same approved isolated credentialless bwrap/user/network namespace with disposable PG17.11, psycopg3.3.9/Python3.13, no external destinations or notification sends. WSGI invoked in process, not actual listener/frontend. Counters need not share a snapshot with settings; no default registration or notification execution claim. SQL byte-bound actual evidence remains stage120, not repeated here. Logs/harness/manifest attached.
+
+## FK enforcement observation correction
+
+The earlier structural profile omitted internal foreign-key trigger enablement. An unchanged isolated diagnostic (manifest `97ace58c56299a33c17bbede2b94cfbc5342ff2152844cf993e674d894af3dcc`) reproduced that omission in source and extension observations. It did not enable runtime admission. The corrected acceptance below checks child and parent trigger enforcement, session replication mode and unexpected incoming references; the original diagnostic remains distinct.
+
+## Stage 122 standalone notification channels: PASS
+Exact channels66, manifest b3acde5dea2e97f8abeea031477ed14279ef6182f2b25a2ab105bede8e7286f4. Four actual PG groups pass: enabled/id order+DTO; constant masks with no suffix/unknown-key/header leaks; URL controls/credentials/path/query/fragment mask and safe root allowed; rowmax+1 and aggregate UTF8 SQL NULL sentinel before transfer; config/operational postSQL/postserialization revoke. No fixture/product corrections. Focused test log attached.
+Same approved credentialless namespace, fresh PG17.11 synthetic channel JSON only. No sends/network/provider callbacks, route registration or default activation. SQL source redaction happens after bounded private config read; this does not claim database never loads private config.
+
+## Stage 123 optional notification channels JWT composition
+Exact reviewed frozen source, manifest `868a6f26233ef4a916c10d9f8808adaf2a31102dc06b46fe77b2e4b3277525c6`.
+Four actual PostgreSQL/JWT groups and 23 focused executions pass. Actual channel order, constant secret masks without suffix, unknown-key omission, URL control masking and header masking verified. Original app stays404. Missing JWT/global/config/operational denial and unsupported query precede SQL. After response start, original config/operational/current/executor/JWT substitution withholds body without changing already-emitted200. Mixed intercept config still works; literal/dynamic HEAD conflicts reject atomically.
+Fixture-only initial import typo (notification_channels rather than notification_channels_read) corrected, initial log preserved. No product edits. SQL row/byte bounds actual proof remains stage122 rather than repeated oversized rows here.
+Same approved isolated credentialless namespace and disposable loopback PG17.11, psycopg/Python; in-process WSGI, no browser/listener, no sends/providers/targets/default route activation. Exact manifest and logs attached.
+
+## Corrected FK enforcement validators: actual PG PASS
+Exact reviewed frozen source Python executable manifest `fa2e4e0e0e91718a15cbf90dec4f0c027ae3f4765108626d62053d43e2f67576`.
+
+Both actual code-owned validators accept original source schema plus all five receipt extensions. Original disabled-child FK reproduction now refuses at validator before caller effects: task_relations and artex_final_settlement, with actual orphan INSERT still succeeding when deliberately attempted by the diagnostic harness to prove enforcement was really disabled. Every fixture transaction rolled back.
+Parent-only task FK action trigger disable refused for source/extension edges. Session replication_role replica and local both refused by both validators. Unknown incoming FK references to tasks and artex_final_assessment refused. Clean positive validates again after all rollbacks. No actual descriptor normalization, source profile relearning or supplied authority.
+
+35 focused executions pass. Initial focused run had one missing data fixture the original schema fixture; copied exact frozen original source schema as readonly test data (hashfaaf0116e85c7ccd949139fec36ec876c537237098456e588fcd7afddce899f5), no executable change. Initial missing-data log preserved. Python manifest remains precise for executed Python tree; added original schema is explicitly documented test data.
+
+Same approved credentialless isolated user/net+bwrap namespace, fresh loopback PG17.11, actual psycopg. No production data/provider/tool execution. Original failed enforcement snapshot97ace58 remains untouched. This is bounded source/extension enforcement-profile acceptance, not genuine timed application admission, arbitrary PG schema compatibility or migration authority.
+
+## Stage 124 channel metadata PATCH standalone: PASS
+Exact reviewed frozen source, manifest `ff6c5a5334934d9be8d5cc40a89b68afba7c0cc2c26bcca1067cc2aa69565719`.
+Four actual PostgreSQL/service groups and 13 focused executions pass. Synthetic channel metadata updates and pending/sending→skipped atomic transition verified, sent unchanged. Kind and config::text byte representation unchanged including unknown nested keys; instrumented product SQL never selects config or updates kind/config. Harness alone reads before/after to verify preservation.
+Injected delivery-write error and precommit grant revocation cause actual transaction rollback of metadata/deliveries. Injected acknowledgement failure after actual commit reports503 outcomeunknown/retryfalse while committed name remains persisted. PreSQL grant denial and forbidden config/kind/Boolean numeric fields reject; null metadata produces no effect.
+No fixture/product corrections. Same approved credentialless disposable PG17.11 namespace, synthetic configuration marker only; no existing user channels, delivery sends/provider/network calls/default registration. In-process service, not external notification configuration. Lost acknowledgement simulated after genuine transaction commit, not real network failure.

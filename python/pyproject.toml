@@ -19,4 +19,4 @@ archive = ["zstandard>=0.25,<0.26"]
 include = ["artex*"]
 
 [tool.setuptools.package-data]
-"artex.db" = ["schema.sql"]
+"artex.db" = ["schema.sql", "timed_source_manifest.json"]

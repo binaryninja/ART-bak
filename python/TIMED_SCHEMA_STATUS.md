@@ -84,3 +84,33 @@ variants and two session-resolution variants, plus nineteen focused tests. The
 clean original-plus-extension baseline passed before negative mutations; one
 read and no sequence advancement verified. Earlier failed snapshots remain
 separate in ISOLATED_QA.md. Extension observation still reports no source readiness.
+
+## Constraint enforcement correction (acceptance pending)
+
+Isolated QA preserved an actual counterexample against the prior module: disabling
+internal FK triggers on `artex_final_settlement` left its validated constraints
+unchanged, the observation accepted, and an orphan insert succeeded in a rolled
+back fixture transaction. Constraint catalog presence alone did not establish
+FK enforcement. The corrected snapshot includes all internal triggers belonging
+to the eleven extension FKs, including their parent-side actions on source tables.
+The expected 44 entries compare exact origin-enabled state, event type, built-in
+RI function, deferrability, empty arguments/condition, and stable FK source/target
+column/action identity. Generated RI trigger names and OIDs are excluded.
+Session replication role must also be origin; no SET is issued. Twenty focused
+unit/review tests pass, but the original failure is not reclassified: fresh
+immutable actual PG positive/disabled-trigger/replica tests remain required.
+
+The corrected trigger query also includes every internal trigger physically on
+an extension relation, even when its FK originates outside the five tables.
+Thus unexpected incoming FK parent actions fail the exact footprint comparison;
+unrelated incoming FKs on base tasks/explorations are not pulled into extension-v1.
+The required parent-side actions of extension-owned FKs remain included.
+
+## Corrected immutable enforcement acceptance
+
+Both source-plus-required-extensions validators pass the corrected actual PG17
+acceptance: clean combined schema, disabled child/parent triggers, non-origin
+replication modes and unknown incoming references. Thirty-five focused tests
+passed. Earlier structural-only observations are not proof of FK enforcement.
+This remains bounded profile compatibility, not runtime admission, migration or
+protection against arbitrary concurrent administrator changes. See ISOLATED_QA.md.

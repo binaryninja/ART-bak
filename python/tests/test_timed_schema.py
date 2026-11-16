@@ -4,7 +4,7 @@ import unittest
 from artex.db import timed_schema as m
 
 def descriptor():
-    body=dict(database='fixture',schema='public',version=170011,temp_shadow_count=0,search_path='public',relations=[],columns=[],constraints=[],indexes=[],sequences=[])
+    body=dict(database='fixture',schema='public',version=170011,temp_shadow_count=0,search_path='public',replication_role='origin',constraint_triggers=[],relations=[],columns=[],constraints=[],indexes=[],sequences=[])
     for name in m._NAMES:
         body['relations'].append(dict(name=name,resolves_exact=True,kind='S' if name in m._SEQUENCES else 'r',persistence='p',partition=False,rls=False,force_rls=False,inheritance=0,triggers=0,rules=0,policies=0,dropped_columns=0))
     for name in (*m._TABLES,'tasks','explorations'):
@@ -24,7 +24,13 @@ def descriptor():
                 body['constraints'].append(constraint('f',[col],foreign_table=table,foreign_columns=['attempt_id' if col=='attempt_id' else 'id']))
     for name,table,column in [(m._SEQUENCES[0],'artex_task_bootstrap','run_id'),(m._SEQUENCES[1],'artex_final_assessment','attempt_id')]:
         body['sequences'].append(dict(name=name,type_name='int8',start=1,increment=1,maximum=2**63-1,minimum=1,cache=1,cycle=False,owners=[['public',table,column,'a']]))
-    for key in ('relations','columns','constraints','indexes','sequences'):body[key+'_count']=len(body[key])
+    for c in body['constraints']:
+        if c['kind']!='f':continue
+        source=c['table_name'];target=c['foreign_table']
+        base=dict(table_schema='public',enabled='O',deferrable=False,deferred=False,function_schema='pg_catalog',args='',condition=None,constraint_kind='f',constraint_schema='public',source_schema='public',source_table=source,target_schema='public',target_table=target,source_columns=c['columns'],target_columns=c['foreign_columns'],update_action='a',delete_action='a',match_type='s')
+        for table,typ,fn in ((source,5,'RI_FKey_check_ins'),(source,17,'RI_FKey_check_upd'),(target,9,'RI_FKey_noaction_del'),(target,17,'RI_FKey_noaction_upd')):
+            body['constraint_triggers'].append(dict(base,table_name=table,type=typ,function_name=fn))
+    for key in ('relations','columns','constraints','indexes','sequences','constraint_triggers'):body[key+'_count']=len(body[key])
     return body
 
 class DB:
@@ -97,6 +103,14 @@ class Tests(unittest.TestCase):
         self.assertIn('pg_catalog.pg_my_temp_schema()',db.calls[0].sql)
         self.assertIn('pg_catalog.to_regclass(pg_catalog.quote_ident(c.relname))=c.oid',db.calls[0].sql)
         self.assertNotIn('SET ',db.calls[0].sql)
+
+    def test_internal_fk_enforcement_not_just_validated_constraint(self):
+        for key,value in [('enabled','D'),('type',True),('function_name','unexpected'),('deferred',True),('table_name','other')]:
+            self.reject(lambda b,k=key,v=value:b['constraint_triggers'][0].update({k:v}))
+        self.reject(lambda b:b['constraint_triggers'].pop())
+        self.reject(lambda b:b.update(replication_role='replica'))
+        self.assertIn("current_setting('session_replication_role')",m.SNAPSHOT_SQL)
+        self.assertIn("OR (tn.nspname=$1 AND tc.relname=ANY($3::text[]))",m.SNAPSHOT_SQL)
 
     def test_bad_arguments_before_catalog_read(self):
         db=DB(descriptor())

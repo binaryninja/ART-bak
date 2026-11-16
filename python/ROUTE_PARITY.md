@@ -22,12 +22,12 @@ Declaration counts retain every source location; alternatives are not simultaneo
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **189**.
-- python route declarations: **209**.
+- python offline contract routes: **190**.
+- python route declarations: **210**.
 - python alternative route groups: **14**.
-- python optional service routes: **183**.
-- matched offline contract routes: **189**.
-- go routes without python registration: **72**.
+- python optional service routes: **184**.
+- matched offline contract routes: **190**.
+- go routes without python registration: **71**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -135,21 +135,21 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
 | GET | `/api/health` | `server/server.go:660` | Offline contract only: `python/artex/server/auth.py:105` |
 | GET | `/api/intercept/history` | `server/server.go:925` | Optional registration; adapters required: `python/artex/server/intercept_inspection.py:27` |
-| GET | `/api/intercept/history/{id}` | `server/server.go:926` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:121` |
-| GET | `/api/intercept/history/{id}/execution` | `server/server.go:927` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:120` |
-| GET | `/api/intercept/judge` | `server/server.go:931` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:114` |
+| GET | `/api/intercept/history/{id}` | `server/server.go:926` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:126` |
+| GET | `/api/intercept/history/{id}/execution` | `server/server.go:927` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:125` |
+| GET | `/api/intercept/judge` | `server/server.go:931` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:119` |
 | PUT | `/api/intercept/judge` | `server/server.go:932` | Not registered |
-| GET | `/api/intercept/judge/usage` | `server/server.go:933` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:117` |
+| GET | `/api/intercept/judge/usage` | `server/server.go:933` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:122` |
 | GET | `/api/intercept/pending` | `server/server.go:922` | Optional registration; adapters required: `python/artex/server/intercept_inspection.py:25` |
 | GET | `/api/intercept/pending/{id}` | `server/server.go:923` | Optional registration; adapters required: `python/artex/server/intercept_inspection.py:26` |
 | POST | `/api/intercept/pending/{id}/decide` | `server/server.go:924` | Not registered |
-| GET | `/api/intercept/rules` | `server/server.go:909` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:116` |
+| GET | `/api/intercept/rules` | `server/server.go:909` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:121` |
 | POST | `/api/intercept/rules` | `server/server.go:910` | Not registered |
 | DELETE | `/api/intercept/rules/{id}` | `server/server.go:912` | Not registered |
 | PUT | `/api/intercept/rules/{id}` | `server/server.go:911` | Not registered |
 | POST | `/api/intercept/rules/{id}/toggle` | `server/server.go:913` | Not registered |
-| GET | `/api/intercept/task/{taskID}` | `server/server.go:928` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:119` |
-| GET | `/api/intercept/tool-config` | `server/server.go:929` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:115` |
+| GET | `/api/intercept/task/{taskID}` | `server/server.go:928` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:124` |
+| GET | `/api/intercept/tool-config` | `server/server.go:929` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:120` |
 | PUT | `/api/intercept/tool-config` | `server/server.go:930` | Not registered |
 | GET | `/api/llm` | `server/server.go:737` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm` | `server/server.go:738` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -176,14 +176,14 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/mcp/{id}` | `server/server.go:868` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
 | POST | `/api/mcp/{id}/refresh` | `server/server.go:870` | Not registered |
 | GET | `/api/mcp/{id}/tools` | `server/server.go:869` | Optional registration; adapters required: `python/artex/server/mcp_catalog.py:58` |
-| GET | `/api/notify/channels` | `server/server.go:805` | Not registered |
+| GET | `/api/notify/channels` | `server/server.go:805` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:117` |
 | POST | `/api/notify/channels` | `server/server.go:806` | Not registered |
 | DELETE | `/api/notify/channels/{id}` | `server/server.go:808` | Not registered |
 | PATCH | `/api/notify/channels/{id}` | `server/server.go:807` | Not registered |
 | POST | `/api/notify/channels/{id}/test` | `server/server.go:809` | Not registered |
-| GET | `/api/notify/deliveries` | `server/server.go:810` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:118` |
+| GET | `/api/notify/deliveries` | `server/server.go:810` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:123` |
 | POST | `/api/notify/deliveries/{id}/retry` | `server/server.go:811` | Not registered |
-| GET | `/api/notify/meta` | `server/server.go:804` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:113` |
+| GET | `/api/notify/meta` | `server/server.go:804` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:118` |
 | GET | `/api/report` | `server/server.go:813` | Not registered |
 | GET | `/api/settings` | `server/server.go:800` | Not registered |
 | PUT | `/api/settings` | `server/server.go:801` | Not registered |
@@ -379,15 +379,16 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/intercept/pending` at `python/artex/server/intercept_inspection.py:25` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/pending/{id}` at `python/artex/server/intercept_inspection.py:26` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/history` at `python/artex/server/intercept_inspection.py:27` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/notify/meta` at `python/artex/server/intercept_read_setup.py:113` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/judge` at `python/artex/server/intercept_read_setup.py:114` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/tool-config` at `python/artex/server/intercept_read_setup.py:115` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/rules` at `python/artex/server/intercept_read_setup.py:116` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/judge/usage` at `python/artex/server/intercept_read_setup.py:117` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/notify/deliveries` at `python/artex/server/intercept_read_setup.py:118` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/task/{taskID}` at `python/artex/server/intercept_read_setup.py:119` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/history/{id}/execution` at `python/artex/server/intercept_read_setup.py:120` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
-- `GET /api/intercept/history/{id}` at `python/artex/server/intercept_read_setup.py:121` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/notify/channels` at `python/artex/server/intercept_read_setup.py:117` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/notify/meta` at `python/artex/server/intercept_read_setup.py:118` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/judge` at `python/artex/server/intercept_read_setup.py:119` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/tool-config` at `python/artex/server/intercept_read_setup.py:120` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/rules` at `python/artex/server/intercept_read_setup.py:121` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/judge/usage` at `python/artex/server/intercept_read_setup.py:122` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/notify/deliveries` at `python/artex/server/intercept_read_setup.py:123` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/task/{taskID}` at `python/artex/server/intercept_read_setup.py:124` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/history/{id}/execution` at `python/artex/server/intercept_read_setup.py:125` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
+- `GET /api/intercept/history/{id}` at `python/artex/server/intercept_read_setup.py:126` (_InterceptReadApplication.__init__): Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation.
 - `GET /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tasks/{id}/intercept-rules/{rid}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
