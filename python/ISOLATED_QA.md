@@ -1231,3 +1231,19 @@ Three groups passed in the approved credential-free disposable filesystem/networ
 - Original grant revoked after actual fetch or at final guard exit returned403 without raw marker. Already denied read skipped SQL.
 
 No product edits by QA beyond separate regression tests; no HTTP registration, model/provider/target access, regex matching, cache activation, mutation route, or production claim. Temporary fixture inserts/updates only. No integration harness correction required.
+
+## Stage 97: exact final39 manual finalization, real PostgreSQL
+
+Manifest SHA-256: `995de159ecc9be7ce6493d55d5341accb565fae6c8f896ab44f8f57883051407`.
+Source is coordinator-frozen final39 Python tree, no working overlays. Existing approved credential-free filesystem/network isolation, temporary PG17, canonical temporary JSONL and fixed inert provider used. No target, real credential or production state accessed.
+
+Five actual integration groups passed:
+- Before explicit additive installation, missing final journal schema retained a quarantined handoff with no provider call or retry. Schemas then explicitly installed in the same disposable fixture database.
+- Genuine manual observer→assessment→canonical restricted final result→settlement completed one-shot. Actual confirmed local fact/proof and met goal produced done; an open goal produced timeout irrespective of identical model prose. SQL status and exact manager retirement verified; observer reported transferred and second run refused.
+- Actual not-yet-expired database clock returned an ordinary preallocation wait with no assessment row/model call. After time elapsed, revoked start permission still prevented allocation/inference.
+- Separate thread cancelled while inert final provider was genuinely blocked on an Event. Cancellation was accepted without prematurely returning the provider future or cancelling the original generation token. After explicit release, canonical cancelled outcome persisted, task remained running, no settlement row, owner quarantined, exactly one provider call.
+- Actual settlement committed, then injected transaction-acknowledgement error occurred. Durable done/receipt remained; manager owner stayed quarantined, original token was not cancelled, and second run could not repeat inference or writes.
+
+Twenty-seven focused finalization/observer tests passed on this exact snapshot. Initial harness lacked a tempfile import; corrected the harness only and retained original failure log. No product source changed.
+
+All positive-timeout owners here require explicitly synthetic private prepared-timeout pin and persisted clock fixtures. No positive-duration public admission, timed engine gate bypass, complete timed application, default scheduling, live model, restart recovery or production guarantee is established. Assessment provider emits fixed local text; graph truth remains authoritative. The postcommit case is an injected acknowledgement failure after a real SQL commit, not an actual PostgreSQL crash.
