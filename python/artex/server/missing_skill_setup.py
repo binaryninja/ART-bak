@@ -88,6 +88,9 @@ class _MissingSkillApplication:
             pure()
             if outer._pins[8](req,outer._pins[7],sel) is not True:raise PermissionError()
             pure()
+            # Authority callbacks can consume enough time to expire the JWT.
+            if outer._pins[2](req) is not True:raise PermissionError()
+            pure()
         if successful:
             try:disclose()
             except Exception:
