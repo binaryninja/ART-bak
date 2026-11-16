@@ -158,6 +158,8 @@ class _AuthenticatedView:
                 if result is not None and callable(getattr(result,'close',None)):result.close()
         return output()
 
+_AUTHENTICATED_CALL=_AuthenticatedView.__call__
+
 class _RuntimeSkillView:
     """Route owned skills without delaying their real post-header fences."""
     def __init__(self,skills,base,pool,runtime_view,check):
@@ -241,8 +243,11 @@ _CONTINUATION_NAMES=('seal_resume','wait_resumes','validate_bindings')
 _CONTINUATION_METHODS=tuple(getattr(TaskContinuationOwner,n) for n in _CONTINUATION_NAMES)
 
 
+from .archive_runtime_view import RuntimeArchiveView
+_ARCHIVE_METHODS=(RuntimeArchiveView.__init__,RuntimeArchiveView.__call__,RuntimeArchiveView.validate)
+
 class RuntimeListener:
-    def __init__(self,bundle,owner,config=DevListenerConfig(),*,skill_reads=None):
+    def __init__(self,bundle,owner,config=DevListenerConfig(),*,skill_reads=None,archive_catalog=None):
         if type(bundle) is not TaskRuntimeApplication or type(owner) is not RuntimeResourceOwner or type(owner.pool) is not ExecutorPool or type(config) is not DevListenerConfig:
             raise ValueError('Actual runtime, pool ownership and development configuration required')
         config.validate()
@@ -276,6 +281,13 @@ class RuntimeListener:
             self._skill_view=_RuntimeSkillView(skill_reads,base,owner.pool,self._view,self._check)
             self._view=self._skill_view
         self._skill_binding=self._skill_view
+        self._archive_view=None
+        if archive_catalog is not None:
+            if any(a is not b for a,b in zip((RuntimeArchiveView.__init__,RuntimeArchiveView.__call__,RuntimeArchiveView.validate),_ARCHIVE_METHODS)):
+                raise ValueError('Original archive runtime adapter required')
+            self._archive_view=RuntimeArchiveView(archive_catalog,base,owner.pool,self._view,self._check,bundle.app)
+            self._view=self._archive_view
+        self._archive_binding=self._archive_view
         self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False
     def _check_continuation(self):
         owner=self._continuation
@@ -305,12 +317,20 @@ class RuntimeListener:
         b._check();self._config.validate()
         if self._skill_view is not self._skill_binding:raise RuntimeError('Runtime skill adapter ownership changed')
         if self._skill_view is not None:
-            if self._view is not self._skill_view:raise RuntimeError('Runtime skill transport changed')
+            if (self._archive_view.fallback if self._archive_view is not None else self._view) is not self._skill_view:raise RuntimeError('Runtime skill transport changed')
             for name,method in zip(('__init__','__call__','validate'),_RUNTIME_SKILL_METHODS):
                 bound=getattr(self._skill_view,name)
                 if getattr(bound,'__self__',None) is not self._skill_view or getattr(bound,'__func__',None) is not method:
                     raise RuntimeError('Runtime skill adapter implementation changed')
             self._skill_view.validate()
+        if self._archive_view is not self._archive_binding:raise RuntimeError('Runtime archive adapter ownership changed')
+        if self._archive_view is not None:
+            if self._view is not self._archive_view:raise RuntimeError('Runtime archive transport changed')
+            for name,method in zip(('__init__','__call__','validate'),_ARCHIVE_METHODS):
+                bound=getattr(self._archive_view,name)
+                if getattr(bound,'__self__',None)is not self._archive_view or getattr(bound,'__func__',None)is not method:
+                    raise RuntimeError('Runtime archive implementation changed')
+            self._archive_view.validate()
     def start_listener(self):
         with self._lock:
             self._check()

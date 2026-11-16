@@ -98,9 +98,12 @@ class TaskChatService:
             if segment is not None and segment<0:segment=None
             client=request.header('Idempotency-Key') or uuid.uuid4().hex
             if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',client):raise ValueError()
-            scope=original_dispatcher.prepare(task_id,segment=segment)
-            admission()
-            original_dispatcher.submit(scope,client,message,authorize=admission)
+            operation=getattr(original_dispatcher,'operation',None)
+            if not callable(operation):raise ChatUnavailable('Issued chat operation required')
+            with operation(task_id) as issued:
+                scope=original_dispatcher.prepare(task_id,segment=segment)
+                admission()
+                original_dispatcher.submit(scope,client,message,authorize=admission,operation=issued)
             return json_response(202,{'status':'accepted','mode':'llm'})
         except PermissionError:return error_response(403,'Task access denied')
         except (ChatBusy,DispatchConflict,TranscriptConflict):return error_response(409,'Task chat running or requires reconciliation')

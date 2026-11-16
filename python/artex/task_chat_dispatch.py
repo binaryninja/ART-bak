@@ -33,6 +33,7 @@ class _TaskActivityProjection:
             records=deepcopy(items)
             if self.ticket.authorize is not None and self.ticket.authorize() is not True:
                 raise PermissionError("Task request denied")
+            if any(item.kind=='user' for item in records):self.core._check_queued_admission(self.ticket)
             for item in records:item.worker='mainagent';item.main_seg=self.scope.segment
             return self.sink.append_many(records)
 
@@ -73,12 +74,20 @@ class TaskChatDispatcher:
         try:yield
         finally:
             with self._lifetime:self._outer.pop(receipt,None);self._lifetime.notify_all()
+    @contextmanager
+    def operation(self,task_id):
+        from .db.core import int64
+        if int64(task_id,'task ID')<=0:raise ValueError('Positive task ID required')
+        with self._invocation():
+            receipt=self._core._enter(task_id,'request')
+            try:yield receipt
+            finally:self._core._leave(receipt)
     def prepare(self,task_id,segment=None):
         with self._invocation():return self._core.prepare(task_id,segment=segment)
-    def submit(self,scope,client_id,message,*,authorize=None):
+    def submit(self,scope,client_id,message,*,authorize=None,operation=None):
         with self._invocation():
             if authorize is not None and not callable(authorize):raise ValueError("Explicit admission check required")
-            ticket=self._core._reserve_queued(scope,authorize)
+            ticket=self._core._reserve_queued(scope,authorize,operation)
             try:
                 receipt=self._submit(scope,client_id,message,ticket)
                 receipt.future.add_done_callback(lambda f,core=self._core:core._leave(ticket))
@@ -87,6 +96,7 @@ class TaskChatDispatcher:
                 self._core._leave(ticket);raise
     def _submit(self,scope,client_id,message,ticket):
         if not isinstance(scope,TaskChatScope) or scope!=ticket.scope:raise ValueError('Original prepared task scope required')
+        self._core._check_queued_admission(ticket)
         sink=self.activity_store(scope)
         if (getattr(sink,'task_id',None)!=scope.task_id or getattr(sink,'exploration_id',None)!=scope.exploration_id
             or getattr(sink,'scope_identity',None)!=scope_identity(scope)
@@ -103,8 +113,10 @@ class TaskChatDispatcher:
             self._core._check(scope,scope.session_id)
             self._core.transcript.check_scoped(scope.session_id,client_id,
                 {'role':'user','content':[{'type':'text','text':message}]},scope_identity(scope))
+            self._core._check_queued_admission(ticket)
             if ticket.authorize is not None and ticket.authorize() is not True:
                 raise PermissionError("Task request denied")
+            self._core._check_queued_admission(ticket)
             return self._queue.submit(scope.task_id,client_id,message,activities=projection,run=run,worker='mainagent:'+identity)
     def running(self,task_id):
         self._check_core();return self._queue.running(task_id) or self._core.running(task_id)

@@ -19,6 +19,7 @@ from .task_constraint_read import TaskConstraintRead
 from .task_intercept_rule_read import TaskInterceptRuleRead
 from .task_intercept_history_read import TaskInterceptHistoryRead
 from .task_resolution_read import TaskResolutionRead
+from .task_report_read import TaskReportRead
 from ..db.token_usage import TokenUsageStore,UsageScope
 from ..db.task_intent_assets import TaskIntentAssetsStore
 from ..db.main_sessions import MainSessionsStore
@@ -41,6 +42,7 @@ class TaskReadServices:
     intercept_rules:TaskInterceptRuleRead | None = None
     intercept_history:TaskInterceptHistoryRead | None = None
     resolution:TaskResolutionRead | None = None
+    report:TaskReportRead | None = None
 
 class TaskReadBuilder:
     def __init__(self,executor,*,request_authorize,context_authorize,asset_authorize,
@@ -58,7 +60,12 @@ class TaskReadBuilder:
                  intercept_rule_workspace=None,intercept_rule_authorize=None,intercept_rule_request_authorize=None,
                  intercept_history_workspace=None,intercept_history_authorize=None,intercept_history_raw_authorize=None,intercept_history_request_authorize=None,
                  resolution_authorize=None,resolution_request_authorize=None,resolution_profile_authorize=None,
-                 resolution_environment_authorize=None,resolution_configuration_valid=None,resolution_environment=None):
+                 resolution_environment_authorize=None,resolution_configuration_valid=None,resolution_environment=None,
+                 report_authorize=None,report_request_authorize=None,report_global_assets_authorize=None):
+        report_policies=(report_authorize,report_request_authorize,report_global_assets_authorize)
+        if any(f is not None for f in report_policies) and not all(callable(f) for f in report_policies):
+            raise ValueError('Independent report source/request/global grants required')
+        self._report_policies=report_policies;self._original_report_policies=report_policies
         policies=(request_authorize,context_authorize,asset_authorize,runtime_snapshot,
                   activity_authorize,activity_raw_authorize,activity_request_authorize,stream_authorize,stream_wait)
         if any(not callable(f) for f in policies[:-1]) or stream_wait is not None and not callable(stream_wait):raise ValueError('Explicit independent task read grants required')
@@ -119,7 +126,7 @@ class TaskReadBuilder:
         self._original_policies=policies;self._original_bounds=self._bounds
     def validate_bindings(self):
         if (self.executor is not self._executor or self._policies is not self._original_policies
-                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies or self._intercept_rule_policies is not self._original_intercept_rule_policies or self._history_policies is not self._original_history_policies or self._resolution_policies is not self._original_resolution_policies):raise ValueError('Read builder configuration changed')
+                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies or self._intent_asset_policies is not self._original_intent_asset_policies or self._token_policies is not self._original_token_policies or self._model_policies is not self._original_model_policies or self._scope_policies is not self._original_scope_policies or self._constraint_policies is not self._original_constraint_policies or self._intercept_rule_policies is not self._original_intercept_rule_policies or self._history_policies is not self._original_history_policies or self._resolution_policies is not self._original_resolution_policies or self._report_policies is not self._original_report_policies):raise ValueError('Read builder configuration changed')
         return True
     def build(self,scope,*,current,lifecycle_guard):
         self.validate_bindings()
@@ -246,4 +253,10 @@ class TaskReadBuilder:
                 environment_authorize=lambda req,s:grant(resolution_environment_grant,req,scope),
                 configuration_valid=validate_resolution,environment=read_resolution_environment,
                 current=live,lifecycle_guard=guard,max_bytes=bytes_)
-        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read,intercept_rule_read,history_read,resolution_read)
+        report_read=None
+        report_source,report_request,report_global=self._report_policies
+        if report_source is not None:
+            report_read=TaskReportRead(self.executor,scope,authorize=lambda s:grant(report_source,scope),
+                request_authorize=lambda req,s:grant(report_request,req,scope),
+                global_assets_authorize=lambda s,kinds:grant(report_global,scope,kinds),current=live,lifecycle_guard=guard)
+        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads,intent_assets,token_usage,model_usage,scope_read,constraint_read,intercept_rule_read,history_read,resolution_read,report_read)

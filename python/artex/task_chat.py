@@ -94,6 +94,7 @@ class _ChatInvocation:
     started:bool=False
     token:object=None
     authorize:object=None
+    cancel_requested:bool=False
 
 class TaskChatCore:
     def __init__(self,*,resolve,current,lifecycle_guard,transcript,provider_resolver,gate,tools=(),limits=Limits(),capture=None):
@@ -112,10 +113,22 @@ class TaskChatCore:
     def _leave(self,receipt):
         with self._condition:
             self._invocations.discard(receipt);self._condition.notify_all()
-    def _reserve_queued(self,scope,authorize=None):
+    def _check_operation(self,receipt,task_id):
+        with self._condition:
+            if receipt not in self._invocations or receipt.kind!='request' or receipt.task_id!=task_id:
+                raise ChatUnavailable('Original issued task operation required')
+            if receipt.cancel_requested:raise RunStopped('cancelled')
+    def _check_queued_admission(self,receipt):
+        with self._condition:
+            if receipt not in self._invocations or receipt.kind!='queued':raise ChatUnavailable('Original queued invocation required')
+            if receipt.cancel_requested:raise RunStopped('cancelled')
+    def _reserve_queued(self,scope,authorize=None,operation=None):
         if type(scope) is not TaskChatScope:raise ChatUnavailable('Exact task scope required')
-        receipt=self._enter(scope.task_id,'queued',deepcopy(scope));receipt.authorize=authorize
-        return receipt
+        copied=deepcopy(scope)
+        with self._condition:
+            if operation is not None:self._check_operation(operation,scope.task_id)
+            receipt=self._enter(scope.task_id,'queued',copied);receipt.authorize=authorize
+            return receipt
     def _run_queued(self,receipt,client_id,message,token):
         with self._condition:
             if receipt not in self._invocations or receipt.kind!='queued' or receipt.started:raise ChatUnavailable('Original queued invocation required')
@@ -135,7 +148,7 @@ class TaskChatCore:
     def _bind_token(self,receipt,token):
         with self._condition:
             if receipt not in self._invocations:raise ChatUnavailable('Task invocation unavailable')
-            receipt.token=token;cancel=self._cancel_on_start
+            receipt.token=token;cancel=self._cancel_on_start or receipt.cancel_requested
         if cancel:token.cancel()
     def seal(self,*,cancel=False):
         if type(cancel) is not bool:raise ValueError('Boolean cancellation required')
@@ -167,17 +180,31 @@ class TaskChatCore:
     def _check(self,scope,session):
         if session!=scope.session_id or self.current(scope) is not True:raise RunStopped('stale_task_chat')
     def running(self,task_id):
-        with self._lock:return task_id in self._active or task_id in self._unresolved or any(r.task_id==task_id and r.kind!='prepare' for r in self._invocations)
+        with self._lock:return task_id in self._active or task_id in self._unresolved or any(r.task_id==task_id for r in self._invocations)
     def cancel(self,task_id):
         with self._condition:
+            owned=[r for r in self._invocations if r.task_id==task_id and r.kind!='cancel']
             token=self._active.get(task_id)
-            if token is None:return False
-            receipt=_ChatInvocation(task_id,'cancel',get_ident());self._invocations.add(receipt)
-        try:token.cancel();return True
-        finally:self._leave(receipt)
+            if not owned and token is None:return False
+            tokens=[]
+            for r in owned:
+                r.cancel_requested=True
+                if r.token is not None and all(r.token is not t for t in tokens):tokens.append(r.token)
+            if token is not None and all(token is not t for t in tokens):tokens.append(token)
+            callbacks=[(_ChatInvocation(task_id,'cancel',get_ident()),t) for t in tokens]
+            self._invocations.update(r for r,t in callbacks)
+        try:
+            for receipt,token in callbacks:token.cancel()
+            return True
+        finally:
+            for receipt,token in callbacks:self._leave(receipt)
     def prepare(self,task_id,*,segment=None):
         receipt=self._enter(task_id,'prepare')
-        try:return self._prepare_impl(task_id,segment=segment)
+        try:
+            scope=self._prepare_impl(task_id,segment=segment)
+            with self._condition:
+                if receipt.cancel_requested:raise RunStopped('cancelled')
+            return scope
         finally:self._leave(receipt)
     def _prepare_impl(self,task_id,*,segment=None):
         int64(task_id,'task ID')

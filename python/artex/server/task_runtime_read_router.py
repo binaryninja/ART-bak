@@ -44,6 +44,7 @@ class TaskRuntimeReadRouter:
         if re.fullmatch(r'/api/tasks/[^/]+/intercept-rules',path):return 'intercept_rules',{'id':path.split('/')[-2]}
         if re.fullmatch(r'/api/tasks/[^/]+/constraints',path):return 'constraints',{'id':path.split('/')[-2]}
         if re.fullmatch(r'/api/tasks/[^/]+/scope',path):return 'scope',{'id':path.split('/')[-2]}
+        if path=='/api/report':return 'report',{}
         if path=='/api/llm/records/by-model':return 'model_usage',{}
         if path=='/api/exploration/tokens':return 'token_usage',{}
         if path=='/api/exploration/main-sessions':return 'main_sessions',{}
@@ -57,7 +58,7 @@ class TaskRuntimeReadRouter:
         if type(application) is not WSGIApplication or type(application.router) is not Router:raise ValueError('One original authenticated application required')
         self.validate_bindings();base=application.router;auth=base.authorize;owner=self
         protected=Router(auth)
-        for path in ('/api/tasks/{id}/llm/resolution','/api/intercept/task/{id}','/api/tasks/{id}/intercept-rules','/api/tasks/{id}/constraints','/api/tasks/{id}/scope','/api/llm/records/by-model','/api/exploration/tokens','/api/tasks/{id}/intent-assets','/api/tasks/{id}/coverage','/api/tasks/{id}/coverage-graph','/api/tasks/{id}/asset-refs','/api/tasks/{id}/goals','/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
+        for path in ('/api/report','/api/tasks/{id}/llm/resolution','/api/intercept/task/{id}','/api/tasks/{id}/intercept-rules','/api/tasks/{id}/constraints','/api/tasks/{id}/scope','/api/llm/records/by-model','/api/exploration/tokens','/api/tasks/{id}/intent-assets','/api/tasks/{id}/coverage','/api/tasks/{id}/coverage-graph','/api/tasks/{id}/asset-refs','/api/tasks/{id}/goals','/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
             protected.add('GET',path,lambda req,params:owner._read(req,base,auth))
         class Overlay:
             def dispatch(self,request):
@@ -124,10 +125,11 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1)''',(task_id,scope.
             if op in ('coverage','coverage_graph','coverage_refs'):
                 if services.coverage is None:return error_response(503,'Coverage read capability unavailable')
                 response=services.coverage.handle({'coverage':'coverage','coverage_graph':'graph','coverage_refs':'refs'}[op],request)
-            elif op in ('intent_assets','token_usage','model_usage','scope','constraints','intercept_rules','intercept_history','resolution'):
+            elif op in ('intent_assets','token_usage','model_usage','scope','constraints','intercept_rules','intercept_history','resolution','report'):
                 if op=='resolution' and services.resolution is None:return error_response(503,'Task resolution capability unavailable')
                 if op=='intercept_history' and services.intercept_history is None:return error_response(503,'Task history read capability unavailable')
                 if op=='intercept_rules' and services.intercept_rules is None:return error_response(503,'Task rule read capability unavailable')
+                if op=='report' and services.report is None:return error_response(503,'Report read capability unavailable')
                 if op=='constraints' and services.constraints is None:return error_response(503,'Constraint read capability unavailable')
                 if op=='scope' and services.scope is None:return error_response(503,'Scope read capability unavailable')
                 if op=='intent_assets' and services.intent_assets is None:return error_response(503,'Intent-asset read capability unavailable')
@@ -149,6 +151,8 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1)''',(task_id,scope.
                     auth_binding()
                 if op=='intent_assets':
                     response=services.intent_assets.handle(request,{'id':str(task_id)},transport_disclosure=transport_disclosure,transport_authentication=transport_authentication)
+                elif op=='report':
+                    response=services.report.handle(request,transport_disclosure=transport_disclosure,transport_authentication=transport_authentication)
                 elif op=='resolution':
                     response=services.resolution.handle(request,transport_disclosure=transport_disclosure,transport_authentication=transport_authentication)
                 elif op=='intercept_history':
