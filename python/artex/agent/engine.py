@@ -47,7 +47,7 @@ class EngineProgress:
 class TaskEngineHandle:
     def __init__(self,scope,token,*,store,planner,planner_scope,worker,worker_model,
                  worker_system,owner,current,lifecycle_guard,single_process,
-                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None,cleanup_authorize=None,cleanup_current=None,timing=None):
+                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None,cleanup_authorize=None,cleanup_current=None,timing=None,process=None):
         if not isinstance(scope,EngineScope) or not isinstance(token,CancellationToken):raise ValueError('Exact task scope and manager token required')
         for value in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(value,'engine identity')<=0:raise ValueError('Positive engine identity required')
@@ -68,6 +68,11 @@ class TaskEngineHandle:
         if timing is not None:
             from .task_timing import PreparedTaskTiming
             if type(timing) is not PreparedTaskTiming or timing.scope is not scope:raise ValueError('Exact scoped timing binding required')
+        if process is not None:
+            from .task_process import PreparedWorkerProcess
+            if type(process) is not PreparedWorkerProcess or process.scope is not scope or cleanup_authorize is None:
+                raise ValueError('Exact scoped process binding and cleanup authority required')
+        self.process=self._process=process
         self.timing=timing;self._timing=timing
         self._cleanup_authorize=cleanup_authorize;self._cleanup_current=cleanup_current;self.cleanup=None;self._cleanup_owner=None
         self.activity_projector=activity_projector;self._activity_projector=activity_projector
@@ -97,9 +102,21 @@ class TaskEngineHandle:
             if self._active or self._started:raise EngineUnavailable('Timing binding requires inert engine')
             self._timing.bind(manager,outer,self)
 
+    def bind_process(self,manager,outer):
+        if self.process is not self._process:raise EngineUnavailable('Process binding changed')
+        if self._process is not None:
+            with self._condition:
+                if self._active or self._started:raise EngineUnavailable('Process binding requires inert engine')
+                self._process.bind(manager,outer,self)
+
+    def _process_drained(self):
+        if self.process is not self._process:raise EngineUnavailable('Process binding changed')
+        return self._process is None or self._process.drained()
+
     @staticmethod
     def _identity(scope):return (scope.task_id,scope.exploration_id,scope.run_id,scope.revision)
     def _check(self):
+        if not self._process_drained():raise EngineUnresolved('Process effects require reconciliation')
         if self.timing is not self._timing:raise EngineUnavailable('Timing binding changed')
         if self._timing is not None:self._timing.validate_bindings()
         if self.current(self.scope,self.token) is not True:raise EngineUnavailable('Engine generation changed')
@@ -139,12 +156,12 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
         if timeout is not None and (isinstance(timeout,bool) or not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or timeout<0):raise ValueError('Finite nonnegative timeout required')
         with self._condition:
             if self._active and self._thread==get_ident():raise EngineUnavailable('Engine cannot wait for itself')
-            return self._condition.wait_for(lambda:not self._active,timeout)
+            return self._condition.wait_for(lambda:not self._active,timeout) and self._process_drained()
     @property
     def task_id(self):return str(self.scope.task_id)
     @property
     def unresolved(self):
-        with self._condition:return self._unresolved
+        with self._condition:return self._unresolved or (not self._active and not self._process_drained())
     def advance(self,now):
         if isinstance(now,bool) or not isinstance(now,(int,float)) or not math.isfinite(now) or now<0:raise ValueError('Finite monotonic tick required')
         with self._condition:
@@ -228,7 +245,7 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
         if not callable(complete):raise ValueError('Exact-token completion callback required')
         with self._condition:
             if self._completed:return True
-            if self._active or self._unresolved or self.token.cancelled:return False
+            if self._active or self._unresolved or self.token.cancelled or not self._process_drained():return False
             self._active=True;self._thread=get_ident()
         attempted=False
         try:

@@ -1,8 +1,9 @@
 """Explicit persisted-role bootstrap/engine composition, without a second manager.
 
 Construction is inert. Host policies, prompts, transcript storage and graph-tool
-catalogs are mandatory inputs, not discovered permissions. Only local graph tools
-are supported here. No process/MCP/network tools, inherited exploration, restart
+catalogs are mandatory inputs, not discovered permissions. Local graph tools are the default. An explicit worker_process_policy adds only
+foreground Bash through a host-injected runner and independent drain ledger.
+No default process runner, MCP/network tools, inherited exploration, restart
 adoption, timed execution, quota failover, or automatic pump are supplied.
 Optional TaskTimingPolicy composes inert original-owner timing resources and
 planner/worker wrappers only after prepared binding. It requires explicit cleanup
@@ -33,7 +34,7 @@ from ..transcripts import TranscriptStore
 class TaskRuntimeAssembly:
     def __init__(self,executor,*,providers,transcript,prompts,policy_revision,
                  current,lifecycle_guard,authorize,asset_authorize,validate_input,
-                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None,timing_policy=None):
+                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None,timing_policy=None,worker_process_policy=None):
         if type(providers) is not TaskProviderResolver or providers.tasks.executor is not executor:
             raise ValueError('Exact persisted provider resolver/executor required')
         if any(not callable(x) for x in (current,lifecycle_guard,authorize,asset_authorize,validate_input)):
@@ -57,6 +58,13 @@ class TaskRuntimeAssembly:
             if type(timing_policy) is not TaskTimingPolicy:raise ValueError('Exact task timing policy required')
             timing_policy.__post_init__()
             if cleanup_authorize is None:raise ValueError('Task timing requires explicit inflight cleanup policy')
+        if worker_process_policy is not None:
+            from .task_process import WorkerProcessPolicy
+            if type(worker_process_policy) is not WorkerProcessPolicy or cleanup_authorize is None:
+                raise ValueError('Exact process policy and cleanup authority required')
+            worker_process_policy.__post_init__()
+        self._process_policy=self._process_pin=worker_process_policy
+        self._process_fields=None if worker_process_policy is None else tuple(vars(worker_process_policy).items())
         self._timing_policy=self._timing_pin=timing_policy
         self._timing_fields=None if timing_policy is None else (timing_policy.revision,timing_policy.clock,
             timing_policy.wall_clock,timing_policy.stamp_authorize,timing_policy.dispatch_authorize)
@@ -73,10 +81,13 @@ class TaskRuntimeAssembly:
         self._coordinator_pins=(self.coordinator.journal,self.coordinator.factory,self.coordinator.current)
     def _configuration_identity(self):
         payload={'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}}
+        if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
         return json.dumps(payload,sort_keys=True,allow_nan=False)
     def validate_bindings(self):
         e,p,t,tasks,agents,profiles,factory=self._pins
+        if self._process_policy is not self._process_pin or self._process_policy is not None and any(getattr(self._process_policy,k) is not v for k,v in self._process_fields):
+            raise RuntimeUnavailable('Process policy changed')
         policy=self._timing_policy
         if policy is not self._timing_pin:raise RuntimeUnavailable('Task timing policy changed')
         if policy is not None:
@@ -150,6 +161,7 @@ class TaskRuntimeAssembly:
                  'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()},
                  'limits':asdict(self._limits),'policy':self._revision,'activity_projection':self._activity_authorize is not None}
         if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
+        if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
         if timeout:payload['timeout_seconds']=timeout
         if self._task_timeout(task)!=timeout:raise RuntimeUnavailable('Timeout changed during role selection')
@@ -201,9 +213,14 @@ class TaskRuntimeAssembly:
         def guarded(s):
             if (s.task_id,s.exploration_id,s.run_id,s.revision)!=(scope.task_id,scope.exploration_id,scope.run_id,scope.revision):raise RuntimeUnavailable('Foreign runtime scope')
             return guard(scope)
+        process=None
+        if self._process_policy is not None:
+            from .task_process import PreparedWorkerProcess
+            process=PreparedWorkerProcess(scope,self._process_policy,configuration_current=cleanup_current)
         def graph_tools(role,s,check):
             gs=GraphScope(s.task_id,s.exploration_id,s.run_id,s.revision,role,getattr(s,'intent_id',0))
             tools=GraphTools(graph,gs,current=lambda _:check(),lifecycle_guard=lambda _:guarded(s),authorize=self._authorize,asset_authorize=lambda scope,ids:self._assets(scope,ids,None)).tools()
+            if role=='worker' and process is not None:tools=tools+process.tools(s)
             names={r.key for r in self._catalog[role]}
             if not names.issubset({t.name for t in tools}):raise RuntimeUnavailable('Only explicit local graph tools supported')
             return tuple(t for t in tools if t.name in names)
@@ -241,7 +258,7 @@ class TaskRuntimeAssembly:
         return TaskEngineHandle(scope,token,store=graph,planner=planner,planner_scope=ps,worker=worker,
             worker_model=models['worker'],worker_system=self._prompts['worker'],owner='runtime-'+str(scope.run_id),
             current=current,lifecycle_guard=guard,single_process=True,activity_projector=projector,cleanup_authorize=self._cleanup_authorize,
-            cleanup_current=cleanup_current if self._cleanup_authorize is not None else None,**({'timing':timing} if timing is not None else {}))
+            cleanup_current=cleanup_current if self._cleanup_authorize is not None else None,process=process,**({'timing':timing} if timing is not None else {}))
     @staticmethod
     def initialized_readiness(task):raise RuntimeUnavailable('Initialized task adoption requires explicit recovery and is unsupported')
     @staticmethod

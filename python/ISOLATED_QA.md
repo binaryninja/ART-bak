@@ -1391,3 +1391,26 @@ Eleven real PostgreSQL 17.11 groups and 19 unchanged focused owner/review tests 
 Method: genuine zero-timeout manual-bootstrap fixture with inert fixed goals responses creates a prepared installed owner; private prepared timeout pin and matching local task row are then explicitly configured positive solely for this standalone component. No fake lease, planner/worker/final-model dispatch, public positive admission, full engine hook, tracked invocation tail or production runtime support is inferred.
 
 Original schema and explicit fresh additive bootstrap/unstamped receipt tables only, in a new disposable PostgreSQL database. Reused approved credentialless bwrap filesystem and outer user/network namespace, loopback only, readonly snapshot/cached dependencies, no external targets or real user data.
+
+## Stage 106: optional worker-process composition
+
+Exact frozen process-composition source; manifest SHA256 `5c61a8255ae79b884f071dc927b83749ab9c11e840787e0c95bd42dbe2b3b73a`. No live overlays or product changes.
+
+Eight actual PostgreSQL 17.11 scenarios, each with a fresh database, and 19 unchanged focused tests pass.
+
+Actual authenticated natural zero-timeout TaskRuntimeAssembly constructs an explicit WorkerProcessPolicy, inert runner, worker-only Bash catalog, and cleanup policy. Real bootstrap creates goals; planner creates intent; owned worker invokes the fixed synthetic Bash proposal. No positive pins or handwritten lifecycle factories.
+
+- Success: one inert runner call returns exact ProcessResult; process ledger drains, actual SQL intent becomes done, canonical outcome is completed and cleanup capability releases. This is worker completion, not full task completion.
+- Denied launch: no runner invocation; process ledger stays drained.
+- Last launch-grant callback cancels manager token: no runner invocation, process stays drained.
+- CleanupUncertain after entry: actual intent remains running, canonical result remains pending, cleanup capability retained, process sticky uncertainty, host cannot drain; subsequent tick makes no second runner call.
+- Malformed ProcessResult with Boolean exit code has the same retained-uncertainty behavior.
+- Actual separate thread blocks inside inert runner: active process and handle refuse drain. Event release raises uncertainty, preserving pending SQL/canonical/cleanup state and no replay.
+- Default assembly without process policy still refuses Bash before any worker provider/runner invocation.
+- Planner Bash catalog is refused before planner provider/runner invocation even with worker policy present.
+
+The runner contract is synchronous: a valid ProcessResult is the host runner's assertion that its effects have drained. These tests do not verify OS containment, detached descendant termination, PosixRunner, actual shell execution or real target access. No subprocess was launched. All model responses and runner effects are inert fixture callbacks.
+
+Isolation: approved outer user/network namespace and credentialless bwrap, loopback-only disposable PostgreSQL, readonly exact snapshot, cached trusted dependencies; no external providers, credentials, real user files or public listener.
+
+One fixture correction: captured activity callback receives ChatOutcome, so completion assertion uses `.result.reason`, not `.reason`. Original failed fixture log preserved. All subsequent scenarios passed without product modifications.
