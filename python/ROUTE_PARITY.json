@@ -35,6 +35,7 @@
     "python/artex/server/intercept_config_read.py": "673f2b9a22cd37f043bce7bd596405fdb57b6ff6bdcd979a8b5b66029a5fe2d0",
     "python/artex/server/intercept_inspection.py": "99975e547b99bccaaa43ffade989e49a1fd114eeb63702de9c21acfc59746126",
     "python/artex/server/intercept_rules.py": "62849c6f92c7a2d5a8236fa1aadf9ac68525004d9f31ac4388d6759bdbd81222",
+    "python/artex/server/judge_usage_read.py": "eaaa1f3a4d8d01d01f23c54c62ec32109878b3e3108937469b85da2132a0a282",
     "python/artex/server/llm_records.py": "517bddaf11f765360eb4cba683d723ebb1b4d73ab63f12f644c9b3b04be94486",
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/main_sessions.py": "193ec9b75cfe99472747cced3d9e9ae90369d989a342f2e58cf119b114cd4f85",

@@ -1247,3 +1247,19 @@ Five actual integration groups passed:
 Twenty-seven focused finalization/observer tests passed on this exact snapshot. Initial harness lacked a tempfile import; corrected the harness only and retained original failure log. No product source changed.
 
 All positive-timeout owners here require explicitly synthetic private prepared-timeout pin and persisted clock fixtures. No positive-duration public admission, timed engine gate bypass, complete timed application, default scheduling, live model, restart recovery or production guarantee is established. Assessment provider emits fixed local text; graph truth remains authoritative. The postcommit case is an injected acknowledgement failure after a real SQL commit, not an actual PostgreSQL crash.
+
+## Stage 98: global judge-usage metadata read
+
+Manifest SHA-256: `155458d6306b771036ea8b80acd881a3905363e1d6106f50a7932578e1c62d54`.
+Exact final39 Python base plus only reviewed db/judge_usage_read.py, server/judge_usage_read.py, owner test, independent test_judge_usage_read_review.py and JUDGE_USAGE_READ_STATUS.md. No evolving runtime/registration overlay.
+
+Independent source review matched Go db/llm_usage.go JudgeUsageStats: all-time judge ledger totals including failed/interrupted calls, UTC daily grouping and rolling days filter only on daily series. Python deliberately combines both source queries into one statement snapshot, caps requested days/daily rows, and fails rather than returning a truncated policy-sensitive result. Original ledger token columns are INTEGER, so SUM returns exact BIGINT; no floating conversion. Projection contains no raw payload columns.
+
+Eight focused tests passed, including two added independent tests for exact integers above 2^53/inconsistent total rejection and final serialization policy-identity replacement refusal. No product correction needed.
+
+Three real PostgreSQL 17 groups passed in approved credential-free disposable isolation:
+- Explicit recording schema installer, empty-ledger zeros, old judge call included in all-time but excluded from daily, failed/interrupted included, worker calls excluded, exact 4,000,000,100 aggregate, same UTC series under Pacific/Honolulu session timezone. Actual bound SQL parsed/executed against original recording schema.
+- Synthetic future ledger rows exceed daily-row bound: whole read refuses500 rather than silently truncates; removing only those synthetic rows restores successful read.
+- Revoking original grant after actual aggregate fetch returns403 without totals; initial denial performs no query.
+
+No route registration, inference, real records/credentials, external targets, default metering permission or production claim. Three explicit synthetic fixture groups only; no concurrency snapshot race or archive-merging claim. All-time aggregates scan the ledger and the single snapshot is a deliberate consistency improvement over Go's two statements. No harness corrections required.
