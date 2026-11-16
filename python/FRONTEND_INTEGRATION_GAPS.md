@@ -12,6 +12,13 @@ token. `web/next.config.mjs` development rewrite defaults to localhost:8787 and
 can use AUTOPENTEST_API; static export requires an external reverse proxy/static
 host. SSE chooses NEXT_PUBLIC_SSE_BASE, otherwise development browser hostname:8787
 (`api.ts:sseUrl`). These destinations must actually point to a Python WSGI host.
+An existing dev-only CLI, `artex/__main__.py`, accepts explicit `--serve` and binds
+stdlib WSGI to `127.0.0.1` using externally supplied DSN/signing key and bcrypt.
+It mounts persisted metadata/CRUD contracts, not the provider/task runtime, pump
+or frontend. `test_cli.py` mocks the socket boundary; it does not prove a real
+listener acceptance test. The remaining gap is checked full-runtime resource and
+lifecycle composition into that transport, not the absence of any listener code.
+
 Neither `build_application` nor `build_persisted_application` opens a listener,
 serves the frontend, sets TLS/timeouts or creates credentials/connections.
 
@@ -104,7 +111,9 @@ remain separate commits: crash recovery and cross-process authority are not solv
 profile configuration and conversation execution on one JWT-authenticated WSGI
 application. Agent support, authorization, grants, tools, prompt resolver, profile
 transport, transcript root and single-process ownership must all be supplied.
-There is no default deployment or listener. Optional catalog_store and explicit
+This conversation assembly is not wired into the packaged listener. The existing
+`python -m artex --serve` loopback CLI mounts the persisted metadata/CRUD application,
+not conversation execution. Optional catalog_store and explicit
 catalog prompt/readiness adapters now mount GET/POST /api/agents and metadata
 routes. Attachments and mentions remain unavailable, so this assembly alone does
 not make the complete chat screen usable. Independent mocked JWT assembly tests exercise configure/send/poll

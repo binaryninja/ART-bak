@@ -9,6 +9,8 @@ from .task_runtime_reads import TaskRuntimeReads,TaskReadScope
 from .task_findings import TaskFindingsService
 from .task_activity import TaskActivityService
 from .main_sessions import MainSessionsService
+from .task_goal_reads import TaskGoalReads
+from .task_coverage_reads import TaskCoverageReads
 from ..db.main_sessions import MainSessionsStore
 from ..db.task_coverage import TaskCoverageStore,CoverageScope
 from ..db.task_findings import TaskFindingsStore
@@ -19,13 +21,17 @@ class TaskReadServices:
     reads:TaskRuntimeReads
     activity:TaskActivityService
     main_sessions:MainSessionsService | None = None
+    goals:TaskGoalReads | None = None
+    coverage:TaskCoverageReads | None = None
 
 class TaskReadBuilder:
     def __init__(self,executor,*,request_authorize,context_authorize,asset_authorize,
                  runtime_snapshot,activity_authorize,activity_raw_authorize,
                  activity_request_authorize,stream_authorize,stream_wait=None,
                  max_rows=500,max_bytes=1048576,max_batches=20,max_polls=3,
-                 main_sessions_authorize=None,main_sessions_request_authorize=None):
+                 main_sessions_authorize=None,main_sessions_request_authorize=None,
+                 goal_authorize=None,goal_request_authorize=None,
+                 coverage_authorize=None,coverage_request_authorize=None,coverage_asset_authorize=None,coverage_connector_authorize=None):
         policies=(request_authorize,context_authorize,asset_authorize,runtime_snapshot,
                   activity_authorize,activity_raw_authorize,activity_request_authorize,stream_authorize,stream_wait)
         if any(not callable(f) for f in policies[:-1]) or stream_wait is not None and not callable(stream_wait):raise ValueError('Explicit independent task read grants required')
@@ -33,6 +39,14 @@ class TaskReadBuilder:
                 or type(max_batches) is not int or not 1<=max_batches<=100 or type(max_polls) is not int or not 1<=max_polls<=100):raise ValueError('Bounded read configuration required')
         if (main_sessions_authorize is None)!=(main_sessions_request_authorize is None) or any(f is not None and not callable(f) for f in (main_sessions_authorize,main_sessions_request_authorize)):
             raise ValueError('Both independent main-session grants required')
+        if (goal_authorize is None)!=(goal_request_authorize is None) or any(f is not None and not callable(f) for f in (goal_authorize,goal_request_authorize)):
+            raise ValueError('Both independent goal read grants required')
+        coverage_policies=(coverage_authorize,coverage_request_authorize,coverage_asset_authorize,coverage_connector_authorize)
+        if any(f is not None for f in coverage_policies) and (any(not callable(f) for f in coverage_policies[:3]) or coverage_connector_authorize is not None and not callable(coverage_connector_authorize)):
+            raise ValueError('Independent coverage source/request/asset grants required')
+        self._coverage_policies=coverage_policies;self._original_coverage_policies=coverage_policies
+        self._goal_policies=(goal_authorize,goal_request_authorize)
+        self._original_goal_policies=self._goal_policies
         self._session_policies=(main_sessions_authorize,main_sessions_request_authorize)
         self._original_session_policies=self._session_policies
         self.executor=executor;self._executor=executor;self._policies=policies
@@ -40,7 +54,7 @@ class TaskReadBuilder:
         self._original_policies=policies;self._original_bounds=self._bounds
     def validate_bindings(self):
         if (self.executor is not self._executor or self._policies is not self._original_policies
-                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies):raise ValueError('Read builder configuration changed')
+                or self._bounds is not self._original_bounds or self._session_policies is not self._original_session_policies or self._goal_policies is not self._original_goal_policies or self._coverage_policies is not self._original_coverage_policies):raise ValueError('Read builder configuration changed')
         return True
     def build(self,scope,*,current,lifecycle_guard):
         self.validate_bindings()
@@ -80,4 +94,17 @@ class TaskReadBuilder:
             session_store=MainSessionsStore(self.executor,CoverageScope(*identity),
                 authorize=lambda s:grant(session_read,scope),current=live,lifecycle_guard=guard,max_rows=rows)
             sessions=MainSessionsService(session_store,authorize=lambda req,s:grant(session_request,req,scope),max_response_bytes=bytes_)
-        return TaskReadServices(reads,activity_service,sessions)
+        goals=None
+        goal_read,goal_request=self._goal_policies
+        if goal_read is not None:
+            goals=TaskGoalReads(self.executor,scope,authorize=lambda s:grant(goal_read,scope),
+                request_authorize=lambda req,s:grant(goal_request,req,scope),current=live,lifecycle_guard=guard)
+        coverage_reads=None
+        csource,crequest,casset,cconnector=self._coverage_policies
+        if csource is not None:
+            coverage_reads=TaskCoverageReads(self.executor,scope,authorize=lambda s,t,e:grant(csource,scope,t,e),
+                request_authorize=lambda req,s,selection:grant(crequest,req,scope,selection),
+                asset_authorize=lambda s,selection,ids:grant(casset,scope,selection,ids),
+                connector_authorize=None if cconnector is None else lambda s,k,v:grant(cconnector,scope,k,v),
+                current=live,lifecycle_guard=guard,max_rows=rows,max_bytes=bytes_)
+        return TaskReadServices(reads,activity_service,sessions,goals,coverage_reads)

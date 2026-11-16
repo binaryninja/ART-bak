@@ -1,7 +1,10 @@
 # Server port status
 
 This package began as an **offline contract core** and now includes explicit opt-in
-WSGI application/runtime compositions. It does not launch a listener. The initial
+WSGI application/runtime compositions. These factories do not launch a listener.
+The separate existing `artex.__main__` dev CLI explicitly serves the persisted
+metadata/CRUD app on IPv4 loopback; it does not compose runtime providers, pump
+or frontend. CLI tests mock its socket boundary, not actual listener acceptance. The initial
 health/auth foundation was based on
 `server/auth.go` and response/routing/health contracts in `server/server.go`.
 The original foundation tests used memory-only stores. Later component acceptance
@@ -26,7 +29,7 @@ expiration mandatory, signing keys at least 32 bytes, only explicit public route
 Password changes retain upstream behavior: already-issued tokens are NOT revoked.
 
 Current scope supersedes the original five-route prototype: the static inventory
-records **180 unique method/path registrations** (196 declarations for the reviewed
+records **180 unique method/path registrations** (200 declarations for the reviewed
 stage 79 composition target, pending its generated report checkpoint), not 180 live or behaviorally equivalent endpoints. Optional
 services require explicit adapters, grants and lifecycle ownership; absence may
 mean an unregistered route or a fail-closed 503. See `ROUTE_PARITY.md` and

@@ -34,8 +34,8 @@ read overlay has the corresponding final authentication fence.
   replacement and authentication replacement during serialization/frame production
   were tested. Reads triggered no inference. Findings in this execution fixture
   were genuinely empty; stage 77 separately covered nonempty synthetic findings.
-- Route audit now records **180 unique method/path routes, 196 declarations and
-  ten exact audited alternative groups**. All declaration locations are retained;
+- Route audit now records **180 unique method/path routes, 200 declarations and
+  fourteen exact audited alternative groups**. All declaration locations are retained;
   unexpected duplicates still fail. These counts are not runtime parity claims.
 
 Stage 79 final immutable manifest:

@@ -35,6 +35,9 @@ class TaskRuntimeReadRouter:
         b.validate_bindings();return True
     @staticmethod
     def _operation(path):
+        match=re.fullmatch(r'/api/tasks/([^/]+)/(coverage|coverage-graph|asset-refs)',path)
+        if match:return {'coverage':'coverage','coverage-graph':'coverage_graph','asset-refs':'coverage_refs'}[match[2]],{'id':match[1]}
+        if re.fullmatch(r'/api/tasks/[^/]+/goals',path):return 'goals',{'id':path.split('/')[-2]}
         if path=='/api/exploration/main-sessions':return 'main_sessions',{}
         if path=='/api/llm/profiles':return 'profiles',{}
         if re.fullmatch(r'/api/tasks/[^/]+',path):return 'task',{'id':path.rsplit('/',1)[1]}
@@ -46,7 +49,7 @@ class TaskRuntimeReadRouter:
         if type(application) is not WSGIApplication or type(application.router) is not Router:raise ValueError('One original authenticated application required')
         self.validate_bindings();base=application.router;auth=base.authorize;owner=self
         protected=Router(auth)
-        for path in ('/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
+        for path in ('/api/tasks/{id}/coverage','/api/tasks/{id}/coverage-graph','/api/tasks/{id}/asset-refs','/api/tasks/{id}/goals','/api/exploration/main-sessions','/api/tasks/{id}','/api/stats','/api/exploration/intents','/api/exploration/findings','/api/llm/profiles','/api/exploration/activity','/api/exploration/activity/history','/api/exploration/activity/stream','/api/exploration/activity/{seq}'):
             protected.add('GET',path,lambda req,params:owner._read(req,base,auth))
         class Overlay:
             def dispatch(self,request):
@@ -81,10 +84,10 @@ class TaskRuntimeReadRouter:
                     if self._pins[7] is None or self._pins[7](request) is not True:raise ReadDenied()
                     auth_binding()
                 allowed();response=ProfileService(ProfileStore(self._pins[2]))._handle('list',request);allowed();return response
-            raw=params['id'] if op=='task' else q.get('task',[''])[0]
+            raw=params['id'] if 'id' in params else q.get('task',[''])[0]
             if not re.fullmatch('[1-9][0-9]{0,18}',raw) or int(raw)>=2**63:raise ValueError()
             task_id=int(raw)
-            if op=='task' and q:raise ValueError()
+            if op in ('task','goals','coverage','coverage_graph') and q:raise ValueError()
             selector(task_id)
             task=self._pins[0].get(task_id)
             selector(task_id)
@@ -110,7 +113,13 @@ AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1)''',(task_id,scope.
             with guard(scope):current(scope)
             services=self._pins[1].build(scope,current=current,lifecycle_guard=guard)
             self.validate_bindings()
-            if op=='main_sessions':
+            if op in ('coverage','coverage_graph','coverage_refs'):
+                if services.coverage is None:return error_response(503,'Coverage read capability unavailable')
+                response=services.coverage.handle({'coverage':'coverage','coverage_graph':'graph','coverage_refs':'refs'}[op],request)
+            elif op=='goals':
+                if services.goals is None:return error_response(503,'Goal read capability unavailable')
+                response=services.goals.handle(request)
+            elif op=='main_sessions':
                 if services.main_sessions is None:return error_response(503,'Main-session read capability unavailable')
                 response=services.main_sessions.handle(request)
             elif op in ('list','history','stream','detail'):response=services.activity.handle(op,request,params)

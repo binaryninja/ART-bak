@@ -27,7 +27,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **2577 tests**; these are authored unit/adapter
+combined suite currently passes **2615 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
@@ -70,3 +70,18 @@ execution and parity limits.
 Latest details: [GRAPH_RUNTIME_STATUS.md](GRAPH_RUNTIME_STATUS.md). Optional SQL
 syntax QA: `python tools/check_sql_syntax.py` from this directory after installing
 the separate `qa` extra. This runs authored tests only, not a database.
+
+## Existing development launcher and remaining composition gap
+
+`python -m artex --check-config` validates explicit `ARTEX_PG_DSN` and
+`ARTEX_SIGNING_KEY_HEX` inputs without opening a database or listener.
+`python -m artex --serve --port 8787` is an existing dev-only, single-threaded
+stdlib WSGI loopback launcher for the persisted metadata/CRUD application. It
+requires the optional psycopg/bcrypt dependencies and an existing compatible
+schema. It does not create credentials/schema, infer provider keys, host the
+frontend, start a task pump or resume tasks. Do not expose it publicly.
+
+The CLI tests mock database/server boundaries; this statement describes source
+capability, not an actual socket acceptance result. Full task-runtime resource
+and shutdown composition into a packaged launcher remains separate work. See
+`DEV_RUNTIME_LISTENER_PLAN.md` for the proposed explicit-input boundary.

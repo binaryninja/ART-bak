@@ -1035,3 +1035,38 @@ retained; new admission/advancement is denied; exact pins and pending rechecks a
 verified. The fixture explicitly injects a positive prepared-timeout pin: this is
 NOT working positive-duration runtime. There is no expiry scheduler, final model
 assessment, terminal-write capability, automatic release or recovery claim.
+
+## Dynamic goals GET (stage 83)
+
+Manifest `96d17d24cb704ac415ca39b7a5720bedabaf4c4a8fd24e3933b83ff6d22c82e6`
+passed four actual PostgreSQL groups and ten focused tests. One unchanged runtime
+application returns each of two tasks' own persisted met-goal source DTO through
+explicit dynamic read grants. Response-time grant revocation and original JWT
+callback replacement withhold disclosure; denied task selection does not affect
+the other task. An oversized persisted UTF-8 payload refuses503, and POST does not
+enable goal mutation. Reads make no model calls. This is Python HTTP acceptance,
+not frontend/browser, live provider, automatic completion or goal CRUD coverage.
+
+## Final-assessment journal prerequisite (stage 84)
+
+Manifest `b124112e09d940196a1d3ec000582c63e629f1a86c18f3d6e3a0d0e1249754c8`
+passed four actual PostgreSQL groups and nineteen focused tests. Fresh additive
+installation refuses wrong databases and existing objects. Exact expired owner
+reservation, phase CAS, canonical inert JSONL recording and read-only inspection
+were exercised; stale receipt/config/bootstrap identities refuse. Actual trigger
+rollback retains quarantine and disallows retry without clearing ownership.
+Positive clock configuration remains a private synthetic prepared-pin injection,
+not admitted timed runtime. No assessment model runner or terminal permission is
+implemented or claimed; canonical test results were locally authored inert data.
+
+## Dynamic coverage, graph and asset references (stage 87)
+
+Manifest `ecac1991abd088cbbf365863dde28cf17781fccea0f5f512bea3ce9665df7810`
+passed three actual PostgreSQL groups and nine focused tests. One unchanged
+runtime application resolves two tasks' distinct synthetic scopes/assets with
+actual coverage counts and graph company connectors. Asset-reference DTOs retain
+local versus directly inherited terminal-intent provenance. Explicit asset
+callbacks revoking previously granted source or connector authority return403
+without graph content. One task's selector denial does not affect the other.
+Reads invoke no models/testing; POST does not enable mutation. All assets/scopes
+and provider responses are inert fixtures, not target tests or default permission.

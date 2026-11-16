@@ -338,6 +338,11 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
 # (including a second occurrence at the same owner) still fails the audit.
 _ALTERNATIVE_BASE = 'python/artex/server/'
 PYTHON_ALTERNATIVE_GROUPS = {
+    ('GET','/api/tasks/{id}/coverage'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/coverage-graph'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/asset-refs'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+
+    ('GET','/api/tasks/{id}/goals'): ('explicit-goal-crud-or-dynamic-read-only', (('task_goals.py','TaskGoalService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/exploration/main-sessions'): ('explicit-fixed-or-dynamic-main-session-read', (('main_sessions.py','MainSessionsService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}'): ('explicit-fixed-or-dynamic-task-read-overlay', (('tasks.py','TaskService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/stats'): ('explicit-fixed-or-dynamic-task-read-overlay', (('stats.py','StatsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),

@@ -23,8 +23,8 @@ Declaration counts retain every source location; alternatives are not simultaneo
 - go method path routes: **261**.
 - go mount handlers: **2**.
 - python offline contract routes: **180**.
-- python route declarations: **196**.
-- python alternative route groups: **10**.
+- python route declarations: **200**.
+- python alternative route groups: **14**.
 - python optional service routes: **174**.
 - matched offline contract routes: **180**.
 - go routes without python registration: **81**.
@@ -101,11 +101,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:78` |
-| GET | `/api/exploration/activity` | `server/server.go:773` | Optional registration; adapters required: `python/artex/server/task_activity.py:26` (audited alternatives: `python/artex/server/task_activity.py:26`, `python/artex/server/task_runtime_read_router.py:50`) |
-| GET | `/api/exploration/activity/history` | `server/server.go:774` | Optional registration; adapters required: `python/artex/server/task_activity.py:27` (audited alternatives: `python/artex/server/task_activity.py:27`, `python/artex/server/task_runtime_read_router.py:50`) |
-| GET | `/api/exploration/activity/stream` | `server/server.go:777` | Optional registration; adapters required: `python/artex/server/task_activity.py:28` (audited alternatives: `python/artex/server/task_activity.py:28`, `python/artex/server/task_runtime_read_router.py:50`) |
-| GET | `/api/exploration/activity/{seq}` | `server/server.go:778` | Optional registration; adapters required: `python/artex/server/task_activity.py:29` (audited alternatives: `python/artex/server/task_activity.py:29`, `python/artex/server/task_runtime_read_router.py:50`) |
-| GET | `/api/exploration/findings` | `server/server.go:756` | Optional registration; adapters required: `python/artex/server/findings.py:126` (audited alternatives: `python/artex/server/findings.py:126`, `python/artex/server/task_findings.py:11`, `python/artex/server/task_runtime_read_router.py:50`, `python/artex/server/task_runtime_reads.py:101`) |
+| GET | `/api/exploration/activity` | `server/server.go:773` | Optional registration; adapters required: `python/artex/server/task_activity.py:26` (audited alternatives: `python/artex/server/task_activity.py:26`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/exploration/activity/history` | `server/server.go:774` | Optional registration; adapters required: `python/artex/server/task_activity.py:27` (audited alternatives: `python/artex/server/task_activity.py:27`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/exploration/activity/stream` | `server/server.go:777` | Optional registration; adapters required: `python/artex/server/task_activity.py:28` (audited alternatives: `python/artex/server/task_activity.py:28`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/exploration/activity/{seq}` | `server/server.go:778` | Optional registration; adapters required: `python/artex/server/task_activity.py:29` (audited alternatives: `python/artex/server/task_activity.py:29`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/exploration/findings` | `server/server.go:756` | Optional registration; adapters required: `python/artex/server/findings.py:126` (audited alternatives: `python/artex/server/findings.py:126`, `python/artex/server/task_findings.py:11`, `python/artex/server/task_runtime_read_router.py:53`, `python/artex/server/task_runtime_reads.py:101`) |
 | GET | `/api/exploration/findings/asset-tree` | `server/server.go:758` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
 | GET | `/api/exploration/findings/export` | `server/server.go:760` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
 | GET | `/api/exploration/findings/groups` | `server/server.go:757` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
@@ -127,9 +127,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}/body` | `server/finding_traffic.go:90` | Not registered |
 | GET | `/api/exploration/frontier` | `server/server.go:755` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
-| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` (audited alternatives: `python/artex/server/exploration.py:78`, `python/artex/server/task_runtime_read_router.py:50`, `python/artex/server/task_runtime_reads.py:97`) |
+| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` (audited alternatives: `python/artex/server/exploration.py:78`, `python/artex/server/task_runtime_read_router.py:53`, `python/artex/server/task_runtime_reads.py:97`) |
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
-| GET | `/api/exploration/main-sessions` | `server/server.go:775` | Optional registration; adapters required: `python/artex/server/main_sessions.py:12` (audited alternatives: `python/artex/server/main_sessions.py:12`, `python/artex/server/task_runtime_read_router.py:50`) |
+| GET | `/api/exploration/main-sessions` | `server/server.go:775` | Optional registration; adapters required: `python/artex/server/main_sessions.py:12` (audited alternatives: `python/artex/server/main_sessions.py:12`, `python/artex/server/task_runtime_read_router.py:53`) |
 | GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/tokens` | `server/server.go:779` | Optional registration; adapters required: `python/artex/server/token_usage.py:26` |
 | POST | `/api/gc` | `server/server.go:785` | Not registered |
@@ -156,7 +156,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/llm/models` | `server/server.go:906` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | GET | `/api/llm/pool` | `server/server.go:904` | Optional registration; adapters required: `python/artex/server/pool_health.py:130` |
 | POST | `/api/llm/pool/reset` | `server/server.go:905` | Optional registration; adapters required: `python/artex/server/pool_health.py:130` |
-| GET | `/api/llm/profiles` | `server/server.go:898` | Optional registration; adapters required: `python/artex/server/profiles.py:126` (audited alternatives: `python/artex/server/profiles.py:126`, `python/artex/server/task_runtime_read_router.py:50`, `python/artex/server/task_runtime_reads.py:98`) |
+| GET | `/api/llm/profiles` | `server/server.go:898` | Optional registration; adapters required: `python/artex/server/profiles.py:126` (audited alternatives: `python/artex/server/profiles.py:126`, `python/artex/server/task_runtime_read_router.py:53`, `python/artex/server/task_runtime_reads.py:98`) |
 | POST | `/api/llm/profiles` | `server/server.go:899` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm/profiles/active` | `server/server.go:901` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -203,7 +203,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PUT | `/api/skills/{name}/files/{file...}` | `server/server.go:889` | Not registered |
 | PUT | `/api/skills/{name}/meta` | `server/server.go:884` | Not registered |
 | GET | `/api/skills/{name}/usage` | `server/server.go:883` | Not registered |
-| GET | `/api/stats` | `server/server.go:661` | Optional registration; adapters required: `python/artex/server/stats.py:66` (audited alternatives: `python/artex/server/stats.py:66`, `python/artex/server/task_runtime_read_router.py:50`, `python/artex/server/task_runtime_reads.py:96`) |
+| GET | `/api/stats` | `server/server.go:661` | Optional registration; adapters required: `python/artex/server/stats.py:66` (audited alternatives: `python/artex/server/stats.py:66`, `python/artex/server/task_runtime_read_router.py:53`, `python/artex/server/task_runtime_reads.py:96`) |
 | POST | `/api/sync/scopesentry/datasource` | `server/server.go:873` | Not registered |
 | GET | `/api/sync/scopesentry/projects` | `server/server.go:874` | Not registered |
 | GET | `/api/sync/scopesentry/status` | `server/server.go:872` | Not registered |
@@ -229,10 +229,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/category/batch` | `server/server.go:679` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
 | POST | `/api/tasks/control/batch` | `server/server.go:693` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | DELETE | `/api/tasks/{id}` | `server/server.go:821` | Not registered |
-| GET | `/api/tasks/{id}` | `server/server.go:684` | Offline contract only: `python/artex/server/task_runtime_read_router.py:50` (audited alternatives: `python/artex/server/task_runtime_read_router.py:50`, `python/artex/server/task_runtime_reads.py:95`, `python/artex/server/tasks.py:209`) |
+| GET | `/api/tasks/{id}` | `server/server.go:684` | Offline contract only: `python/artex/server/task_runtime_read_router.py:53` (audited alternatives: `python/artex/server/task_runtime_read_router.py:53`, `python/artex/server/task_runtime_reads.py:95`, `python/artex/server/tasks.py:209`) |
 | PATCH | `/api/tasks/{id}` | `server/server.go:685` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | POST | `/api/tasks/{id}/archive` | `server/server.go:696` | Not registered |
-| GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
+| GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` (audited alternatives: `python/artex/server/task_coverage.py:29`, `python/artex/server/task_runtime_read_router.py:53`) |
 | POST | `/api/tasks/{id}/assets` | `server/server.go:705` | Not registered |
 | DELETE | `/api/tasks/{id}/assets/{assetID}` | `server/server.go:706` | Not registered |
 | PATCH | `/api/tasks/{id}/category` | `server/server.go:686` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
@@ -246,9 +246,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | DELETE | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:727` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
 | PATCH | `/api/tasks/{id}/constraints/{cid}` | `server/server.go:726` | Optional registration; adapters required: `python/artex/server/task_constraints.py:97` |
 | POST | `/api/tasks/{id}/control` | `server/server.go:728` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
-| GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
-| GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
-| GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
+| GET | `/api/tasks/{id}/coverage` | `server/server.go:702` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` (audited alternatives: `python/artex/server/task_coverage.py:29`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/tasks/{id}/coverage-graph` | `server/server.go:703` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` (audited alternatives: `python/artex/server/task_coverage.py:29`, `python/artex/server/task_runtime_read_router.py:53`) |
+| GET | `/api/tasks/{id}/goals` | `server/server.go:720` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` (audited alternatives: `python/artex/server/task_goals.py:108`, `python/artex/server/task_runtime_read_router.py:53`) |
 | POST | `/api/tasks/{id}/goals` | `server/server.go:721` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | DELETE | `/api/tasks/{id}/goals/{gid}` | `server/server.go:723` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
 | PATCH | `/api/tasks/{id}/goals/{gid}` | `server/server.go:722` | Optional registration; adapters required: `python/artex/server/task_goals.py:108` |
@@ -356,13 +356,13 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/conversations/delete/batch` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/frontier` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/intents` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/intents` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/intents` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/intents` at `python/artex/server/task_runtime_reads.py:97` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/graph` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/nodes` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/findings` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `GET /api/exploration/findings` at `python/artex/server/task_findings.py:11` (TaskFindingsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/findings` at `python/artex/server/task_runtime_reads.py:101` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
 - `PATCH /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
@@ -399,7 +399,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/logs/history` at `python/artex/server/logs.py:206` (LogService.register): build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/logs/stream` at `python/artex/server/logs.py:207` (LogService.register): build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
 - `GET /api/exploration/main-sessions` at `python/artex/server/main_sessions.py:12` (MainSessionsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/main-sessions` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/main-sessions` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/mcp` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/mcp` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/mcp/{id}` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -409,7 +409,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/profiles` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/profiles` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/profiles` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/profiles` at `python/artex/server/task_runtime_reads.py:98` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/profiles/active` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -430,16 +430,16 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/side-questions/{requestID}/events` at `python/artex/server/sidequestions.py:60` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/side-questions/{requestID}/cancel` at `python/artex/server/sidequestions.py:61` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/stats` at `python/artex/server/stats.py:66` (StatsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/stats` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/stats` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/stats` at `python/artex/server/task_runtime_reads.py:96` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/activity` at `python/artex/server/task_activity.py:26` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/activity` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/activity/history` at `python/artex/server/task_activity.py:27` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/activity/history` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/history` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/activity/stream` at `python/artex/server/task_activity.py:28` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/activity/stream` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/stream` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/exploration/activity/{seq}` at `python/artex/server/task_activity.py:29` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/activity/{seq}` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/{seq}` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-categories` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `POST /api/task-categories` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
 - `PATCH /api/task-categories/{id}` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
@@ -454,16 +454,20 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `PATCH /api/tasks/{id}/constraints/{cid}` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/tasks/{id}/constraints/{cid}` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/coverage` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/coverage-graph` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage-graph` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/asset-refs` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/asset-refs` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/goals` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/goals` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tasks/{id}/goals` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PATCH /api/tasks/{id}/goals/{gid}` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/tasks/{id}/goals/{gid}` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/intent-assets` at `python/artex/server/task_intent_assets.py:15` (TaskIntentAssetsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tasks/{id}/llm` at `python/artex/server/task_profiles.py:89` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/llm/resolution` at `python/artex/server/task_profiles.py:90` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}` at `python/artex/server/task_runtime_read_router.py:50` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}` at `python/artex/server/task_runtime_reads.py:95` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
 - `GET /api/tasks/{id}/scope` at `python/artex/server/task_scope.py:37` (TaskScopeService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.

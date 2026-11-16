@@ -123,6 +123,13 @@ class DeadlineFreeze:
     task_id: str
 
 
+@dataclass(frozen=True, eq=False)
+class DeadlineAssessment:
+    """Exact journal reservation only; no model/tool or terminal permission."""
+    task_id: str
+    config_digest: str
+
+
 @dataclass
 class _DeadlineSlot:
     reservation: DeadlineReservation
@@ -140,6 +147,7 @@ class _DeadlineSlot:
     attempted: bool = False
     lease: DeadlineLease | None = None
     freeze: DeadlineFreeze | None = None
+    assessment: DeadlineAssessment | None = None
 
 
 @dataclass
@@ -267,7 +275,7 @@ class TaskManager:
             if allow_cancelled:
                 return True
             deadline=self._deadline_slots.get(key)
-            if deadline is not None and deadline.state in ('freezing','drained','quarantined'):return False
+            if deadline is not None and deadline.state in ('freezing','drained','assessing','quarantined'):return False
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
@@ -452,6 +460,39 @@ class TaskManager:
             with self._lock:
                 if self._deadline_slots.get(freeze.task_id) is slot:slot.state='quarantined'
             raise
+
+    def reserve_deadline_assessment(self,freeze,token,handle,lease,config_digest):
+        """Reserve one final journal against a clean frozen generation.
+
+        This does not authorize inference, restart, final tools or terminal SQL.
+        An actual restricted runner and evidence-bound settlement remain separate.
+        """
+        if type(config_digest) is not str or len(config_digest)!=64 or any(c not in '0123456789abcdef' for c in config_digest):
+            raise ValueError('Canonical final configuration digest required')
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(freeze,'task_id',None))
+            if type(freeze) is not DeadlineFreeze or slot is None or slot.freeze is not freeze or slot.token is not token or slot.handle is not handle or slot.lease is not lease:
+                raise TaskConflict('Exact drained deadline owner required')
+            self._deadline_binding(slot)
+            if slot.assessment is not None:
+                if slot.state=='assessing' and slot.assessment.config_digest==config_digest:return slot.assessment
+                raise TaskConflict('Existing assessment requires reconciliation')
+            if slot.state!='drained':raise TaskConflict('Clean frozen drain required')
+            slot.assessment=DeadlineAssessment(freeze.task_id,config_digest);slot.state='assessing'
+            return slot.assessment
+
+    def validate_deadline_assessment(self,assessment,freeze,token,handle,lease,config_digest,*,inspection=False):
+        """Validate exact retained journal identity, never execution authority."""
+        if type(inspection) is not bool or type(assessment) is not DeadlineAssessment:return False
+        with self._lock:
+            slot=self._deadline_slots.get(assessment.task_id)
+            if slot is None or slot.assessment is not assessment or slot.freeze is not freeze or slot.token is not token or slot.handle is not handle or slot.lease is not lease or assessment.config_digest!=config_digest:
+                return False
+            if slot.state not in (('assessing','quarantined') if inspection else ('assessing',)):return False
+            try:self._deadline_binding(slot)
+            except (TaskConflict,AttributeError):return False
+            row=self._tasks.get(assessment.task_id)
+            return row is not None and row.get('deleted_at') is None and row.get('archived_at') is None and row.get('status') not in _TERMINAL
 
     def validate_deadline_owner(self,lease,operation='read'):
         """Lease-only read capability; never permits providers/tools/completion.
