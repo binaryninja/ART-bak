@@ -1263,3 +1263,18 @@ Three real PostgreSQL 17 groups passed in approved credential-free disposable is
 - Revoking original grant after actual aggregate fetch returns403 without totals; initial denial performs no query.
 
 No route registration, inference, real records/credentials, external targets, default metering permission or production claim. Three explicit synthetic fixture groups only; no concurrency snapshot race or archive-merging claim. All-time aggregates scan the ledger and the single snapshot is a deliberate consistency improvement over Go's two statements. No harness corrections required.
+
+## Stage 99: exact routes42 optional JWT metadata view and timeout identity
+
+Manifest SHA-256: `4471f920786fdd778a5f4868170f2e4571121980e85484f6f200458742f6aabb`.
+Source: frozen routes42 Python tree only, no evolving registry/listener/history overlay. Existing approved credential-free namespace/filesystem isolation and fresh PG17 fixtures; fixed inert provider callbacks for zero-timeout runtime only.
+
+Six actual integration groups passed:
+1. Actual configuration and tool-rule reads through optional WSGI JWT wrapper; original application still404 for those routes. Missing JWT returns401 before SQL; independent global and service/raw policy denials403 before SQL. HEAD remains400/no body.
+2. start_response callback revokes global authority: wrapper raises before returning any body. Exactly one already-emitted200 status observed; no fabricated replacement403 after headers.
+3. Dynamic existing-route conflict refuses binding without changing original declarations.
+4. Natural zero-timeout timing opt-in actual authenticated goals/planner/worker/proof completes, no deadline store/kernel/timing grants/stamps; positive HTTP create refuses prewrite.
+5. No-policy default actual lifecycle likewise completes without timing effects or positive admission.
+6. Actual persisted timeout metadata drift from0 to10 changes runtime configuration digest and refuses the old prepared scope before further provider work. Only initial goals2 occurred; no timed engine was advanced or gate bypassed.
+
+Twenty-six focused wrapper/timeout-identity owner and independent tests passed on this exact snapshot. No product edits, harness corrections or live network/model targets. Read wrapper explicitly mounted only in this disposable fixture. This is not production registration or positive-duration runtime support. Synthetic persisted timeout drift is a negative configuration test, not permitted entry. No listener/browser/frontend claim or arbitrary policy fixed-point guarantee.

@@ -22,12 +22,12 @@ Declaration counts retain every source location; alternatives are not simultaneo
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **180**.
-- python route declarations: **200**.
+- python offline contract routes: **182**.
+- python route declarations: **202**.
 - python alternative route groups: **14**.
 - python optional service routes: **174**.
-- matched offline contract routes: **180**.
-- go routes without python registration: **81**.
+- matched offline contract routes: **182**.
+- go routes without python registration: **79**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -143,13 +143,13 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/intercept/pending` | `server/server.go:922` | Optional registration; adapters required: `python/artex/server/intercept_inspection.py:25` |
 | GET | `/api/intercept/pending/{id}` | `server/server.go:923` | Optional registration; adapters required: `python/artex/server/intercept_inspection.py:26` |
 | POST | `/api/intercept/pending/{id}/decide` | `server/server.go:924` | Not registered |
-| GET | `/api/intercept/rules` | `server/server.go:909` | Not registered |
+| GET | `/api/intercept/rules` | `server/server.go:909` | Offline contract only: `python/artex/server/intercept_read_setup.py:45` |
 | POST | `/api/intercept/rules` | `server/server.go:910` | Not registered |
 | DELETE | `/api/intercept/rules/{id}` | `server/server.go:912` | Not registered |
 | PUT | `/api/intercept/rules/{id}` | `server/server.go:911` | Not registered |
 | POST | `/api/intercept/rules/{id}/toggle` | `server/server.go:913` | Not registered |
 | GET | `/api/intercept/task/{taskID}` | `server/server.go:928` | Not registered |
-| GET | `/api/intercept/tool-config` | `server/server.go:929` | Not registered |
+| GET | `/api/intercept/tool-config` | `server/server.go:929` | Offline contract only: `python/artex/server/intercept_read_setup.py:44` |
 | PUT | `/api/intercept/tool-config` | `server/server.go:930` | Not registered |
 | GET | `/api/llm` | `server/server.go:737` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm` | `server/server.go:738` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -379,6 +379,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/intercept/pending` at `python/artex/server/intercept_inspection.py:25` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/pending/{id}` at `python/artex/server/intercept_inspection.py:26` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/intercept/history` at `python/artex/server/intercept_inspection.py:27` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/intercept/tool-config` at `python/artex/server/intercept_read_setup.py:44` (_InterceptReadApplication.__init__): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/intercept/rules` at `python/artex/server/intercept_read_setup.py:45` (_InterceptReadApplication.__init__): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tasks/{id}/intercept-rules/{rid}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.

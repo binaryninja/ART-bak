@@ -55,6 +55,7 @@ class TaskRuntimeAssembly:
         if timing_policy is not None:
             from .task_timing import TaskTimingPolicy
             if type(timing_policy) is not TaskTimingPolicy:raise ValueError('Exact task timing policy required')
+            timing_policy.__post_init__()
             if cleanup_authorize is None:raise ValueError('Task timing requires explicit inflight cleanup policy')
         self._timing_policy=self._timing_pin=timing_policy
         self._timing_fields=None if timing_policy is None else (timing_policy.revision,timing_policy.clock,
@@ -97,14 +98,61 @@ class TaskRuntimeAssembly:
         if self.coordinator.journal.executor is not e or self.coordinator.guard is not self._guard:
             raise RuntimeUnavailable('Task runtime coordinator changed')
         return True
+    @staticmethod
+    def _timeout_value(value):
+        if type(value) is not int or not 0<=value<=2**31-1:
+            raise RuntimeUnavailable('Timeout must be an exact bounded nonnegative integer')
+        return value
+    def _task_timeout(self,task):
+        """Read configuration under the resolver's existing task-read authority.
+
+        Provisional options have no persisted ID. Persisted snapshots cannot
+        override the database or invent a default for an invalid/missing value.
+        Zero retains the historical digest; positive identity needs explicit
+        timing composition, never permission to admit or execute a task.
+        """
+        self.validate_bindings();resolver=self.providers
+        snapshot=resolver._snapshot(task)
+        if snapshot.get('provisional') is True:
+            value=self._timeout_value(snapshot['options'].get('timeout_seconds',0))
+            if 'timeout_seconds' in snapshot and self._timeout_value(snapshot['timeout_seconds'])!=value:
+                raise RuntimeUnavailable('Ambiguous provisional timeout')
+        else:
+            if snapshot.get('options') is not None:raise RuntimeUnavailable('Persisted timeout cannot have provisional options')
+            pins=resolver._pins();guard=resolver._resources[5]
+            resolver._resources_check(pins)
+            with guard(deepcopy(snapshot)):
+                resolver._grant(pins[1],snapshot,pins,'goals')
+                row=resolver.tasks.get(snapshot['task_id'])
+                resolver._grant(pins[1],snapshot,pins,'goals')
+                if row is None or row.id!=snapshot['task_id'] or row.exploration_id!=snapshot['exploration_id']:
+                    raise RuntimeUnavailable('Persisted timeout task unavailable')
+                value=self._timeout_value(getattr(row,'timeout_seconds',None))
+                row_identity=(row.id,row.exploration_id,value)
+                if 'timeout_seconds' in snapshot and self._timeout_value(snapshot['timeout_seconds'])!=value:
+                    raise RuntimeUnavailable('Persisted timeout snapshot changed')
+            resolver._grant(pins[1],snapshot,pins,'goals')
+            # A host grant may mutate the returned Task object after capture.
+            # Reject that alias drift without pretending this is an atomic DB
+            # snapshot across separate model-selection reads. No retry loop.
+            if (type(row.id) is not int or type(row.exploration_id) is not int
+                or (row.id,row.exploration_id,self._timeout_value(getattr(row,'timeout_seconds',None)))!=row_identity):
+                raise RuntimeUnavailable('Persisted timeout row changed after authorization')
+        self.validate_bindings()
+        if value and self._timing_policy is None:raise RuntimeUnavailable('Positive timeout configuration requires explicit timing policy')
+        return value
+
     def _select(self,task):
         self.validate_bindings()
+        task=deepcopy(task);timeout=self._task_timeout(task)
         models={role:self.providers.select(deepcopy(task),role).model for role in ('goals','planner','worker')}
         payload={'models':{k:asdict(v) for k,v in models.items()},'prompts':self._prompts,
                  'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()},
                  'limits':asdict(self._limits),'policy':self._revision,'activity_projection':self._activity_authorize is not None}
         if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
+        if timeout:payload['timeout_seconds']=timeout
+        if self._task_timeout(task)!=timeout:raise RuntimeUnavailable('Timeout changed during role selection')
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,allow_nan=False).encode()).hexdigest()
         self.validate_bindings();return models,digest
     def bootstrap_configuration(self,task):

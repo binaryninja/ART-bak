@@ -18,7 +18,7 @@ class DB:
 class Tests(unittest.TestCase):
     def setUp(self):
         self.db=DB();self.tasks=TaskStore(self.db);self.agents=AgentStore(self.db);self.profiles=ProfileStore(self.db)
-        self.task=SimpleNamespace(exploration_id=9,llm_profile_ids=[2],active_llm_profile_id=2)
+        self.task=SimpleNamespace(id=5,exploration_id=9,timeout_seconds=0,llm_profile_ids=[2],active_llm_profile_id=2)
         self.tasks.get=lambda id:self.task
         from artex.db.agents import Agent
         self.agent=Agent(1,'goals','Goals','','goals',True,True,8,600,False,False,'',0,'',0,'serial','all',1,None)
