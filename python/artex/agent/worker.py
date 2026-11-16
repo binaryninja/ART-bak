@@ -12,6 +12,10 @@ steering, goal proof, default tools, background thread or task completion.
 Host current(scope,phase) and lifecycle_guard(scope) must share real run/config,
 pause/archive/deletion and intent lifetime authority; phase is admit/run/settle.
 Settlement may allow the same canceled generation while new admission is forbidden.
+An explicit InflightCleanupOwner can instead reserve a single CREATED turn after
+claim, commit it and settle that exact claim after execution freezes. Its opaque
+capability is returned for engine-owned activity projection/finish; failures
+quarantine ownership. This does not enable positive task timeout admission.
 All intent writers must honor WorkerStore versions and the same barrier. Generic
 ExplorationStore.claim_intent is NOT compatible. SQL and JSONL are not atomic:
 any uncertainty leaves running ownership for explicit reconciliation, not replay.
@@ -57,33 +61,57 @@ class WorkerOutcome:
     state:str
     version:int
     outcome:object
+    cleanup:object=None
 
 class _Transcript:
-    def __init__(self,core,scope):self.core,self.scope=core,scope
+    def __init__(self,core,scope):
+        self.core,self.scope=core,scope
+        self.cleanup=core._cleanup;self.cap=None
     def begin(self,session,client,user):
         with self.core.guard(self.scope):
             self.core.check(self.scope,'run',claimed=True)
-            return self.core.transcript.begin_scoped(session,client,user,self.scope.identity(self.core.limits))
+            turn=self.core.transcript.begin_scoped(session,client,user,self.scope.identity(self.core.limits))
+            if self.cleanup is not None and turn.created:
+                self.cap=self.cleanup.reserve('worker',self.scope,session,turn,
+                    self.scope.identity(self.core.limits),worker_store=self.core.store)
+            return turn
     def current(self,session,turn):
         with self.core.guard(self.scope):
             self.core.check(self.scope,'run',claimed=True)
             return self.core.transcript.current(session,turn)
     def commit(self,session,turn,result):
+        if self.cap is not None:
+            self.core._binding()
+            persisted=self.cleanup.commit(self.cap,turn,result)
+            self.core._binding()
+            return persisted
         with self.core.guard(self.scope):
             self.core.check(self.scope,'settle',claimed=True)
             return self.core.transcript.commit(session,turn,result)
 
 class IntentWorker:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,registry_factory,authorize,limits=Limits()):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,registry_factory,authorize,limits=Limits(),cleanup=None):
+        self.cleanup=self._cleanup=None
         if not isinstance(store,WorkerStore):raise ValueError('Real WorkerStore required')
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,registry_factory,authorize)):raise ValueError('Explicit worker authority and adapters required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','check_scoped','current','commit')):raise ValueError('Durable scoped transcript required')
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
         self._store,self._executor=store,store.executor
         self.provider,self.registry_factory,self.authorize=provider_resolver,registry_factory,authorize
-        self.limits=limits;self._lock=RLock();self._active={}
+        self.limits=limits;self._lock=RLock();self._active={};self._started=False
+        if cleanup is not None:self.bind_cleanup(cleanup)
+    def bind_cleanup(self,owner):
+        """Install the original cleanup owner once, before any worker admission."""
+        from .inflight_cleanup import InflightCleanupOwner
+        with self._lock:
+            self._binding()
+            if self._started or self._active or self._cleanup is not None:
+                raise WorkerConflict('Cleanup binding requires an unused worker')
+            if type(owner) is not InflightCleanupOwner or owner.worker_store is not self.store or owner.transcript is not self.transcript:
+                raise ValueError('Exact cleanup owner with original worker resources required')
+            self.cleanup=self._cleanup=owner
     def _binding(self):
-        if self.store is not self._store or self.store.executor is not self._executor:raise WorkerConflict('Worker owning resource changed')
+        if self.cleanup is not self._cleanup or self.store is not self._store or self.store.executor is not self._executor:raise WorkerConflict('Worker owning resource changed')
     def check(self,scope,phase,*,claimed=False):
         self._binding()
         if not isinstance(scope,WorkerScope):raise ValueError('WorkerScope required')
@@ -109,12 +137,13 @@ class IntentWorker:
             active[0].cancel();return True
     def run(self,scope,client_id):
         if not isinstance(client_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',client_id):raise ValueError('Invalid worker client ID')
-        token=Cancellation();claimed=False
+        token=Cancellation();claimed=False;transcript=None
         with self.guard(scope):
             record=self.check(scope,'admit')
             with self._lock:
                 if scope.intent_id in self._active:raise WorkerConflict('Intent already active')
                 self._active[scope.intent_id]=[token,None,False]
+                self._started=True
         try:
             # Preflight the explicit registry and current provider before SQL claim.
             registry=self.registry_factory(scope,record)
@@ -160,12 +189,15 @@ class IntentWorker:
                         self.check(scope,'run',claimed=True);context.check()
                         return tool.callback(context,args)
                 guarded.append(Tool(tool.name,tool.description,tool.input_schema,execute,tool.validate))
-            agent=ChatAgent(_Transcript(self,scope),provider,gate=gate,tools=guarded,limits=self.limits)
+            transcript=_Transcript(self,scope)
+            agent=ChatAgent(transcript,provider,gate=gate,tools=guarded,limits=self.limits)
             outcome=agent.run(scope.session_id,client_id,message,model=scope.model,system=scope.system,metadata=scope.identity(self.limits),token=token)
+            if transcript.cap is not None:
+                outcome=transcript.cleanup.canonical_outcome(transcript.cap,outcome)
+                self._binding()
             if not outcome.persisted or outcome.stale or outcome.result is None:raise WorkerUnresolved('Worker transcript outcome unresolved')
             reason=outcome.result.reason
-            with self.guard(scope):
-                self.check(scope,'settle',claimed=True)
+            def terminal_state():
                 # Linearize cancellation against the final SQL decision. After
                 # this flag, cancel returns False rather than promising a pause.
                 with self._lock:
@@ -178,9 +210,24 @@ class IntentWorker:
                     elif reason=='completed':state='done'
                     elif reason in ('max_turns','timeout','token_budget','tool_budget'):state='exhausted'
                     else:state='blocked'
-                if not self.store.transition(scope.intent_id,'running',state,scope.expected_version+1):raise WorkerUnresolved('Worker settlement compare-and-set failed')
-            return WorkerOutcome(scope.intent_id,state,scope.expected_version+2,outcome)
+                    return state,cancel_reason if token.cancelled else None
+            if transcript.cap is not None:
+                # This capability owns only the exact already-claimed job and
+                # canonical turn; it grants no execution or admission authority.
+                self._binding()
+                state,cancel_reason=terminal_state()
+                if not transcript.cleanup.worker_settle(transcript.cap,self.store,state,cancellation_reason=cancel_reason):
+                    raise WorkerUnresolved('Worker cleanup settlement unresolved')
+                self._binding()
+            else:
+                with self.guard(scope):
+                    self.check(scope,'settle',claimed=True)
+                    state,_=terminal_state()
+                    if not self.store.transition(scope.intent_id,'running',state,scope.expected_version+1):raise WorkerUnresolved('Worker settlement compare-and-set failed')
+            return WorkerOutcome(scope.intent_id,state,scope.expected_version+2,outcome,transcript.cap)
         except BaseException as error:
+            if transcript is not None and transcript.cap is not None:
+                transcript.cleanup.quarantine(transcript.cap)
             if claimed:raise WorkerUnresolved('Worker effects or settlement require reconciliation; do not retry') from None
             raise
         finally:

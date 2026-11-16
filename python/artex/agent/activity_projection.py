@@ -45,18 +45,28 @@ class ActivityProjector:
         self.current,self.guard,self.authorize=current,lifecycle_guard,authorize
         self.max_bytes=max_bytes
         self._pins=(executor,scope,transcript,transcript.store,transcript.store.root,transcript.agent_id,current,lifecycle_guard,authorize,max_bytes)
-    def _check(self):
+    def _check(self,*,cleanup_check=None):
         e,s,t,store,root,agent,current,guard,authorize,bound=self._pins
         def pins():
             if self.executor is not e or self.scope is not s or self.transcript is not t or t.store is not store or store.root!=root or t.agent_id!=agent or self.current is not current or self.guard is not guard or self.authorize is not authorize or self.max_bytes!=bound:
                 raise ProjectionUnavailable('Projection resource changed')
         pins()
-        if current(s) is not True:raise ProjectionUnavailable('Projection lifetime changed')
+        if (cleanup_check() if cleanup_check is not None else current(s)) is not True:raise ProjectionUnavailable('Projection lifetime changed')
         pins()
-    def project(self,role,scope,outcome,identity):
+    def project(self,role,scope,outcome,identity,*,cleanup=None):
         if role not in ('goals','planner','worker') or not isinstance(outcome,ChatOutcome) or outcome.persisted is not True or outcome.stale:
             raise ProjectionUnavailable('Confirmed terminal turn required')
         identity=_scope_identity(identity)  # bounded canonical snapshot before any callback
+        cleanup_check=None
+        if cleanup is not None:
+            from .inflight_cleanup import CleanupTurn,InflightCleanupOwner
+            if type(cleanup) is not CleanupTurn or type(cleanup.owner) is not InflightCleanupOwner:
+                raise ProjectionUnavailable('Exact registered cleanup capability required')
+            owner=cleanup.owner
+            def cleanup_check():
+                if cleanup.owner is not owner:raise ProjectionUnavailable('Cleanup owner changed')
+                return owner.projection_current(cleanup,self,role,scope,outcome,identity)
+        def check():self._check(cleanup_check=cleanup_check)
         base=self.scope
         if any(getattr(scope,k)!=getattr(base,k) for k in ('task_id','exploration_id','run_id','revision')):
             raise ProjectionUnavailable('Foreign projection scope')
@@ -67,13 +77,13 @@ class ActivityProjector:
         attempted=False
         try:
             with self._pins[7](base):
-                self._check()
+                check()
                 receipt=self.transcript.finalized_scoped_result(session,outcome.turn.id,identity)
                 if receipt is None or receipt.run_id!=outcome.turn.run_id:raise ProjectionUnavailable('Durable scoped receipt unavailable')
                 result=receipt.result
                 proposal=ProjectionProposal(base.task_id,base.exploration_id,base.run_id,base.revision,role,node,receipt.turn_id,receipt.result_digest)
                 def grant():
-                    self._check();g=self.authorize(proposal);self._check()
+                    check();g=self.authorize(proposal);check()
                     if not isinstance(g,Grant) or any(v is not True for v in (g.permission,g.in_scope,g.approved)):raise ProjectionUnavailable('Progress projection not authorized')
                 grant()
                 key=hashlib.sha256(json.dumps([session,receipt.turn_id,identity],sort_keys=True,allow_nan=False).encode()).hexdigest()

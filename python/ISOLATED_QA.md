@@ -1114,3 +1114,38 @@ rather than false retirement or rollback. Synthetic expired ownership is explici
 private-pin setup, not ordinary positive-duration admission. Inherited/goalless
 settlement, external concurrent graph writers, recovery and live targets remain
 unsupported. Initial fixture plain text in JSONB was corrected in the harness only.
+
+## Stage 91: explicit in-flight cleanup with real PostgreSQL
+
+Immutable snapshot manifest SHA-256:
+`98cd0a4ebfd4829f9b8926e6a128ac52849f225a90260799d6e936e5f32b5f27`.
+Five zero-timeout integration scenarios passed in isolated fresh PostgreSQL 17,
+using actual runtime assembly, JWT task creation, installed bootstrap/engine,
+canonical JSONL and activity projection with fixed inert provider callbacks.
+Planner and worker cancellation produced cancelled canonical receipts and durable
+activity, then released cleanup ownership. Explicit task-pause maps the worker
+intent to open, not the blocked mapping used without that cause. During active
+execution pause(timeout=0) first raises TaskConflict after cancellation-gating;
+only the subsequent drained pause persists paused. Revoked cleanup permission,
+actual activity INSERT failure, and cancellation between CREATED and reservation
+retain unresolved ownership without provider replay (the last performs no model
+call). All 27 focused cleanup tests passed.
+
+A sixth real-PostgreSQL case verified that synthetic positive prepared-timeout
+pins still cannot pass the engine's timeout_seconds=0 SQL guard: no provider or
+cleanup reservation runs. This intentional refusal is not integrated timed-freeze
+acceptance. Freeze protocol coverage remains focused SQL-double evidence only.
+No guard was bypassed, no fabricated active-owner flags or real providers/targets
+were used, and no product source was changed. Synchronous callback cancellation
+is not proof of arbitrary network-provider preemption or cross-process recovery.
+Harness-only corrections fixed capture argument position and task-pause mapping.
+
+### Stage91 exact cleanup-only dependency rerun
+
+Before checkpoint publication, the same six stage91 cases and 27 focused tests
+were rerun against the exact cleanup-only frozen index, excluding later clock,
+RuntimeContext and transport changes. All passed without source overlays or
+harness changes. Manifest:
+`e729a65b98a3b93a77986773d3b291b22b9c3b2085f2c8514869e1424f0b91a3`.
+The earlier moving-source stage91 result remains separate evidence, not relabeled.
+This exact rerun still verifies refusal, not execution, of positive timed entry.

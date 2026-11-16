@@ -47,7 +47,7 @@ class EngineProgress:
 class TaskEngineHandle:
     def __init__(self,scope,token,*,store,planner,planner_scope,worker,worker_model,
                  worker_system,owner,current,lifecycle_guard,single_process,
-                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None):
+                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None,cleanup_authorize=None,cleanup_current=None):
         if not isinstance(scope,EngineScope) or not isinstance(token,CancellationToken):raise ValueError('Exact task scope and manager token required')
         for value in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(value,'engine identity')<=0:raise ValueError('Positive engine identity required')
@@ -64,6 +64,8 @@ class TaskEngineHandle:
         if activity_projector is not None:
             from .activity_projection import ActivityProjector
             if type(activity_projector) is not ActivityProjector or activity_projector.executor is not store.executor or activity_projector.scope is not scope:raise ValueError('Exact scoped activity projector required')
+        if (cleanup_authorize is None)!=(cleanup_current is None) or cleanup_authorize is not None and (not callable(cleanup_authorize) or not callable(cleanup_current)):raise ValueError('Explicit paired cleanup policies required')
+        self._cleanup_authorize=cleanup_authorize;self._cleanup_current=cleanup_current;self.cleanup=None;self._cleanup_owner=None
         self.activity_projector=activity_projector;self._activity_projector=activity_projector
         self.scope,self.token,self.store=scope,token,store
         self.planner,self.planner_scope,self.worker=planner,planner_scope,worker
@@ -73,6 +75,17 @@ class TaskEngineHandle:
         self._condition=Condition(RLock());self._active=False;self._thread=None;self._child=None
         self._events=[];self._event_ids=set();self._last_plan=None;self._started=False
         self._unresolved=False;self._closed=False;self._completed=False;self._wake=None
+    def bind_cleanup(self,manager,outer):
+        if self._cleanup_authorize is None:return
+        from .inflight_cleanup import InflightCleanupOwner
+        with self._condition:
+            if self._active or self._started or self.cleanup is not None:raise EngineUnavailable('Cleanup binding requires inert engine')
+            if self.planner.transcript is not self.worker.transcript:raise EngineUnavailable('One canonical transcript required')
+            owner=InflightCleanupOwner(manager,outer,self.token,self.scope,transcript=self.planner.transcript,
+                worker_store=self.worker.store,projector=self.activity_projector,current=self.planner.current,
+                configuration_current=self._cleanup_current,lifecycle_guard=self.guard,authorize=self._cleanup_authorize)
+            self.planner.bind_cleanup(owner);self.worker.bind_cleanup(owner);self.cleanup=owner;self._cleanup_owner=owner
+
     @staticmethod
     def _identity(scope):return (scope.task_id,scope.exploration_id,scope.run_id,scope.revision)
     def _check(self):
@@ -163,15 +176,22 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
             effects=True
             if action=='planner':
                 outcome=self.planner.run(wake)
+                if self.cleanup is not self._cleanup_owner:raise EngineUnresolved('Cleanup owner changed')
                 if self.activity_projector is not self._activity_projector:raise EngineUnresolved('Activity projector changed')
                 if self.activity_projector is not None:
                     identity=dict(wake.scope.identity(),limits_digest=hashlib.sha256(json.dumps(asdict(self.planner.limits),sort_keys=True,allow_nan=False).encode()).hexdigest(),tool_catalog_digest=self.planner._tool_catalog_digest)
-                    self.activity_projector.project('planner',wake.scope,outcome.outcome,identity)
+                    if outcome.cleanup is not None:self.cleanup.project(outcome.cleanup,self.activity_projector,outcome.outcome,identity)
+                    else:self.activity_projector.project('planner',wake.scope,outcome.outcome,identity)
+                if outcome.cleanup is not None:self.cleanup.finish(outcome.cleanup)
                 with self._condition:self._last_plan=now;self._wake=None
             else:
                 outcome=self.worker.run(worker_scope,uuid.uuid4().hex)
+                if self.cleanup is not self._cleanup_owner:raise EngineUnresolved('Cleanup owner changed')
                 if self.activity_projector is not self._activity_projector:raise EngineUnresolved('Activity projector changed')
-                if self.activity_projector is not None:self.activity_projector.project('worker',worker_scope,outcome.outcome,worker_scope.identity(self.worker.limits))
+                if self.activity_projector is not None:
+                    if outcome.cleanup is not None:self.cleanup.project(outcome.cleanup,self.activity_projector,outcome.outcome,worker_scope.identity(self.worker.limits))
+                    else:self.activity_projector.project('worker',worker_scope,outcome.outcome,worker_scope.identity(self.worker.limits))
+                if outcome.cleanup is not None:self.cleanup.finish(outcome.cleanup)
                 with self._condition:
                     if len(self._event_ids)>=self.max_events:raise EngineUnresolved('Completed worker event requires reconciliation')
                     event_id=f'worker:{record.id}:{outcome.version}'

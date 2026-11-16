@@ -27,7 +27,7 @@ from ..transcripts import TranscriptStore
 class TaskRuntimeAssembly:
     def __init__(self,executor,*,providers,transcript,prompts,policy_revision,
                  current,lifecycle_guard,authorize,asset_authorize,validate_input,
-                 graph_catalog,limits=Limits(),activity_authorize=None):
+                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None):
         if type(providers) is not TaskProviderResolver or providers.tasks.executor is not executor:
             raise ValueError('Exact persisted provider resolver/executor required')
         if any(not callable(x) for x in (current,lifecycle_guard,authorize,asset_authorize,validate_input)):
@@ -45,6 +45,8 @@ class TaskRuntimeAssembly:
         self._authorize=authorize;self._assets=asset_authorize;self._input=validate_input;self._limits=limits
         self._pins=(executor,providers,transcript,providers.tasks,providers.agents,providers.profiles,providers.factory)
         if activity_authorize is not None and not callable(activity_authorize):raise ValueError('Explicit progress projection authorization required')
+        if cleanup_authorize is not None and not callable(cleanup_authorize):raise ValueError('Explicit cleanup policy required')
+        self._cleanup_authorize=cleanup_authorize;self._cleanup_pin=cleanup_authorize
         self._activity_authorize=activity_authorize;self._activity_pin=activity_authorize
         self._configurations={}
         self._transcript_store=transcript.store
@@ -59,6 +61,7 @@ class TaskRuntimeAssembly:
         return json.dumps({'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}},sort_keys=True,allow_nan=False)
     def validate_bindings(self):
         e,p,t,tasks,agents,profiles,factory=self._pins
+        if self._cleanup_authorize is not self._cleanup_pin:raise RuntimeUnavailable('Cleanup policy changed')
         if self._activity_authorize is not self._activity_pin:raise RuntimeUnavailable('Activity projection authority changed')
         if any(a is not b for a,b in zip((self._current,self._guard,self._authorize,self._assets,self._input,self._limits,self._revision),self._policy_pins)) or self._configuration_identity()!=self._configuration_bytes or t.store is not self._transcript_store:
             raise RuntimeUnavailable('Task runtime policy or transcript changed')
@@ -79,6 +82,7 @@ class TaskRuntimeAssembly:
         payload={'models':{k:asdict(v) for k,v in models.items()},'prompts':self._prompts,
                  'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()},
                  'limits':asdict(self._limits),'policy':self._revision,'activity_projection':self._activity_authorize is not None}
+        if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,allow_nan=False).encode()).hexdigest()
         self.validate_bindings();return models,digest
     def bootstrap_configuration(self,task):
@@ -117,6 +121,13 @@ class TaskRuntimeAssembly:
             _,live_digest=self._select({'task_id':scope.task_id,'exploration_id':scope.exploration_id})
             result=live_digest==scope.revision and self._current(scope.task_id,scope.exploration_id,self._revision) is True and current(scope,token) is True
             self.validate_bindings();return result
+        def cleanup_current(s):
+            self.validate_bindings()
+            if (s.task_id,s.exploration_id,s.run_id,s.revision)!=(scope.task_id,scope.exploration_id,scope.run_id,scope.revision):return False
+            if self._current(scope.task_id,scope.exploration_id,self._revision) is not True:return False
+            _,live=self._select({'task_id':scope.task_id,'exploration_id':scope.exploration_id})
+            result=live==scope.revision and self._current(scope.task_id,scope.exploration_id,self._revision) is True
+            self.validate_bindings();return result
         def guarded(s):
             if (s.task_id,s.exploration_id,s.run_id,s.revision)!=(scope.task_id,scope.exploration_id,scope.run_id,scope.revision):raise RuntimeUnavailable('Foreign runtime scope')
             return guard(scope)
@@ -149,7 +160,8 @@ class TaskRuntimeAssembly:
             projector=ActivityProjector(self.executor,scope,transcript=self.transcript,current=exact,lifecycle_guard=guarded,authorize=self._activity_authorize)
         return TaskEngineHandle(scope,token,store=graph,planner=planner,planner_scope=ps,worker=worker,
             worker_model=models['worker'],worker_system=self._prompts['worker'],owner='runtime-'+str(scope.run_id),
-            current=current,lifecycle_guard=guard,single_process=True,activity_projector=projector)
+            current=current,lifecycle_guard=guard,single_process=True,activity_projector=projector,cleanup_authorize=self._cleanup_authorize,
+            cleanup_current=cleanup_current if self._cleanup_authorize is not None else None)
     @staticmethod
     def initialized_readiness(task):raise RuntimeUnavailable('Initialized task adoption requires explicit recovery and is unsupported')
     @staticmethod

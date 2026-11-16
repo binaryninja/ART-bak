@@ -146,6 +146,7 @@ class BootstrapHandle:
                 if isinstance(child,TaskEngineHandle):
                     with self._condition:self._child=child
                 if not isinstance(child,TaskEngineHandle) or child.scope!=scope or child.token is not self._token or child.store.executor is not self._executor or child.current is not current or child.guard is not guard or child.unresolved or child.wait(0) is not True:raise BootstrapUnresolved('Exact inert engine child required')
+                child.bind_cleanup(self.manager,self)
                 with self._condition:self._phase='engine'
                 if self.token.cancelled:child.cancel(self.token.reason)
                 else:self._owned()

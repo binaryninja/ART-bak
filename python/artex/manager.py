@@ -462,7 +462,7 @@ class TaskManager:
                 if slot.state not in ('freezing','drained'):raise TaskConflict('Freeze state changed')
                 if unresolved:
                     slot.state='quarantined';raise TaskConflict('Frozen work requires reconciliation')
-                if not drained:return False
+                if not drained or self._has_cleanup(freeze.task_id):return False
                 slot.state='drained';return True
         except BaseException:
             with self._lock:
@@ -501,6 +501,44 @@ class TaskManager:
             except (TaskConflict,AttributeError):return False
             row=self._tasks.get(assessment.task_id)
             return row is not None and row.get('deleted_at') is None and row.get('archived_at') is None and row.get('status') not in _TERMINAL
+
+    def reserve_inflight_cleanup(self,owner,cap):
+        from .agent.inflight_cleanup import InflightCleanupOwner,CleanupTurn
+        if type(owner) is not InflightCleanupOwner or type(cap) is not CleanupTurn or cap.owner is not owner:raise TaskConflict('Exact cleanup components required')
+        owner.validate_reservation(cap)
+        with self._lock:
+            if not self.owns_generation(cap.task_id,owner.token,owner.handle):raise TaskConflict('Active execution required to reserve cleanup')
+            slots=getattr(self,'_cleanup_slots',None)
+            if slots is None:self._cleanup_slots={};slots=self._cleanup_slots
+            if any(c.task_id==cap.task_id for c in slots):raise TaskConflict('Cleanup already retained for this task')
+            slots[cap]=(owner,self.repository,self.repository.executor)
+        return cap
+
+    def validate_inflight_cleanup(self,owner,cap):
+        with self._lock:
+            entry=getattr(self,'_cleanup_slots',{}).get(cap)
+            if entry is None or entry[0] is not owner or self.repository is not entry[1] or self.repository.executor is not entry[2]:return False
+            row=self._tasks.get(cap.task_id);run=self._runs.get(cap.task_id)
+            return (row is not None and row.get('deleted_at') is None and row.get('archived_at') is None
+                and row.get('status') not in _TERMINAL and run is not None and run.token is owner.token
+                and run.handle is owner.handle and not run.uncertain)
+
+    def finish_inflight_cleanup(self,owner,cap):
+        with self._lock:
+            if not self.validate_inflight_cleanup(owner,cap):raise TaskConflict('Cleanup owner changed')
+            del self._cleanup_slots[cap]
+
+    def quarantine_inflight_cleanup(self,owner,cap):
+        with self._lock:
+            entry=getattr(self,'_cleanup_slots',{}).get(cap)
+            if entry is None or entry[0] is not owner:raise TaskConflict('Exact retained cleanup required')
+            run=self._runs.get(cap.task_id)
+            if run is not None and run.token is owner.token and run.handle is owner.handle:run.uncertain=True
+            slot=self._deadline_slots.get(cap.task_id)
+            if slot is not None and slot.token is owner.token and slot.handle is owner.handle:slot.state='quarantined'
+
+    def _has_cleanup(self,key):
+        return any(cap.task_id==key for cap in getattr(self,'_cleanup_slots',{}))
 
     def reserve_deadline_settlement(self,store):
         """Reserve only a code-owned, exact finalized assessment; no SQL here."""
@@ -584,6 +622,7 @@ class TaskManager:
         try:key=_id(task_id)
         except TaskNotFound:return False
         with self._lock:
+            if self._has_cleanup(key):return False
             slot=self._deadline_slots.get(key)
             if slot is None:return True
             if slot.token is not token or slot.handle is not handle:return False
@@ -699,6 +738,7 @@ class TaskManager:
         self._runtime_required()
         with self._lock:
             key, row = self._require(task_id)
+            if self._has_cleanup(key):raise TaskConflict('Retained cleanup prevents admission')
             if key in self._deadline_slots:
                 raise TaskConflict('Retained deadline requires explicit resume reconciliation')
             if key in self._runs:
@@ -813,6 +853,7 @@ class TaskManager:
         # Do not hold the registry lock while SQL waits for a task row: a lease
         # reader may hold that row and need the registry lock to revalidate.
         with self._lock:
+            if self._has_cleanup(key):raise TaskConflict('Cleanup not confirmed; paused ownership retained')
             if self._runs.get(key) is not run:
                 raise TaskConflict('Paused generation changed before persistence')
             if deadline_slot is not None:
@@ -859,6 +900,7 @@ class TaskManager:
         with self._lock:
             key, row = self._require(task_id)
             run = self._runs.get(key)
+            if self._has_cleanup(key):return False
             if key in self._deadline_slots:
                 return False  # No deadline terminal-CAS authority is implemented yet.
             if run is None or run.token is not token or token.cancelled:

@@ -68,22 +68,31 @@ class PlannerResult:
     goals_met:bool|None
     stalled:bool|None
     observed:bool=True
+    cleanup:object=None
 
 _INTENT_SCHEMA={'type':'object','properties':{'summary':{'type':'string'},'priority':{'type':'integer'},'asset_ids':{'type':'array','items':{'type':'integer'}},'parent_ids':{'type':'array','items':{'type':'integer'}},'intents':{'type':'array','items':{'type':'object'}}},'additionalProperties':False}
 
 class _FreshTranscript:
-    def __init__(self,owner,scope):self.owner,self.scope=owner,scope;self.original=None;self.executor=owner.store.executor
+    def __init__(self,owner,scope):self.owner,self.scope=owner,scope;self.original=None;self.executor=owner.store.executor;self.cleanup=owner.cleanup;self.cap=None
     def begin(self,session,client,user):
         with self.owner.guard(self.scope):
             self.owner.check(self.scope)
             original=self.owner.transcript.begin_scoped(session,client,user,dict(self.scope.identity(),limits_digest=hashlib.sha256(json.dumps(asdict(self.owner.limits),sort_keys=True,allow_nan=False).encode()).hexdigest(),tool_catalog_digest=self.owner._tool_catalog_digest))
             self.original=original
+            if self.cleanup is not None:
+                identity=dict(self.scope.identity(),limits_digest=hashlib.sha256(json.dumps(asdict(self.owner.limits),sort_keys=True,allow_nan=False).encode()).hexdigest(),tool_catalog_digest=self.owner._tool_catalog_digest)
+                self.cap=self.cleanup.reserve('planner',self.scope,session,original,identity)
             return replace(original,messages=[deepcopy(user)])
     def current(self,session,turn):
         with self.owner.guard(self.scope):
             self.owner.check(self.scope)
             return self.owner.transcript.current(session,self.original)
     def commit(self,session,turn,result):
+        if self.cleanup is not self.owner.cleanup:raise ChatUnavailable('Cleanup resource changed')
+        if self.cleanup is not None:
+            if not result.messages or result.messages[0]!=turn.messages[0]:raise ChatUnavailable('Planner rewrote wake')
+            joined=replace(result,messages=deepcopy(self.original.messages[:-1])+deepcopy(result.messages))
+            return self.cleanup.commit(self.cap,self.original,joined)
         with self.owner.guard(self.scope):
             self.owner.check_persistence(self.scope,self.executor)
             if not result.messages or result.messages[0]!=turn.messages[0]:raise ChatUnavailable('Planner rewrote wake')
@@ -91,7 +100,7 @@ class _FreshTranscript:
             return self.owner.transcript.commit(session,self.original,joined)
 
 class PlannerCycle:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=(),persist_current=None):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,asset_authorize,limits=Limits(),max_nodes=2000,additional_tools=(),additional_catalog=(),persist_current=None,cleanup=None):
         if not isinstance(store,ExplorationStore) or store.read_only:raise ValueError('Writable scoped ExplorationStore required')
         if any(not callable(v) for v in (current,lifecycle_guard,provider_resolver,authorize,asset_authorize)):raise ValueError('Explicit planner authority required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','current','commit','finalized_result')):raise ValueError('Durable scoped transcript required')
@@ -99,6 +108,10 @@ class PlannerCycle:
         if type(max_nodes) is not int or not 1<=max_nodes<=10000:raise ValueError('Invalid graph bound')
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
         self._store,self._executor=store,store.executor
+        if cleanup is not None:
+            from .inflight_cleanup import InflightCleanupOwner
+            if type(cleanup) is not InflightCleanupOwner:raise ValueError('Exact cleanup owner required')
+        self.cleanup=cleanup
         self.persist_current=persist_current
         self.provider,self.authorize,self.asset_authorize=provider_resolver,authorize,asset_authorize
         supplied=tuple(additional_tools);catalog=tuple(additional_catalog)
@@ -119,6 +132,13 @@ class PlannerCycle:
                      'catalog':[asdict(row) for row in sorted(self._additional_catalog,key=lambda r:r.key)]}
         self._tool_catalog_digest=hashlib.sha256(json.dumps(declaration,sort_keys=True,allow_nan=False,separators=(',',':')).encode('utf-8')).hexdigest()
         self.limits,self.max_nodes=limits,max_nodes;self._lock=RLock();self._active={}
+    def bind_cleanup(self,owner):
+        from .inflight_cleanup import InflightCleanupOwner
+        if type(owner) is not InflightCleanupOwner or owner.transcript is not self.transcript or owner.handle.executor is not self.store.executor:raise ValueError('Original cleanup resources required')
+        with self._lock:
+            if self._active or self.cleanup is not None:raise ValueError('Cleanup binding requires inert planner')
+            self.cleanup=owner
+
     def _validate_scope(self,scope):
         if self.store is not self._store or self.store.executor is not self._executor:raise ChatUnavailable('Planner owning resource changed')
         if not isinstance(scope,PlannerScope):raise ValueError('Planner scope required')
@@ -217,6 +237,7 @@ class PlannerCycle:
             with self._lock:
                 if scope.task_id in self._active:raise ChatBusy('Planner cycle active')
                 self._active[scope.task_id]=token
+        fresh=None
         try:
             tool=self.intent_tool(scope)
             registry=ToolRegistry('planner',handlers=[tool,*self._additional_tools],current=lambda rev:rev==scope.revision and self.current(scope) is True,lifecycle_guard=lambda rev:self.guard(scope),authorize=self.authorize)
@@ -232,6 +253,7 @@ class PlannerCycle:
             agent=ChatAgent(fresh,resolver,gate=self.authorize,tools=registry.tools(),limits=self.limits)
             outcome=agent.run(scope.session_id,wake.cycle_id,wake.message,model=scope.model,system=scope.system,metadata=scope.identity(),token=token)
             if not outcome.persisted or outcome.stale:raise ChatUnavailable('Planner transcript persistence unconfirmed')
+            if fresh.cap is not None:outcome=fresh.cleanup.canonical_outcome(fresh.cap,outcome)
             if outcome.reused:
                 with self.guard(scope):
                     self.check(scope)
@@ -241,22 +263,27 @@ class PlannerCycle:
             if token.cancelled or (outcome.result is not None and outcome.result.reason=='cancelled'):
                 # A committed cancelled turn is not graph completion evidence.
                 # Do not re-enter execution authority merely to observe nodes.
-                return PlannerResult(outcome,None,None,None,observed=False)
+                return PlannerResult(outcome,None,None,None,observed=False,cleanup=fresh.cap)
             with self.guard(scope):
-                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False,cleanup=fresh.cap)
                 try:self.check(scope)
                 except RunStopped:
                     # Cancellation may win between the first check and the
                     # execution-current callback. Commit already confirmed its
                     # own authority; returning no observation grants nothing.
-                    if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                    if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False,cleanup=fresh.cap)
                     raise
-                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False,cleanup=fresh.cap)
                 nodes=self._nodes()
-                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False)
+                if token.cancelled:return PlannerResult(outcome,None,None,None,observed=False,cleanup=fresh.cap)
                 goals=[n for n in nodes if n.kind=='goal'];met=bool(goals) and all(n.state=='met' for n in goals)
                 active=any(n.kind=='intent' and n.state in ('open','running') for n in nodes)
-            return PlannerResult(outcome,active,met,not active and not met)
+            return PlannerResult(outcome,active,met,not active and not met,cleanup=fresh.cap)
+        except BaseException:
+            if fresh is not None and fresh.cap is not None:
+                try:fresh.cleanup.quarantine(fresh.cap)
+                except BaseException:pass
+            raise
         finally:
             with self._lock:
                 if self._active.get(scope.task_id) is token:self._active.pop(scope.task_id)
