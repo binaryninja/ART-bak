@@ -211,13 +211,10 @@ export function stats(
   state: { tasks?: readonly Task[]; findings?: readonly Finding[]; activeTask?: string } = {},
 ): Stats & { active_task?: unknown } {
   const taskList = state.tasks ?? tasks;
-  const findingList = state.findings ?? findings;
   const base: Stats = {
     assets: assets.length,
     engine_mode: "exploring",
     llm_configured: true,
-    roe_enabled: true,
-    findings_confirmed: findingList.filter((f) => f.severity !== "low").length,
   };
   const selectedTaskID = taskId ?? state.activeTask ?? ACTIVE_TASK;
   const t = taskList.find((item) => item.id === selectedTaskID);
@@ -225,7 +222,6 @@ export function stats(
   return {
     ...base,
     engine_mode: t.engine_mode ?? "idle",
-    findings_confirmed: findingList.filter((f) => f.task_id === t.id).length,
     active_task: {
       id: t.id,
       in_flight: t.in_flight,
