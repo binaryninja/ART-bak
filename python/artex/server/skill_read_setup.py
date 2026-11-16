@@ -1,4 +1,4 @@
-"""Compose three optional skill read families without stacking exact-base overlays.
+"""Compose explicitly enabled skill read families without stacking exact-base overlays.
 
 Independent request/source/global grants are retained for each family; a permit
 for filesystem names does not grant ledger access or vice versa. No default app
@@ -10,17 +10,18 @@ from .core import error_response
 from .skill_usage_setup import bind_skill_usage_reads, _SkillUsageApplication
 from .missing_skill_setup import bind_missing_skill_reads, _MissingSkillApplication
 from .skill_files_setup import bind_skill_files_reads, _SkillFilesApplication
+from .skill_content_setup import bind_skill_content_reads, _SkillContentApplication
 
 # Code-owned implementation anchors, captured when this module is loaded, not
 # from potentially replaced methods at the time a caller asks to bind a view.
-_VIEW_TYPES = (_SkillUsageApplication, _MissingSkillApplication, _SkillFilesApplication)
+_VIEW_TYPES = (_SkillUsageApplication, _MissingSkillApplication, _SkillFilesApplication, _SkillContentApplication)
 _VIEW_METHODS = tuple((cls.__call__, cls._check, cls.__init__) for cls in _VIEW_TYPES)
-_BINDERS = (bind_skill_usage_reads, bind_missing_skill_reads, bind_skill_files_reads)
+_BINDERS = (bind_skill_usage_reads, bind_missing_skill_reads, bind_skill_files_reads, bind_skill_content_reads)
 
 
 def _factory_integrity():
     if any(actual is not expected for actual,expected in zip(
-            (bind_skill_usage_reads,bind_missing_skill_reads,bind_skill_files_reads),_BINDERS)):
+            (bind_skill_usage_reads,bind_missing_skill_reads,bind_skill_files_reads,bind_skill_content_reads),_BINDERS)):
         raise ValueError('Original skill read binders required')
     for cls,methods in zip(_VIEW_TYPES,_VIEW_METHODS):
         if any(actual is not expected for actual,expected in zip(
@@ -29,7 +30,8 @@ def _factory_integrity():
 
 _PATTERNS = (re.compile(r'/api/skills/[^/]+/usage'),
              re.compile(r'/api/skills/missing'),
-             re.compile(r'/api/skills/[^/]+/files'))
+             re.compile(r'/api/skills/[^/]+/files'),
+             re.compile(r'/api/skills/[^/]+/files/.+'))
 
 
 def _key(method):
@@ -46,16 +48,19 @@ class SkillReadBundle:
     usage: object = field(repr=False)
     missing: object = field(repr=False)
     files: object = field(repr=False)
+    content: object = field(default=None,repr=False)
 
 
 class _SkillReadApplication:
     def __init__(self,original,views):
         _factory_integrity()
+        if len(views) not in (3,4):raise ValueError("Three or four explicit skill families required")
         for view,cls,methods in zip(views,_VIEW_TYPES,_VIEW_METHODS):
             if type(view) is not cls or view.original is not original or not _same(view.__call__,(view,methods[0])) or not _same(view._check,(view,methods[1])):
                 raise ValueError('Exact original skill read view required')
         self.original=original
-        self.usage_application,self.missing_application,self.files_application=views
+        self.usage_application,self.missing_application,self.files_application=views[:3]
+        self.content_application=views[3] if len(views)==4 else None
         self._original=original
         self._views=tuple(views)
         self._types=_VIEW_TYPES
@@ -65,14 +70,14 @@ class _SkillReadApplication:
     def _check(self,index):
         if self.original is not self._original or not _same(self.original.__call__,self._original_call):
             raise PermissionError('Original skill application changed')
-        view=(self.usage_application,self.missing_application,self.files_application)[index]
+        view=(self.usage_application,self.missing_application,self.files_application,self.content_application)[index]
         if view is not self._views[index] or type(view) is not self._types[index] or view.original is not self._original or not _same(view.__call__,self._methods[index][0]) or not _same(view._check,self._methods[index][1]):
             raise PermissionError('Skill read family changed')
         view._check()
 
     def __call__(self,environ,start_response):
         path=environ.get('PATH_INFO','')
-        index=next((i for i,pattern in enumerate(_PATTERNS) if type(path) is str and pattern.fullmatch(path)),None)
+        index=next((i for i,pattern in enumerate(_PATTERNS[:len(self._views)]) if type(path) is str and pattern.fullmatch(path)),None)
         if index is None:
             # Unrelated behavior stays with the original application, including
             # auth/status handling. The composition does not add another route.
@@ -97,13 +102,19 @@ class _SkillReadApplication:
 
 
 def bind_skill_reads(application,*,usage_service,missing_service,files_service,
-                     authorize_usage,authorize_missing,authorize_files):
-    """Bind all three families explicitly; no partial mutation on failure.
+                     authorize_usage,authorize_missing,authorize_files,
+                     content_service=None,authorize_content=None):
+    """Bind three families and optionally content; no partial mutation on failure.
+
+    Content requires both its own service and grant; neither is inherited from
+    listing. Omission preserves original routing for content paths.
 
     Each existing binder validates its own exact reader, scope, original JWT
     authority, callback and conflicting routes. All are constructed against the
     same untouched base, rather than weakening their exact-base requirements.
     """
+    if (content_service is None)!=(authorize_content is None):
+        raise ValueError("Content service and explicit authority must be supplied together")
     _factory_integrity()
     usage=bind_skill_usage_reads(application,usage_service=usage_service,
                                  authorize_global=authorize_usage)
@@ -111,6 +122,11 @@ def bind_skill_reads(application,*,usage_service,missing_service,files_service,
                                     authorize_global=authorize_missing)
     files=bind_skill_files_reads(application,files_service=files_service,
                                 authorize_global=authorize_files)
-    view=_SkillReadApplication(application,(usage.application,missing.application,files.application))
-    for index in range(3):view._check(index)
-    return SkillReadBundle(view,usage_service,missing_service,files_service)
+    views=(usage.application,missing.application,files.application)
+    if content_service is not None:
+        content=bind_skill_content_reads(application,content_service=content_service,
+                                        authorize_global=authorize_content)
+        views+= (content.application,)
+    view=_SkillReadApplication(application,views)
+    for index in range(len(views)):view._check(index)
+    return SkillReadBundle(view,usage_service,missing_service,files_service,content_service)
