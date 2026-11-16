@@ -4,6 +4,8 @@ Callers explicitly provide a database executor, signing key and password codec.
 Use PostgresExecutor and BcryptCodec in production; never use test fakes. There
 is no task/provider/tool execution or automatic migration in this factory.
 """
+from .task_activity import TaskActivityService
+from ..db.task_activity_read import TaskActivityReadStore
 from .main_sessions import MainSessionsService
 from ..db.main_sessions import MainSessionsStore
 from .task_intent_assets import TaskIntentAssetsService
@@ -83,6 +85,22 @@ def _validate_token_usage_service(executor, service):
 def _validate_workspace_upload_service(service):
     if service is not None and type(service) is not WorkspaceUploadService:
         raise ValueError("Explicit scoped workspace upload service required")
+
+
+def _validate_task_activity_service(executor, service):
+    if service is None:return
+    if type(service) is not TaskActivityService or type(service.store) is not TaskActivityReadStore:
+        raise ValueError('Explicit fixed task activity service required')
+    store=service.store
+    s,e,scope,guard,authorize,current,wait,batches,polls=service._fixed
+    se,ss,sg,maximum,rows=store._fixed
+    if (store is not s or e is not executor or se is not executor or store.executor is not executor
+        or store.scope is not scope or ss is not scope or store.guard is not guard or sg is not guard
+        or service.authorize is not authorize or service.stream_current is not current or service.wait is not wait
+        or (service.max_batches,service.max_polls)!=(batches,polls)
+        or (store.max_bytes,store.max_rows)!=(maximum,rows)
+        or any(a is not b for a,b in zip(store.pins(),store._initial_policies))):
+        raise ValueError('Task activity requires original scope, policies and application executor')
 
 
 def _validate_command_history_service(executor, service):
@@ -179,7 +197,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
                       side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                       side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                       side_cancel_request=None, side_clear_history=None, side_wait=None,
-                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev',
+                      log_ring=None, coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, task_activity_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev',
                       max_body_bytes=1_048_576):
     """Return a WSGI callable; executor lifecycle remains caller-owned.
 
@@ -222,6 +240,11 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     policies; no folder creation/extraction or root inference. Raw request bytes
     pass unchanged after the existing global body limit. That limit is never
     expanded for uploads: the smaller global/service bound wins.
+    Optional task_activity_service exposes bounded local history/detail and finite
+    SSE replay for ONE explicitly scoped task. No inherited/archive reads, ambient
+    task selection, broadcaster or completion-at-EOF claim; no default registration.
+    Original resource and policy identities are checked before startup reads.
+
     Optional command_history_service exposes historical tool inputs/results (not
     merely shell commands), never command execution. The legacy ?task selector
     means exploration ID. Its exact scoped/global grants and separate raw-data
@@ -258,6 +281,7 @@ def build_application(executor, signing_key: bytes, password_codec, *,
     _validate_intercept_service(executor, intercept_service)
     _validate_token_usage_service(executor, token_usage_service)
     _validate_command_history_service(executor, command_history_service)
+    _validate_task_activity_service(executor, task_activity_service)
     _validate_pool_health_service(executor, pool_health_service)
     _validate_intercept_inspection_service(executor, intercept_inspection_service)
     _validate_intent_assets_service(executor, intent_assets_service)
@@ -300,6 +324,8 @@ def build_application(executor, signing_key: bytes, password_codec, *,
         workspace_upload_service.register(router)
     if command_history_service is not None:
         command_history_service.register(router)
+    if task_activity_service is not None:
+        task_activity_service.register(router)
     if visibility_service is not None:
         visibility_service.register(router)
     if main_sessions_service is not None:
@@ -327,7 +353,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                                 side_parent_resolver=None, side_request_resolver=None, side_model_available=None,
                                 side_coordinator=None, side_dispatcher=None, side_prepare_question=None,
                                 side_cancel_request=None, side_clear_history=None, side_wait=None,
-                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev', max_body_bytes=1_048_576):
+                                coverage_service=None, traffic_service=None, intercept_service=None, token_usage_service=None, command_history_service=None, task_activity_service=None, pool_health_service=None, intercept_inspection_service=None, intent_assets_service=None, main_sessions_service=None, audit_service=None, workspace_mutation_service=None, workspace_upload_service=None, visibility_service=None, version='python-port-dev', max_body_bytes=1_048_576):
     """Compose actual task repositories/metrics/manager, then load without start.
 
     This factory reads existing task state and therefore requires the reference
@@ -356,6 +382,7 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
     _validate_intercept_service(executor, intercept_service)
     _validate_token_usage_service(executor, token_usage_service)
     _validate_command_history_service(executor, command_history_service)
+    _validate_task_activity_service(executor, task_activity_service)
     _validate_pool_health_service(executor, pool_health_service)
     _validate_intercept_inspection_service(executor, intercept_inspection_service)
     _validate_intent_assets_service(executor, intent_assets_service)
@@ -407,5 +434,5 @@ def build_persisted_application(executor, signing_key: bytes, password_codec, *,
                              side_wait=side_wait,
                              coverage_service=coverage_service, traffic_service=traffic_service,
                              workspace_mutation_service=workspace_mutation_service,
-                             workspace_upload_service=workspace_upload_service, visibility_service=visibility_service, intercept_service=intercept_service, token_usage_service=token_usage_service, command_history_service=command_history_service, pool_health_service=pool_health_service, intercept_inspection_service=intercept_inspection_service, intent_assets_service=intent_assets_service, main_sessions_service=main_sessions_service, audit_service=audit_service,
+                             workspace_upload_service=workspace_upload_service, visibility_service=visibility_service, intercept_service=intercept_service, token_usage_service=token_usage_service, command_history_service=command_history_service, task_activity_service=task_activity_service, pool_health_service=pool_health_service, intercept_inspection_service=intercept_inspection_service, intent_assets_service=intent_assets_service, main_sessions_service=main_sessions_service, audit_service=audit_service,
                              version=version, max_body_bytes=max_body_bytes)

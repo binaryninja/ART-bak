@@ -333,9 +333,42 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
     return routes, hashes
 
 
+# Audited alternative deployments, not duplicate registrations on one router.
+# Every declaration must match its exact source AND owner; another declaration
+# (including a second occurrence at the same owner) still fails the audit.
+_ALTERNATIVE_BASE = 'python/artex/server/'
+PYTHON_ALTERNATIVE_GROUPS = {
+    ('GET','/api/tasks/{id}'): ('fixed-task-read-overlay', (('tasks.py','TaskService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+    ('GET','/api/stats'): ('fixed-task-read-overlay', (('stats.py','StatsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+    ('GET','/api/exploration/intents'): ('fixed-task-read-overlay', (('exploration.py','ExplorationService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+    ('GET','/api/llm/profiles'): ('fixed-task-read-overlay', (('profiles.py','ProfileService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+    ('GET','/api/exploration/findings'): ('explicit-task-findings-or-global-and-fixed-overlay', (('findings.py','FindingService.register'),('task_findings.py','TaskFindingsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+}
+
+
+def group_python_routes(declarations):
+    groups = {}
+    for route in declarations:
+        groups.setdefault((route['method'],route['path']), []).append(route)
+    result=[]
+    for key, members in groups.items():
+        if len(members)==1:
+            result.append(dict(members[0],declarations=list(members)))
+            continue
+        spec=PYTHON_ALTERNATIVE_GROUPS.get(key)
+        actual=Counter((r['source'],r['function']) for r in members)
+        expected=Counter((_ALTERNATIVE_BASE+source,owner) for source,owner in spec[1]) if spec else None
+        if expected is None or actual!=expected or any(r['public'] is not False for r in members):
+            raise AuditError(f'Unexpected duplicate Python route declarations: {key[0]} {key[1]}')
+        result.append(dict(members[0],declarations=list(members),alternative_group=spec[0],
+            alternative_note='Audited alternate composition only; never permission to mount duplicate handlers on one router.'))
+    return result
+
+
 def inventory(root: Path) -> dict:
     go, mounts, go_hashes, registration_calls = go_inventory(root)
-    python, python_hashes = python_inventory(root)
+    declarations, python_hashes = python_inventory(root)
+    python = group_python_routes(declarations)
     py_index = {(r['method'], r['path']): r for r in python}
     go_keys = {(r['method'], r['path']) for r in go}
     duplicates = [f'{method} {path}' for (method, path), count in
@@ -346,16 +379,19 @@ def inventory(root: Path) -> dict:
         counterpart = py_index.get((route['method'], route['path']))
         route['python'] = counterpart
         route['status'] = counterpart['status'] if counterpart else 'not registered in Python'
-    return {'schema_version': 1,
+    return {'schema_version': 2,
             'scope': 'Static registration coverage only, not HTTP service availability or behavior parity.',
             'summary': {'go_registration_call_sites': registration_calls,
                         'go_method_path_routes': len(go), 'go_mount_handlers': len(mounts),
                         'python_offline_contract_routes': len(python),
+                        'python_route_declarations': len(declarations),
+                        'python_alternative_route_groups': sum('alternative_group' in r for r in python),
                         'python_optional_service_routes': sum(r['registration_mode'].startswith('optional') for r in python),
                         'matched_offline_contract_routes': sum(r['python'] is not None for r in go),
                         'go_routes_without_python_registration': sum(r['python'] is None for r in go)},
             'source_sha256': {**go_hashes, **python_hashes},
             'go_routes': go, 'go_mounts': mounts, 'python_routes': python,
+            'python_route_declarations': declarations,
             'python_only': [r for r in python if (r['method'], r['path']) not in go_keys]}
 
 
@@ -391,10 +427,13 @@ def markdown(data: dict) -> str:
         counterpart = route['python']
         status = (f'{"Optional registration; adapters required" if counterpart["registration_mode"].startswith("optional") else "Offline contract only"}: `{counterpart["source"]}:{counterpart["line"]}`'
                   if counterpart else 'Not registered')
+        if counterpart and 'alternative_group' in counterpart:
+            status += ' (audited alternatives: ' + ', '.join(f"`{r['source']}:{r['line']}`" for r in counterpart['declarations']) + ')'
         lines.append(f'| {route["method"]} | `{route["path"]}` | `{route["source"]}:{route["line"]}` | {status} |')
     lines += ['', '## Python registration prerequisites', '']
     for route in data['python_routes']:
-        lines.append(f'- `{route["method"]} {route["path"]}`: {route["dependencies"]}.')
+        for declaration in route['declarations']:
+            lines.append(f'- `{route["method"]} {route["path"]}` at `{declaration["source"]}:{declaration["line"]}` ({declaration["function"]}): {declaration["dependencies"]}.')
     lines += ['', '## Non-method mounts', '']
     for route in data['go_mounts']:
         lines.append(f'- `{route["pattern"]}` → `{route["handler"]}` at `{route["source"]}:{route["line"]}`; no Python transport equivalent.')

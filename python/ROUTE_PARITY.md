@@ -19,10 +19,12 @@ Declarations do not prove execution readiness. Production limitations are in
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **176**.
-- python optional service routes: **171**.
-- matched offline contract routes: **176**.
-- go routes without python registration: **85**.
+- python offline contract routes: **180**.
+- python route declarations: **186**.
+- python alternative route groups: **5**.
+- python optional service routes: **174**.
+- matched offline contract routes: **180**.
+- go routes without python registration: **81**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -96,11 +98,11 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:78` |
-| GET | `/api/exploration/activity` | `server/server.go:773` | Not registered |
-| GET | `/api/exploration/activity/history` | `server/server.go:774` | Not registered |
-| GET | `/api/exploration/activity/stream` | `server/server.go:777` | Not registered |
-| GET | `/api/exploration/activity/{seq}` | `server/server.go:778` | Not registered |
-| GET | `/api/exploration/findings` | `server/server.go:756` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
+| GET | `/api/exploration/activity` | `server/server.go:773` | Optional registration; adapters required: `python/artex/server/task_activity.py:26` |
+| GET | `/api/exploration/activity/history` | `server/server.go:774` | Optional registration; adapters required: `python/artex/server/task_activity.py:27` |
+| GET | `/api/exploration/activity/stream` | `server/server.go:777` | Optional registration; adapters required: `python/artex/server/task_activity.py:28` |
+| GET | `/api/exploration/activity/{seq}` | `server/server.go:778` | Optional registration; adapters required: `python/artex/server/task_activity.py:29` |
+| GET | `/api/exploration/findings` | `server/server.go:756` | Optional registration; adapters required: `python/artex/server/findings.py:126` (audited alternatives: `python/artex/server/findings.py:126`, `python/artex/server/task_findings.py:11`, `python/artex/server/task_runtime_reads.py:101`) |
 | GET | `/api/exploration/findings/asset-tree` | `server/server.go:758` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
 | GET | `/api/exploration/findings/export` | `server/server.go:760` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
 | GET | `/api/exploration/findings/groups` | `server/server.go:757` | Optional registration; adapters required: `python/artex/server/findings.py:126` |
@@ -122,7 +124,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/exploration/findings/{id}/traffic/{binding_id}/body` | `server/finding_traffic.go:90` | Not registered |
 | GET | `/api/exploration/frontier` | `server/server.go:755` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
 | GET | `/api/exploration/graph` | `server/server.go:771` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
-| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
+| GET | `/api/exploration/intents` | `server/server.go:770` | Optional registration; adapters required: `python/artex/server/exploration.py:78` (audited alternatives: `python/artex/server/exploration.py:78`, `python/artex/server/task_runtime_reads.py:97`) |
 | POST | `/api/exploration/main-session/new` | `server/server.go:776` | Not registered |
 | GET | `/api/exploration/main-sessions` | `server/server.go:775` | Optional registration; adapters required: `python/artex/server/main_sessions.py:12` |
 | GET | `/api/exploration/nodes` | `server/server.go:772` | Optional registration; adapters required: `python/artex/server/exploration.py:78` |
@@ -151,7 +153,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/llm/models` | `server/server.go:906` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | GET | `/api/llm/pool` | `server/server.go:904` | Optional registration; adapters required: `python/artex/server/pool_health.py:130` |
 | POST | `/api/llm/pool/reset` | `server/server.go:905` | Optional registration; adapters required: `python/artex/server/pool_health.py:130` |
-| GET | `/api/llm/profiles` | `server/server.go:898` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
+| GET | `/api/llm/profiles` | `server/server.go:898` | Optional registration; adapters required: `python/artex/server/profiles.py:126` (audited alternatives: `python/artex/server/profiles.py:126`, `python/artex/server/task_runtime_reads.py:98`) |
 | POST | `/api/llm/profiles` | `server/server.go:899` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | POST | `/api/llm/profiles/active` | `server/server.go:901` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
 | DELETE | `/api/llm/profiles/{id}` | `server/server.go:900` | Optional registration; adapters required: `python/artex/server/profiles.py:126` |
@@ -198,7 +200,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | PUT | `/api/skills/{name}/files/{file...}` | `server/server.go:889` | Not registered |
 | PUT | `/api/skills/{name}/meta` | `server/server.go:884` | Not registered |
 | GET | `/api/skills/{name}/usage` | `server/server.go:883` | Not registered |
-| GET | `/api/stats` | `server/server.go:661` | Optional registration; adapters required: `python/artex/server/stats.py:66` |
+| GET | `/api/stats` | `server/server.go:661` | Optional registration; adapters required: `python/artex/server/stats.py:66` (audited alternatives: `python/artex/server/stats.py:66`, `python/artex/server/task_runtime_reads.py:96`) |
 | POST | `/api/sync/scopesentry/datasource` | `server/server.go:873` | Not registered |
 | GET | `/api/sync/scopesentry/projects` | `server/server.go:874` | Not registered |
 | GET | `/api/sync/scopesentry/status` | `server/server.go:872` | Not registered |
@@ -224,7 +226,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/tasks/category/batch` | `server/server.go:679` | Optional registration; adapters required: `python/artex/server/task_categories.py:112` |
 | POST | `/api/tasks/control/batch` | `server/server.go:693` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | DELETE | `/api/tasks/{id}` | `server/server.go:821` | Not registered |
-| GET | `/api/tasks/{id}` | `server/server.go:684` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
+| GET | `/api/tasks/{id}` | `server/server.go:684` | Offline contract only: `python/artex/server/task_runtime_reads.py:95` (audited alternatives: `python/artex/server/task_runtime_reads.py:95`, `python/artex/server/tasks.py:209`) |
 | PATCH | `/api/tasks/{id}` | `server/server.go:685` | Optional registration; adapters required: `python/artex/server/tasks.py:209` |
 | POST | `/api/tasks/{id}/archive` | `server/server.go:696` | Not registered |
 | GET | `/api/tasks/{id}/asset-refs` | `server/server.go:704` | Optional registration; adapters required: `python/artex/server/task_coverage.py:29` |
@@ -302,182 +304,192 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python registration prerequisites
 
-- `GET /api/agents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/agents/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/agents/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/config`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/prompt`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/prompt/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/wrapup`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/wrapup/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/wrapup/task-timeout`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/wrapup/task-timeout/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/triggers`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/triggers`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/prompts`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/variables`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/prompt/preview`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/visibility`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/visibility`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
-- `GET /api/assets/counts`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
-- `POST /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
-- `DELETE /api/assets`: Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
-- `GET /api/audit`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/health`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/auth/status`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/auth/init`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/auth/login`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/auth/change-password`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations/{id}/messages`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations/{id}/stop`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations/{id}/messages`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations/{id}/messages/{seq}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/commands`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/commands/stats`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/companies`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/companies/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/companies/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/companies/reattribute`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/conversations/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/conversations/{id}/profile`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/conversations/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations/delete/batch`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/frontier`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/intents`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/nodes`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/findings`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `PATCH /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/stats`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/groups`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/asset-tree`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/export`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/{id}/lineage`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/exploration/findings/retests/active`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `POST /api/exploration/findings/{id}/retests`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `POST /api/exploration/findings/{id}/deepen`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `DELETE /api/exploration/findings/{id}`: Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
-- `GET /api/intercept/pending`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/intercept/pending/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/intercept/history`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/intercept-rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/intercept-rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/tasks/{id}/intercept-rules/{rid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/intercept-rules/{rid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/intercept-rules/{rid}/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/asset-intercept/rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/asset-intercept/rules`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/asset-intercept/rules/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/asset-intercept/rules/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/asset-intercept/rules/{id}/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/records`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/records/tasks`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/records/by-model`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/records/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/llm/records`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tokens/usage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/logs`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
-- `GET /api/logs/history`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
-- `GET /api/logs/stream`: build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
-- `GET /api/exploration/main-sessions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/mcp`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/mcp/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/mcp/{id}/tools`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/pool`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/pool/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/retry-policy`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/retry-policy`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/profiles`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/profiles/active`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/llm/profiles/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/llm/models`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/conversations/{id}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/chat/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/intents/{iid}/side-questions`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/side-questions/{requestID}/events`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/side-questions/{requestID}/cancel`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/stats`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `POST /api/task-categories`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `PATCH /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `DELETE /api/task-categories/{id}`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `PATCH /api/tasks/{id}/category`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `POST /api/tasks/category/batch`: Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
-- `POST /api/chat`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/chat/status`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/chat/stop`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/constraints`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/constraints`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/constraints/{cid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/coverage`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/coverage-graph`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/asset-refs`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/goals`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/goals/{gid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/intent-assets`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/tasks/{id}/llm`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/llm/resolution`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tasks/{id}/scope`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tasks/{id}/scope/{sid}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/task-templates`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/task-templates/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/task-templates/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `POST /api/tasks`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `GET /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `POST /api/tasks/{id}/control`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `PATCH /api/tasks/{id}`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `POST /api/tasks/control/batch`: build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
-- `GET /api/tokens/daily`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tokens/conversations`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/exploration/tokens`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/tools`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/tools/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tools/custom`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/tools/custom/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/tools/custom/{key}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tools/custom/test`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/tools/{key}/reset`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/traffic`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/traffic/hosts`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/traffic/exchange`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/traffic/blob`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/visibility/{kind}/{id}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/visibility/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/visibility/skill/{name}`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/visibility/skill/toggle`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/workspace/list`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/workspace/read`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/workspace/download`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/workspace/mkdir`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/workspace/delete`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/workspace/upload`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/workspace/write`: Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/config` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/prompt` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/prompt/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/wrapup` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/wrapup/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/wrapup/task-timeout` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/wrapup/task-timeout/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/triggers` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/triggers` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/prompts` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/variables` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/prompt/preview` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/visibility` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/visibility` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `GET /api/assets/counts` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `POST /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `DELETE /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `GET /api/audit` at `python/artex/server/audit.py:41` (AuditService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/health` at `python/artex/server/auth.py:105` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/auth/status` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/auth/init` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/auth/login` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/auth/change-password` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/messages` at `python/artex/server/chat.py:77` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/stop` at `python/artex/server/chat.py:78` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages` at `python/artex/server/chat.py:79` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages/{seq}` at `python/artex/server/chat.py:80` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/commands` at `python/artex/server/command_history.py:26` (CommandHistoryService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/commands/stats` at `python/artex/server/command_history.py:27` (CommandHistoryService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/companies` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/companies/{id}` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/companies/{id}` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies/{id}/scope` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/companies/reattribute` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/conversations/{id}` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/conversations/{id}/profile` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/conversations/{id}` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/delete/batch` at `python/artex/server/conversations.py:28` (ConversationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/frontier` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/intents` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/intents` at `python/artex/server/task_runtime_reads.py:97` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/graph` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/nodes` at `python/artex/server/exploration.py:78` (ExplorationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings` at `python/artex/server/task_findings.py:11` (TaskFindingsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings` at `python/artex/server/task_runtime_reads.py:101` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `PATCH /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/stats` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/groups` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/asset-tree` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/export` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/{id}/lineage` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/{id}/retests` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/exploration/findings/retests/active` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `POST /api/exploration/findings/{id}/retests` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `POST /api/exploration/findings/{id}/deepen` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `DELETE /api/exploration/findings/{id}` at `python/artex/server/findings.py:126` (FindingService.register): Explicit finding store and asset-label resolver; metadata-only PATCH; status notifications, exports, retention/deletion and retests are unavailable 503 contracts.
+- `GET /api/intercept/pending` at `python/artex/server/intercept_inspection.py:25` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/intercept/pending/{id}` at `python/artex/server/intercept_inspection.py:26` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/intercept/history` at `python/artex/server/intercept_inspection.py:27` (InterceptInspectionService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intercept-rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tasks/{id}/intercept-rules/{rid}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/intercept-rules/{rid}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intercept-rules/{rid}/toggle` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/asset-intercept/rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/asset-intercept/rules` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/asset-intercept/rules/{id}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/asset-intercept/rules/{id}` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/asset-intercept/rules/{id}/toggle` at `python/artex/server/intercept_rules.py:78` (InterceptRuleService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/tasks` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/by-model` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/records/{id}` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/llm/records` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tokens/usage` at `python/artex/server/llm_records.py:74` (LLMRecordService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/logs` at `python/artex/server/logs.py:205` (LogService.register): build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/logs/history` at `python/artex/server/logs.py:206` (LogService.register): build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/logs/stream` at `python/artex/server/logs.py:207` (LogService.register): build_application explicitly registers LogService; authenticated history requires LogStore/executor; snapshot requires explicitly supplied log ring; no SSE/capture wiring.
+- `GET /api/exploration/main-sessions` at `python/artex/server/main_sessions.py:12` (MainSessionsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/mcp` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/mcp` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/mcp/{id}` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/mcp/{id}/tools` at `python/artex/server/mcp_catalog.py:58` (MCPCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/pool` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/pool/reset` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/profiles` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm/profiles` at `python/artex/server/task_runtime_reads.py:98` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/profiles` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/profiles/active` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/llm/profiles/{id}` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/llm` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/test` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/models` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/chat/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/chat/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/chat/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/intents/{iid}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/intents/{iid}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/intents/{iid}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/side-questions/{requestID}/events` at `python/artex/server/sidequestions.py:60` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/side-questions/{requestID}/cancel` at `python/artex/server/sidequestions.py:61` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/stats` at `python/artex/server/stats.py:66` (StatsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/stats` at `python/artex/server/task_runtime_reads.py:96` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity` at `python/artex/server/task_activity.py:26` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/history` at `python/artex/server/task_activity.py:27` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/stream` at `python/artex/server/task_activity.py:28` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/activity/{seq}` at `python/artex/server/task_activity.py:29` (TaskActivityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/task-categories` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `POST /api/task-categories` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `PATCH /api/task-categories/{id}` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `DELETE /api/task-categories/{id}` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `PATCH /api/tasks/{id}/category` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `POST /api/tasks/category/batch` at `python/artex/server/task_categories.py:112` (TaskCategoryService.register): Explicit TaskCategoryService.register(router) call; injected category repository for list/create; live task manager required for rename/delete/task assignment; missing adapters return 503.
+- `POST /api/chat` at `python/artex/server/task_chat.py:42` (TaskChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/chat/status` at `python/artex/server/task_chat.py:43` (TaskChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/chat/stop` at `python/artex/server/task_chat.py:44` (TaskChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/constraints` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/constraints` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/tasks/{id}/constraints/{cid}` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/constraints/{cid}` at `python/artex/server/task_constraints.py:97` (TaskConstraintService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/coverage-graph` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/asset-refs` at `python/artex/server/task_coverage.py:29` (TaskCoverageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/goals` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/goals` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/tasks/{id}/goals/{gid}` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/goals/{gid}` at `python/artex/server/task_goals.py:108` (TaskGoalService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/intent-assets` at `python/artex/server/task_intent_assets.py:15` (TaskIntentAssetsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tasks/{id}/llm` at `python/artex/server/task_profiles.py:89` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}/llm/resolution` at `python/artex/server/task_profiles.py:90` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}` at `python/artex/server/task_runtime_reads.py:95` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks/{id}` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `GET /api/tasks/{id}/scope` at `python/artex/server/task_scope.py:37` (TaskScopeService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tasks/{id}/scope` at `python/artex/server/task_scope.py:37` (TaskScopeService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tasks/{id}/scope/{sid}` at `python/artex/server/task_scope.py:37` (TaskScopeService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/task-templates` at `python/artex/server/task_templates.py:30` (TaskTemplateService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/task-templates` at `python/artex/server/task_templates.py:30` (TaskTemplateService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/task-templates/{id}` at `python/artex/server/task_templates.py:30` (TaskTemplateService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/task-templates/{id}` at `python/artex/server/task_templates.py:30` (TaskTemplateService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tasks` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks/{id}/control` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `PATCH /api/tasks/{id}` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `POST /api/tasks/control/batch` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.
+- `GET /api/tokens/daily` at `python/artex/server/token_usage.py:26` (TokenUsageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tokens/conversations` at `python/artex/server/token_usage.py:26` (TokenUsageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/exploration/tokens` at `python/artex/server/token_usage.py:26` (TokenUsageService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/tools` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tools/{key}` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tools/custom` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/tools/custom/{key}` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/tools/custom/{key}` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tools/custom/test` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/tools/{key}/reset` at `python/artex/server/tool_catalog.py:22` (ToolCatalogService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic` at `python/artex/server/traffic_read.py:36` (TrafficReadService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/hosts` at `python/artex/server/traffic_read.py:36` (TrafficReadService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/exchange` at `python/artex/server/traffic_read.py:36` (TrafficReadService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/traffic/blob` at `python/artex/server/traffic_read.py:36` (TrafficReadService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/visibility/{kind}/{id}` at `python/artex/server/visibility.py:26` (VisibilityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/visibility/toggle` at `python/artex/server/visibility.py:27` (VisibilityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/visibility/skill/{name}` at `python/artex/server/visibility.py:28` (VisibilityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/visibility/skill/toggle` at `python/artex/server/visibility.py:29` (VisibilityService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/list` at `python/artex/server/workspace.py:42` (WorkspaceService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/read` at `python/artex/server/workspace.py:42` (WorkspaceService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/workspace/download` at `python/artex/server/workspace.py:42` (WorkspaceService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/mkdir` at `python/artex/server/workspace_mutations.py:33` (WorkspaceMutationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/workspace/delete` at `python/artex/server/workspace_mutations.py:34` (WorkspaceMutationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/upload` at `python/artex/server/workspace_upload.py:72` (WorkspaceUploadService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/workspace/write` at `python/artex/server/workspace_write.py:51` (WorkspaceWriteService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 
 ## Non-method mounts
 

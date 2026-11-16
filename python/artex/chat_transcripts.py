@@ -26,7 +26,7 @@ commit, asserting no old execution can still act. It records unknown effects and
 never retries tools/models. No default recovery, directories, threads or providers.
 """
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict,dataclass
 from datetime import datetime,timezone
 import hashlib
 import json
@@ -81,6 +81,20 @@ def _result_value(result):
     try:serialize(Config('openai','history-validation'),{'messages':value['messages']})
     except Exception:raise TranscriptError('Incomplete or invalid tool-message batch') from None
     return value
+
+
+@dataclass(frozen=True)
+class FinalizedScopedResult:
+    """Verified read receipt, not authority to run or retry any effects.
+
+    prefix_length counts canonical messages through the admitted user message.
+    result is an independent value copy; mutating it cannot alter persisted data.
+    """
+    turn_id:str
+    run_id:int
+    prefix_length:int
+    result_digest:str
+    result:RunResult
 
 
 class ChatTranscriptAdapter:
@@ -275,6 +289,33 @@ class ChatTranscriptAdapter:
         value=_result_value(result)
         if _digest(value)!=meta['result_digest']:raise TranscriptError('Finalized result digest mismatch')
         return RunResult(**value)
+
+    def finalized_scoped_result(self,session_id,turn_id,scope_identity):
+        """Read exact durable scoped turn without requiring its original prefix.
+
+        Missing/running turns return None. A matching ID with another scope (or
+        legacy unscoped metadata) conflicts, never grants cross-run replay. All
+        records and message pairing/digests are validated, including later turns.
+        No admission, metadata recovery or transcript-record writes are performed.
+        Existing store locking may create lock files or agent directories. Digests detect
+        corruption, not malicious rewriting of a fully attacker-owned store.
+        """
+        if not isinstance(turn_id,str) or not re.fullmatch(r'[0-9a-f]{32}',turn_id):
+            raise TranscriptError('Invalid scoped turn ID')
+        identity=_scope_identity(scope_identity)
+        snapshot=self.store.begin(session_id,self.agent_id)
+        records=list(snapshot.records)
+        turns=self._validate(session_id,records)
+        for index,meta,prefix in turns.values():
+            if meta['turn_id']!=turn_id:continue
+            if meta.get('scope_digest')!=_digest(identity):
+                raise TranscriptConflict('Turn scope identity differs')
+            if meta['phase']!='finalized':return None
+            value=_result_value(RunResult(messages=_history(records[:index+1+meta['generated_count']]),**deepcopy(meta['result'])))
+            if _digest(value)!=meta['result_digest']:
+                raise TranscriptError('Finalized result digest mismatch')
+            return FinalizedScopedResult(turn_id,meta['run_id'],len(prefix),meta['result_digest'],RunResult(**value))
+        return None
 
     def pending(self,session_id):
         """Inspection/recovery only; never a permission to resume model/tool execution."""

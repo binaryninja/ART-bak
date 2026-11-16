@@ -22,9 +22,10 @@ class TaskRuntimeApplication:
     runtime: object
     bootstrap: BootstrapApplication
     pump: EnginePump
+    read_app: object = None
 
     @property
-    def app(self):return self.bootstrap.app
+    def app(self):return self.read_app if self.read_app is not None else self.bootstrap.app
     @property
     def host(self):return self.bootstrap.host
     @property
@@ -54,7 +55,7 @@ class TaskRuntimeApplication:
 def build_task_runtime_application(runtime, signing_key, password_codec, *,
         live_last_activity, profile_available=None, capacity=1, max_pending=64,
         single_process=False, application_options=None, pump_interval=1.0,
-        pump_max_per_tick=8, pump_clock=monotonic):
+        pump_max_per_tick=8, pump_clock=monotonic, read_services=None):
     # Component type import stays local to avoid a setup/component import cycle.
     from ..agent.task_runtime import TaskRuntimeAssembly
     if type(runtime) is not TaskRuntimeAssembly:
@@ -66,6 +67,11 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         raise ValueError('Explicit bounded pump configuration required')
     if runtime.validate_bindings() is not True:
         raise ValueError('Task runtime bindings unavailable')
+    if read_services is not None:
+        from .task_runtime_reads import TaskRuntimeReads
+        if type(read_services) is not TaskRuntimeReads or read_services.executor is not runtime.executor:
+            raise ValueError('Exact task read composition/executor required')
+        read_services.validate_bindings()
     bootstrap=build_bootstrap_application(runtime.executor,signing_key,password_codec,
         coordinator=runtime.coordinator,
         bootstrap_configuration=runtime.bootstrap_configuration,
@@ -77,6 +83,7 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         application_options=application_options)
     if runtime.validate_bindings() is not True:
         raise RuntimeUnavailable('Task runtime bindings changed during assembly')
+    read_app=None if read_services is None else read_services.bind(bootstrap.app)
     pump=EnginePump(bootstrap.host,interval=pump_interval,
         max_per_tick=pump_max_per_tick,clock=pump_clock)
-    return TaskRuntimeApplication(runtime,bootstrap,pump)
+    return TaskRuntimeApplication(runtime,bootstrap,pump,read_app)

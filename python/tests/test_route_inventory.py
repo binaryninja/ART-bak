@@ -67,3 +67,25 @@ class RouteInventoryTests(unittest.TestCase):
                      "if condition:\n    router.add('GET','/one',handler)"):
             with self.subTest(body=body), self.assertRaises(audit.AuditError):
                 self.scan(body)
+
+class AlternativeGroupTests(unittest.TestCase):
+    def declarations(self,key):
+        name,members=audit.PYTHON_ALTERNATIVE_GROUPS[key]
+        return [dict(method=key[0],path=key[1],source=audit._ALTERNATIVE_BASE+source,
+                     function=owner,line=i+1,public=False) for i,(source,owner) in enumerate(members)]
+    def test_exact_alternative_group_preserves_all_locations_unique_count(self):
+        key=('GET','/api/exploration/findings');rows=self.declarations(key)
+        grouped=audit.group_python_routes(rows)
+        self.assertEqual(len(grouped),1);self.assertEqual(grouped[0]['declarations'],rows)
+        self.assertIn('alternative_group',grouped[0])
+    def test_unexpected_duplicates_still_fail(self):
+        key=('GET','/api/stats');rows=self.declarations(key)
+        variants=[rows+[dict(rows[0])],rows+[dict(rows[0],source='foreign.py')],
+                  [dict(r,function='Other.register') for r in rows],
+                  [dict(r,public=True) for r in rows],
+                  [dict(r,path='/unexpected') for r in rows]]
+        for variant in variants:
+            with self.subTest(variant=variant),self.assertRaises(audit.AuditError):audit.group_python_routes(variant)
+    def test_partial_duplicate_set_cannot_hide_missing_alternative(self):
+        rows=self.declarations(('GET','/api/exploration/findings'))
+        with self.assertRaises(audit.AuditError):audit.group_python_routes(rows[:2])

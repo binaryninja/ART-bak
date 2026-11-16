@@ -953,3 +953,28 @@ stream tests are not full-stack streaming evidence. No positive timed execution,
 background pump thread, listener/browser, initialized-task adoption, multi-process
 or production-readiness claim. Initial harness import typo was corrected without
 product changes.
+
+## Task finding projection (stage 77)
+
+Manifest `5f6a47b4ebfd615d6d3abbfd6f199bac791a74ccf20ebcfc317d636b97d80eea`
+passed three actual PostgreSQL groups and ten focused tests. Source DTO/local and
+direct-source provenance, asset labels and additional asset grants, post-fetch
+revocation/policy replacement, archive refusal, SQL UTF-8/row caps and ambiguous
+metadata refusal were verified. Initial fixture used an invalid finding state;
+correcting it did not require product changes. No global reads or mutation enabled.
+
+## Task progress and fixed-task overview (stage 78, final batch fix)
+
+Manifest `c25af357827552e3c2e460c894a71ffa4036683d6b48ca1692522d3571b103b4`
+passed five actual PostgreSQL groups and 29 focused tests. Actual runtime terminal
+projection produced three rows with real fixture usage totals 6/6; repeating a
+receipt added no usage, and edited persisted payload refused reconciliation.
+Authenticated fixed-task overview returned actual nonempty intents/findings.
+History/detail/SSE replay, reconnect/close, nested null/scalar/array metadata and
+later-batch grant revocation were exercised. The latter withholds buffered output
+after the actual batch-specific grant is revoked, not only the original selector.
+
+Projection is terminal-result progress, not live model-token capture. Injected
+metadata fixtures are distinct from runtime-generated activity. No original
+frontend build/browser, live providers, automatic all-task scope or unbounded
+stream service was tested. Optional factory composition is reviewed separately.

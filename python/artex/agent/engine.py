@@ -15,10 +15,10 @@ chat, archive/delete and external graph mutations must honor completion fencing.
 No deadline final-planning parity: nonzero task timeout is rejected before work.
 Task activity projection/streaming is not supplied by this module.
 """
-from dataclasses import dataclass,replace
+from dataclasses import dataclass,replace,asdict
 from threading import Condition,RLock,get_ident
 from time import monotonic
-import math,uuid
+import math,uuid,json,hashlib
 from .planner import PlannerCycle,PlannerScope
 from .worker import IntentWorker,WorkerScope
 from ..manager import CancellationToken
@@ -47,7 +47,7 @@ class EngineProgress:
 class TaskEngineHandle:
     def __init__(self,scope,token,*,store,planner,planner_scope,worker,worker_model,
                  worker_system,owner,current,lifecycle_guard,single_process,
-                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100):
+                 manual_mode=False,heartbeat_seconds=600,max_nodes=5000,max_events=100,activity_projector=None):
         if not isinstance(scope,EngineScope) or not isinstance(token,CancellationToken):raise ValueError('Exact task scope and manager token required')
         for value in (scope.task_id,scope.exploration_id,scope.run_id):
             if int64(value,'engine identity')<=0:raise ValueError('Positive engine identity required')
@@ -61,6 +61,10 @@ class TaskEngineHandle:
         if not callable(current) or not callable(lifecycle_guard):raise ValueError('Shared lifecycle authority required')
         if type(heartbeat_seconds) is not int or heartbeat_seconds<600:raise ValueError('Heartbeat minimum is 600 seconds')
         if type(max_nodes) is not int or not 1<=max_nodes<=10000 or type(max_events) is not int or not 1<=max_events<=1000:raise ValueError('Invalid engine bounds')
+        if activity_projector is not None:
+            from .activity_projection import ActivityProjector
+            if type(activity_projector) is not ActivityProjector or activity_projector.executor is not store.executor or activity_projector.scope is not scope:raise ValueError('Exact scoped activity projector required')
+        self.activity_projector=activity_projector;self._activity_projector=activity_projector
         self.scope,self.token,self.store=scope,token,store
         self.planner,self.planner_scope,self.worker=planner,planner_scope,worker
         self.worker_model,self.worker_system,self.owner=worker_model,worker_system,owner
@@ -159,9 +163,15 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
             effects=True
             if action=='planner':
                 outcome=self.planner.run(wake)
+                if self.activity_projector is not self._activity_projector:raise EngineUnresolved('Activity projector changed')
+                if self.activity_projector is not None:
+                    identity=dict(wake.scope.identity(),limits_digest=hashlib.sha256(json.dumps(asdict(self.planner.limits),sort_keys=True,allow_nan=False).encode()).hexdigest(),tool_catalog_digest=self.planner._tool_catalog_digest)
+                    self.activity_projector.project('planner',wake.scope,outcome.outcome,identity)
                 with self._condition:self._last_plan=now;self._wake=None
             else:
                 outcome=self.worker.run(worker_scope,uuid.uuid4().hex)
+                if self.activity_projector is not self._activity_projector:raise EngineUnresolved('Activity projector changed')
+                if self.activity_projector is not None:self.activity_projector.project('worker',worker_scope,outcome.outcome,worker_scope.identity(self.worker.limits))
                 with self._condition:
                     if len(self._event_ids)>=self.max_events:raise EngineUnresolved('Completed worker event requires reconciliation')
                     event_id=f'worker:{record.id}:{outcome.version}'
