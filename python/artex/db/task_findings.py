@@ -33,6 +33,10 @@ class TaskFindingsStore:
             self._check()
             if disclosure() is not True:raise CoverageDenied('Finding disclosure denied')
             self._check()
+            # Asset/request callbacks may revoke an earlier source grant.
+            # Revalidate the exact source set after those callbacks.
+            for task,exp in identities:c._allow(task,exp)
+            self._check()
         with c._context() as (tx,ids,exps,_):
             identities=tuple((task,exp) for exp,task in exps.items());allow()
             rows=tx.fetch_all(Query("""WITH selected AS (
@@ -86,6 +90,10 @@ traffic_count,owner_count,mappings FROM bounded ORDER BY (task_id<>$3),task_id,i
                 result.append(item)
             result=c._bounded(result);allow()
         with self._pins[3](self.scope):allow()
+        allow()
         def validate_disclosure():
             with self._pins[3](self.scope):allow()
+            # Guard exit itself may revoke authority; never release the
+            # already serialized response without this final fence.
+            allow()
         return result,validate_disclosure
