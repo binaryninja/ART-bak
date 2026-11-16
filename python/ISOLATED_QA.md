@@ -1686,3 +1686,23 @@ Independent source review found the new final write authority is checked after c
 Existing approved user/network namespace plus credentialless bubblewrap filesystem, fresh temporary PostgreSQL reachable only on isolated loopback. No external provider, sending, credential use, production data, or default registration. Only generated synthetic metadata. Snapshot and harness immutable; no product corrections during this run.
 
 Initial attempts were blocked by full temporary storage and produced no acceptance result. Coordinator relocated unrelated completed snapshots without deleting evidence; unchanged stage129 then exited zero. These infrastructure attempts are not product failures or passes.
+
+
+# Stage130: genuine timed admission and final runner retirement
+
+Exact manifest SHA256 `bf90fe64c3000aaa7178f3accdbaebdb8196be7a83c24fda2f28022028bfda4e`. Immutable snapshot and harness hashes were retained with the QA evidence. Base is stage125-disposition plus exactly reviewed owned_finalization.py, manual_action_owner.py, engine_runner.py and retirement tests/status. No moving source overlay or product correction during execution.
+
+## Actual PostgreSQL outcomes
+
+- Unchanged natural positive proof harness: authenticated task INSERT with timeout120, no model calls during creation, goals prepare with NULL clock, actual first planner stamp, add_intent, worker record_fact, planner prove_goal, authoritative early completion and original runner removal. All pass with real source and five-extension validators, actual owned PostgresExecutor session, canonical transcript and injected inert OpenAI transport.
+- Unchanged direct issued-cap seal regression refuses admission without writes/providers. Independent runner seal regression is separately logged.
+- Unchanged strengthened expiry harness: task INSERT with timeout20 (no synthetic prepared pins/config edits), actual worker blocked inside inert provider, real persisted deadline expires, observer draining then ready, worker returns without thread errors, pump.failure remains empty. Restricted final assessment invokes bounded list_goals and settles actual timeout. Clock timestamps do not change. Repeated finalizer invocation makes no additional provider calls. Before host.poll: original runner retained and manual pending_removal=1. After host.poll: runner absent and manual pending_removal=0. This corrects the preserved stage125-disposition failure rather than masking missing ownership.
+- Separate post-seal variant repeats genuine expiry, seals manual action admission after final settlement but before poll, then verifies exact read-only removal continuation: runner absent, sealed=True, active=0, unresolved=0, pending_removal=0. No new model calls or settlement retries.
+
+17 focused retirement tests pass, including original journal receipt identity/type/timezone checks, inert accessor, retained confirmation failures and blocked post-retirement cancellation tail. These are separate focused tests, not claimed as actual PostgreSQL concurrency evidence.
+
+## Scope and isolation
+
+Credentialless user/network namespace + bubblewrap; fresh disposable PostgreSQL17.11 on isolated loopback; original schema plus explicit five receipt installers; dummy JWT/role profiles; fixed in-process provider responses only. No live credentials, providers, commands, targets, listeners or production effects. Real positive duration is present from the initial authenticated task INSERT, unlike earlier synthetic-positive component stages. Positive path remains an explicit opt-in narrow configuration, not a production readiness or all-feature parity claim. No process/activity-provider composition, restart recovery, complete frontend workflow, failure-matrix exhaustiveness or general race-free claim.
+
+Earlier seal/disposition failure reports and manifests remain separate. No historical results were relabeled.

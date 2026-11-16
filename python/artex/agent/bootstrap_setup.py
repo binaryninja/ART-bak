@@ -59,7 +59,10 @@ class BootstrapApplication:
 def build_bootstrap_application(executor,signing_key,password_codec,*,coordinator,
         bootstrap_configuration,engine_factory,initialized_readiness,initialized_factory,
         live_last_activity,capacity=1,max_pending=64,single_process=False,
-        profile_available=None,application_options=None):
+        profile_available=None,application_options=None,timed_admission=None):
+    if timed_admission is not None:
+        from .timed_admission import PreparedTimedAdmission
+        if type(timed_admission) is not PreparedTimedAdmission:raise ValueError('Exact timed admission capability required')
     if not isinstance(coordinator,BootstrapCoordinator) or coordinator.journal.executor is not executor or coordinator._executor is not executor or coordinator._journal is not coordinator.journal or coordinator.journal._executor is not executor:raise ValueError('Exact bootstrap coordinator/executor required')
     if any(not callable(f) for f in (bootstrap_configuration,engine_factory,initialized_readiness,initialized_factory,live_last_activity)):raise ValueError('Explicit pure configuration, inert factories and live activity callback required')
     if single_process is not True or type(max_pending) is not int or not 1<=max_pending<=10000 or type(capacity) is not int or not 1<=capacity<=max_pending:raise ValueError('Explicit bounded single-process capacity required')
@@ -76,9 +79,11 @@ def build_bootstrap_application(executor,signing_key,password_codec,*,coordinato
     def factory(task,token,manager):
         value=config(task)
         if value is None:raise RuntimeUnavailable('Bootstrap configuration changed during admission')
+        cap=runner.timed_admission_for(task,policy_revision=value.policy_revision)
+        if cap is not None and cap is not timed_admission:raise RuntimeUnavailable('Bootstrap admission capability changed')
         return BootstrapHandle(task,token,coordinator=coordinator,manager=manager,
             model=value.model,system=value.system,policy_revision=value.policy_revision,
-            request_id=value.request_id,engine_factory=engine_factory)
+            request_id=value.request_id,engine_factory=engine_factory,timed_admission=cap)
     runner=EngineRunner(readiness=initialized_readiness,factory=initialized_factory,max_pending=max_pending,
         initialization_readiness=readiness,bootstrap_factory=factory)
     hosted=None;controller=None

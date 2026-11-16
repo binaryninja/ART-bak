@@ -79,8 +79,8 @@ class ManualActionOwner:
         with self._condition:
             self.validate_bindings()
             kind=self._components.get(component)
-            expected=('tick','claim_finalization') if kind=='observer' else ('run_once',) if kind=='finalizer' else ('run_once','confirm_runner_removal') if kind=='frontier' else ()
-            continuation=(kind=='frontier' and operation=='confirm_runner_removal' and component in self._pending and component._removal_pending and component.result is not None)
+            expected=('tick','claim_finalization') if kind=='observer' else ('run_once','confirm_runner_removal') if kind=='finalizer' else ('run_once','confirm_runner_removal') if kind=='frontier' else ()
+            continuation=(kind in ('frontier','finalizer') and operation=='confirm_runner_removal' and component in self._pending and component._removal_pending and component.result is not None)
             if (self._sealed and not continuation) or operation not in expected or component._manual_owner is not self or component._manual_owner_pin is not self:
                 raise ManualActionUnavailable('Manual action admission closed')
             receipt=_Invocation(component,operation,get_ident());self._active[receipt]=component
@@ -93,7 +93,7 @@ class ManualActionOwner:
             # Pure code-owned outcome inspection, no arbitrary callbacks.
             failed=bool(getattr(component,'_failed',False))
             retained=(getattr(component,'_handoff',None) is not None or getattr(component,'_freeze',None) is not None or (self._components.get(component)=='frontier' and component._used))
-            if self._components.get(component)=='frontier':
+            if self._components.get(component) in ('frontier','finalizer'):
                 if component._removal_pending:self._pending.add(component)
                 else:self._pending.discard(component)
             if failed and retained:self._unresolved.add(component)

@@ -45,7 +45,8 @@ class EngineRunner:
         self._readiness,self._factory=readiness,factory
         self.max_pending=max_pending
         self._lock=RLock(); self._handles={}; self._host=None; self._host_executor=None; self._host_manager=None
-        self._frontier={};self._host_settlement_check=None
+        self._frontier={};self._final_retirement={};self._host_settlement_check=None
+        self._timed_admission=None;self._admission_methods=None
         self._timed_lifecycle=None;self._timed_methods=None;self._timed_attempts={};self._host_work_check=None
 
     def claim_host(self, host):
@@ -74,6 +75,42 @@ class EngineRunner:
             self._host_executor=executor
             self._host_manager=host.manager
 
+    def install_timed_admission(self,cap):
+        """Explicit verified capability, only after original app composition."""
+        from .timed_admission import PreparedTimedAdmission
+        if type(cap) is not PreparedTimedAdmission:raise RuntimeUnavailable('Exact timed admission required')
+        names=('validate_bindings','validate_task','validate_handle_configuration','validate_admission_open')
+        methods=tuple(getattr(cap,n) for n in names)
+        if any(getattr(m,'__func__',None) is not getattr(PreparedTimedAdmission,n) for n,m in zip(names,methods)):
+            raise RuntimeUnavailable('Original admission methods required')
+        cap.validate_admission_open()
+        app=cap._application
+        if (self._host is None or app.runner is not self or app.host is not self._host
+            or app.manager is not self._host_manager or app.runtime.executor is not self._host_executor
+            or app.timed_lifecycle is not self._timed_lifecycle or self._timed_lifecycle is None):
+            raise RuntimeUnavailable('Original fully composed timed application required')
+        with self._lock:
+            if self._timed_admission is not None or self._handles:raise TaskConflict('Timed admission requires unused runner')
+            self._timed_admission=cap;self._admission_methods=methods
+
+    def _admission_cap(self):
+        cap=self._timed_admission
+        if cap is None:raise RuntimeUnavailable('Positive timeout requires explicit verified admission')
+        names=('validate_bindings','validate_task','validate_handle_configuration','validate_admission_open')
+        if tuple(getattr(cap,n) for n in names)!=self._admission_methods:
+            raise RuntimeUnavailable('Timed admission methods changed')
+        # Admission-only fence; existing handles retain structural cleanup access.
+        self._admission_methods[3]()
+        return cap
+
+    def timed_admission_for(self,task,*,policy_revision):
+        if task.get('timeout_seconds',0)==0:return None
+        cap=self._admission_cap()
+        cap.validate_task(deepcopy(task),runner=self)
+        if cap.runtime.bootstrap_configuration(deepcopy(task)).policy_revision!=policy_revision:
+            raise RuntimeUnavailable('Timed admission configuration changed')
+        self._admission_cap();return cap
+
     def validate_create(self, description, goal, options, seed_first_intent=False):
         if self._initialization_readiness is None:
             raise RuntimeUnavailable('Engine runner requires an initialized persisted graph; creation/bootstrap unavailable')
@@ -83,7 +120,7 @@ class EngineRunner:
     def _prepare(self, task):
         if not isinstance(task,Mapping):raise RuntimeUnavailable('Task snapshot required')
         task=deepcopy(dict(task))
-        bootstrap=False
+        bootstrap=False;positive=False
         if self._initialization_readiness is not None:
             if self._host is None:raise RuntimeUnavailable('Initialization requires a claimed persisted host')
             self.claim_host(self._host)
@@ -97,11 +134,16 @@ class EngineRunner:
             if type(task.get('seed_first_intent',False)) is not bool or task.get('seed_first_intent'):
                 raise RuntimeUnavailable('Intent seeding unavailable')
             for source in (task,options):
-                if source.get('timeout_seconds',0)!=0 or source.get('deadline_at') or source.get('source_task_ids') or source.get('parent_ref') or source.get('intercept_rules'):
-                    raise RuntimeUnavailable('Deadline, inherited context and intercept bootstrap unavailable')
+                if source.get('deadline_at') or source.get('source_task_ids') or source.get('parent_ref') or source.get('intercept_rules'):
+                    raise RuntimeUnavailable('Inherited context, existing deadline and intercept bootstrap unavailable')
+                positive=positive or source.get('timeout_seconds',0)!=0
+            if positive:
+                cap=self._admission_cap();cap.validate_task(deepcopy(task),runner=self);self._admission_cap()
             bootstrap=self._initialization_readiness(deepcopy(task))
             self.claim_host(self._host)
+            if positive:self._admission_cap()
             if type(bootstrap) is not bool:raise RuntimeUnavailable('Initialization readiness must return literal bool')
+            if positive and not bootstrap:raise RuntimeUnavailable('Positive timeout requires fresh bootstrap')
             if task.get('provisional'):
                 if not bootstrap:raise RuntimeUnavailable('Creation requires initialization readiness')
                 return task,None
@@ -113,7 +155,7 @@ class EngineRunner:
             task_id=int64(raw_id,'task ID')
             exploration_id=int64(task.get('exploration_id'),'exploration ID')
         except (TypeError,ValueError):raise RuntimeUnavailable('Initialized task identity required') from None
-        if task_id<=0 or exploration_id<=0 or task.get('timeout_seconds',0)!=0:
+        if task_id<=0 or exploration_id<=0 or (task.get('timeout_seconds',0)!=0 and not (positive and bootstrap)):
             raise RuntimeUnavailable('Initialized graph without deadline required')
         if bootstrap:return task,None
         scope=self._readiness(deepcopy(task))
@@ -217,6 +259,87 @@ class EngineRunner:
             or self._host_settlement_check(self) is not True):
             raise TaskConflict('Frontier completion requires original host settlement slot')
 
+    def _frontier_expiry_owned(self,handle,component):
+        """Defer unused frontier only to its original registered expiry owner.
+
+        This is retained ownership, not completion, drain, or error suppression.
+        Unknown/quarantined generations still fail the exact manager predicates.
+        """
+        binder=self._timed_binding()
+        if binder is None:return False
+        from .expiry_observer import OwnedExpiryObserver
+        from .owned_finalization import OwnedFinalization,FinalizationHandoff
+        from ..manager import TaskManager
+        actions=binder.actions(handle)
+        observer=actions.observer;manager=self._host_manager
+        if (actions.handle is not handle or actions.frontier is not component
+            or type(observer) is not OwnedExpiryObserver or observer.host is not self._host
+            or observer.clock.store is not component.deadline
+            or actions.timing.kernel is not observer.clock):
+            raise RuntimeUnavailable('Original frontier expiry registration changed')
+        # No lease/freeze means the original frontier branch still owns the choice.
+        if observer._freeze is None:return False
+        for name in ('validate_deadline_observation','validate_deadline_assessment'):
+            if getattr(getattr(manager,name),'__func__',None) is not getattr(TaskManager,name):
+                raise RuntimeUnavailable('Original expiry manager predicates required')
+        OwnedExpiryObserver._check(observer)
+        lease=observer._lease;freeze=observer._freeze
+        if lease is None or component.deadline.lease is not lease:
+            raise RuntimeUnavailable('Original frozen lease required')
+        handoff=observer._transfer
+        if handoff is None:
+            TaskManager.validate_deadline_observation(manager,handle.task_id,handle.token,handle,lease,freeze)
+            return True
+        finalizer=actions.finalizer
+        if (type(handoff) is not FinalizationHandoff or type(finalizer) is not OwnedFinalization
+            or handoff.owner is not finalizer or handoff.observer is not observer
+            or handoff.freeze is not freeze or handoff.lease is not lease
+            or observer._final_owner is not finalizer or finalizer.observer is not observer
+            or finalizer._failed):
+            raise RuntimeUnavailable('Original final handoff required')
+        OwnedFinalization._validate(finalizer)
+        if TaskManager.validate_deadline_assessment(manager,handoff.assessment,freeze,
+                handle.token,handle,lease,finalizer.plan.configuration.digest,inspection=False) is not True:
+            raise RuntimeUnavailable('Original final assessment ownership required')
+        return True
+
+    def _settle_final_frontier(self,key,entry):
+        """Consume only original final settlement evidence, retaining ack retries."""
+        handle,component,token,run,early_retirement,early_confirm,wait=entry
+        with self._lock:owned=self._final_retirement.get(handle)
+        if owned is None:return None
+        binder,actions,finalizer,methods=owned
+        if (self._timed_binding() is not binder or binder.actions(handle) is not actions
+            or actions.finalizer is not finalizer or actions.frontier is not component
+            or tuple(getattr(finalizer,n) for n in ('bind_runner_retirement','retirement_result','confirm_runner_removal'))!=methods):
+            raise RuntimeUnavailable('Original final retirement binding changed')
+        if finalizer.result is None:return None
+        # The final invocation tail still owns resources even after durable commit.
+        finalizer._retirement_pins()
+        if finalizer._active:return False
+        retirement=methods[1];confirm=methods[2]
+        receipt=retirement(self)
+        if wait(0) is not True or handle.unresolved is not False:
+            raise TaskConflict('Final execution effects have not drained')
+        self._frontier_slot()
+        if (retirement(self) is not receipt or handle.wait!=wait
+            or tuple(getattr(finalizer,n) for n in ('bind_runner_retirement','retirement_result','confirm_runner_removal'))!=methods):
+            raise RuntimeUnavailable('Final retirement proof changed')
+        with self._lock:
+            if self._frontier.get(key) is not entry or self._final_retirement.get(handle) is not owned:
+                raise TaskConflict('Final retirement inventory changed')
+            current=self._handles.get(key)
+            if current is handle:del self._handles[key]
+            elif current is not None:raise TaskConflict('Final retirement generation changed')
+        # Keep both ledgers until read-only confirmation succeeds, including seal.
+        if confirm() is not True:raise TaskConflict('Final removal confirmation pending')
+        self._frontier_slot()
+        with self._lock:
+            if self._frontier.get(key) is not entry or self._final_retirement.get(handle) is not owned:
+                raise TaskConflict('Final retirement inventory changed')
+            del self._frontier[key];del self._final_retirement[handle]
+        return True
+
     def _settle_frontier(self,key,entry):
         self._frontier_slot()
         handle,component,token,run,retirement,confirm,wait=entry
@@ -231,7 +354,10 @@ class EngineRunner:
         # A used controller must never replay SQL. Its private evidence accessor
         # distinguishes committed retirement from attempted/uncertain effects.
         if not component._used:
+            final=self._settle_final_frontier(key,entry)
+            if final is not None:return final
             if installed is not handle:raise TaskConflict('Frontier handle missing before attempt')
+            if self._frontier_expiry_owned(handle,component):return False
             result=run()
             if result.phase in ('busy','waiting','expiry_required'):return False
             if result.phase!='awaiting_runner_removal':raise RuntimeUnavailable('Unexpected frontier outcome')
@@ -256,6 +382,7 @@ class EngineRunner:
         with self._lock:
             if self._frontier.get(key) is not entry:raise TaskConflict('Frontier binding changed')
             del self._frontier[key]
+            self._final_retirement.pop(handle,None)
         return True
 
     def _retire_cancelled(self, key, handle):
@@ -351,6 +478,14 @@ class EngineRunner:
                     if not binder.registered(handle) or binder.actions(handle) is not actions:
                         raise RuntimeUnavailable('Prepared actions not retained')
                     if actions.finalizer is not None:
+                        from .owned_finalization import OwnedFinalization
+                        finalizer=actions.finalizer
+                        names=('bind_runner_retirement','retirement_result','confirm_runner_removal')
+                        methods=tuple(getattr(finalizer,n) for n in names)
+                        if type(finalizer) is not OwnedFinalization or any(getattr(m,'__func__',None) is not getattr(OwnedFinalization,n) for n,m in zip(names,methods)):
+                            raise RuntimeUnavailable('Original final retirement methods required')
+                        methods[0](binder,actions)
+                        with self._lock:self._final_retirement[handle]=(binder,actions,finalizer,methods)
                         handle._child.bind_timed_execution(binder,actions)
                         self._timed_binding()
                 with self._lock:

@@ -28,6 +28,7 @@ class TaskRuntimeApplication:
     read_app: object = None
     manual_actions: object = None
     timed_lifecycle: object = None
+    timed_admission: object = None
 
     @property
     def app(self):return self.read_app if self.read_app is not None else self.bootstrap.app
@@ -44,6 +45,10 @@ class TaskRuntimeApplication:
 
     def _check(self):
         self.runtime.validate_bindings()
+        if self.timed_admission is not None:
+            from ..agent.timed_admission import PreparedTimedAdmission
+            if type(self.timed_admission) is not PreparedTimedAdmission:raise RuntimeUnavailable('Exact admission capability required')
+            self.timed_admission.validate_bindings()
         if self.manual_actions is not None:
             from ..agent.manual_action_owner import ManualActionOwner
             if type(self.manual_actions) is not ManualActionOwner or self.manual_actions.host is not self.host or self.manual_actions._application is not self:
@@ -71,7 +76,7 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         live_last_activity, profile_available=None, capacity=1, max_pending=64,
         single_process=False, application_options=None, pump_interval=1.0,
         pump_max_per_tick=8, pump_clock=monotonic, read_services=None, read_router=None,
-        track_manual_actions=False, manual_action_capacity=1024, timed_lifecycle_policy=None):
+        track_manual_actions=False, manual_action_capacity=1024, timed_lifecycle_policy=None, timed_admission_request=None):
     # Component type import stays local to avoid a setup/component import cycle.
     from ..agent.task_runtime import TaskRuntimeAssembly
     if type(track_manual_actions) is not bool or type(manual_action_capacity) is not int or not 1<=manual_action_capacity<=10000:
@@ -106,6 +111,12 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         if type(read_services) is not TaskRuntimeReads or read_services.executor is not runtime.executor:
             raise ValueError('Exact task read composition/executor required')
         read_services.validate_bindings()
+    timed_admission=None
+    if timed_admission_request is not None:
+        from ..agent.timed_admission import prepare_timed_admission
+        if timed_lifecycle_policy is None or track_manual_actions is not True:
+            raise ValueError('Complete explicit tracked lifecycle required for timed admission')
+        timed_admission=prepare_timed_admission(runtime,timed_lifecycle_policy,timed_admission_request)
     bootstrap=build_bootstrap_application(runtime.executor,signing_key,password_codec,
         coordinator=runtime.coordinator,
         bootstrap_configuration=runtime.bootstrap_configuration,
@@ -114,7 +125,7 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         initialized_factory=runtime.initialized_factory,
         live_last_activity=live_last_activity,profile_available=profile_available,
         capacity=capacity,max_pending=max_pending,single_process=single_process,
-        application_options=application_options)
+        application_options=application_options,**({} if timed_admission is None else {'timed_admission':timed_admission}))
     if runtime.validate_bindings() is not True:
         raise RuntimeUnavailable('Task runtime bindings changed during assembly')
     read_app=None if read_services is None else read_services.bind(bootstrap.app)
@@ -136,5 +147,9 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         object.__setattr__(bundle,'timed_lifecycle',lifecycle)
         lifecycle.validate_bindings()
         bundle.runner.install_timed_lifecycle(lifecycle)
+    if timed_admission is not None:
+        object.__setattr__(bundle,'timed_admission',timed_admission)
+        timed_admission.bind_application(bundle)
+        bundle.runner.install_timed_admission(timed_admission)
     bundle._check()
     return bundle

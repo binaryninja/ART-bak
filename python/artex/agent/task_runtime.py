@@ -71,6 +71,7 @@ class TaskRuntimeAssembly:
         self._cleanup_authorize=cleanup_authorize;self._cleanup_pin=cleanup_authorize
         self._activity_authorize=activity_authorize;self._activity_pin=activity_authorize
         self._configurations={}
+        self._timed_admission=None;self._admission_pin=None;self._admission_digest=None
         self._transcript_store=transcript.store
         self._transcript_identity=(transcript.store.root,transcript.store.max_bytes,transcript.agent_id,transcript.recovery_guard)
         self._policy_pins=(current,lifecycle_guard,authorize,asset_authorize,validate_input,limits,policy_revision)
@@ -83,9 +84,26 @@ class TaskRuntimeAssembly:
         payload={'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}}
         if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
+        if self._timed_admission is not None:payload['timed_admission']=self._admission_digest
         return json.dumps(payload,sort_keys=True,allow_nan=False)
+    def bind_timed_admission(self,capability):
+        from .timed_admission import PreparedTimedAdmission,validate_issued_admission
+        self.validate_bindings()
+        if (type(capability) is not PreparedTimedAdmission or capability.runtime is not self
+            or self._timed_admission is not None or self._configurations):
+            raise RuntimeUnavailable('Timed admission requires unused original runtime')
+        validate_issued_admission(capability,self)
+        self._timed_admission=self._admission_pin=capability
+        self._admission_digest=capability.digest
+        self._configuration_bytes=self._configuration_identity()
+        self.validate_bindings();return True
     def validate_bindings(self):
         e,p,t,tasks,agents,profiles,factory=self._pins
+        if self._timed_admission is not self._admission_pin:raise RuntimeUnavailable('Timed admission binding changed')
+        if self._timed_admission is not None:
+            from .timed_admission import validate_issued_admission
+            validate_issued_admission(self._timed_admission,self)
+            if self._timed_admission.digest!=self._admission_digest:raise RuntimeUnavailable('Timed admission identity changed')
         if self._process_policy is not self._process_pin or self._process_policy is not None and any(getattr(self._process_policy,k) is not v for k,v in self._process_fields):
             raise RuntimeUnavailable('Process policy changed')
         policy=self._timing_policy
@@ -163,6 +181,7 @@ class TaskRuntimeAssembly:
         if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
         if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
+        if self._timed_admission is not None:payload['timed_admission']=self._admission_digest
         if timeout:payload['timeout_seconds']=timeout
         if self._task_timeout(task)!=timeout:raise RuntimeUnavailable('Timeout changed during role selection')
         digest=hashlib.sha256(json.dumps(payload,sort_keys=True,allow_nan=False).encode()).hexdigest()

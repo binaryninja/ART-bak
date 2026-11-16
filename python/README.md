@@ -27,7 +27,7 @@ Additional offline/injected-adapter slices now exist for `agent`, `db`, `enrich`
 `evidence`, `intercept`, `llmpool`, `llmrec`, `mcphttp`, `notify`, `server`,
 `sidequestion`, `skills`, and `traffic`. Each package includes its own status
 notes describing implementation boundaries and deliberate differences. The
-combined suite currently passes **3331 tests**; these are authored unit/adapter
+combined suite currently passes **3383 tests**; these are authored unit/adapter
 tests, not Go differential tests or end-to-end frontend compatibility tests.
 
 Run `python python/tools/translation_inventory.py` from the repository root to audit remaining Han text.
@@ -85,3 +85,14 @@ The CLI tests mock database/server boundaries; this statement describes source
 capability, not an actual socket acceptance result. Full task-runtime resource
 and shutdown composition into a packaged launcher remains separate work. See
 `DEV_RUNTIME_LISTENER_PLAN.md` for the proposed explicit-input boundary.
+
+## Explicit timed-admission profile
+
+The opt-in single-session/manual-observer profile now has actual PostgreSQL
+acceptance from positive-duration task creation through proof-based completion
+or blocked-worker deadline cleanup, restricted final assessment and exact runner
+retirement. It requires explicit original resources, schema validators and final
+plan; it is not the default and does not provide a production listener, automatic
+observer, restart recovery or arbitrary tool integration. See
+TIMED_ADMISSION_CANDIDATE_STATUS.md and ISOLATED_QA.md for the exact supported
+profile, prior corrected failures and limitations.

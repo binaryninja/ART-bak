@@ -24,16 +24,26 @@ from ..db.tasks import TaskStore
 from ..sidequestion import Model
 
 class BootstrapHandle:
-    def __init__(self,task,token,*,coordinator,manager,model,system,policy_revision,request_id,engine_factory):
+    def __init__(self,task,token,*,coordinator,manager,model,system,policy_revision,request_id,engine_factory,timed_admission=None):
         if type(token) is not CancellationToken or not isinstance(coordinator,BootstrapCoordinator) or not isinstance(manager,TaskManager) or not isinstance(manager.repository,TaskStore):raise ValueError('Actual coordinator, manager repository and token required')
         if not isinstance(task,dict) or not callable(engine_factory):raise ValueError('Explicit task snapshot and inert engine factory required')
         raw=task.get('id')
         if isinstance(raw,str) and raw.isascii() and raw.isdecimal():raw=int(raw)
         exp=task.get('exploration_id')
         if type(raw) is not int or not 0<raw<2**63 or type(exp) is not int or not 0<exp<2**63:raise ValueError('Valid persisted task/exploration required')
-        if task.get('timeout_seconds',0)!=0 or task.get('seed_first_intent'):raise ValueError('Deadlines and first intent seeding unavailable')
+        if task.get('seed_first_intent'):raise ValueError('First intent seeding unavailable')
+        if timed_admission is not None:
+            from .timed_admission import PreparedTimedAdmission
+            if type(timed_admission) is not PreparedTimedAdmission or any(getattr(getattr(timed_admission,name,None),'__func__',None) is not getattr(PreparedTimedAdmission,name) for name in ('validate_bindings','validate_handle_configuration')):
+                raise ValueError('Exact original timed admission capability required')
+        if task.get('timeout_seconds',0)!=0:
+            if timed_admission is None:raise ValueError('Positive timeout requires explicit timed admission')
+            timed_admission.validate_handle_configuration(task,manager,coordinator,policy_revision,model,system=system,request_id=request_id)
+        elif timed_admission is not None:raise ValueError('Zero timeout does not use timed admission')
         if not isinstance(model,Model) or not model.identity or not isinstance(system,str) or not system.strip() or not isinstance(policy_revision,str) or not 1<=len(policy_revision)<=256 or not isinstance(request_id,str) or not 1<=len(request_id)<=128:raise ValueError('Explicit bootstrap configuration and request ID required')
         if manager.repository.executor is not coordinator.journal.executor:raise ValueError('Manager and bootstrap must share executor')
+        self.timed_admission=self._timed_admission=timed_admission
+        self._admission_check=None if timed_admission is None else timed_admission.validate_bindings
         self.task_id=str(raw);self.exploration_id=exp;self.token=token
         self.model,self.system,self.policy_revision,self.request_id=model,system,policy_revision,request_id
         self.manager,self.coordinator=manager,coordinator
@@ -45,7 +55,7 @@ class BootstrapHandle:
         self._phase='installed';self._child=None;self._receipt=None;self._unresolved=False;self._completed=False
     @property
     def prepared_timeout_seconds(self):
-        """Constructor-owned timeout pin; current constructors accept only zero."""
+        """Constructor-owned timeout; positive requires verified explicit cap."""
         return self._configuration[-1]
     @property
     def executor(self):return self._executor
@@ -60,6 +70,10 @@ class BootstrapHandle:
     def phase(self):
         with self._condition:return self._phase
     def _binding(self):
+        if self.timed_admission is not self._timed_admission:raise BootstrapConflict('Timed admission changed')
+        if self._timed_admission is not None:
+            if self._timed_admission.validate_bindings!=self._admission_check:raise BootstrapConflict('Timed admission validation changed')
+            self._admission_check()
         if self.manager is not self._manager or self.coordinator is not self._coordinator or self.token is not self._token or self.manager.repository is not self._repository or self._repository.executor is not self._executor or self.coordinator.journal.executor is not self._executor:
             raise BootstrapConflict('Bootstrap owning resource changed')
         if (self.model,self.system,self.policy_revision,self.request_id,self.task_id,self.exploration_id,self._task.get('timeout_seconds',0))!=self._configuration:raise BootstrapConflict('Bootstrap configuration changed')
