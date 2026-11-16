@@ -13,9 +13,14 @@ from .wsgi import WSGIApplication
 from .stats import StatsService
 from .exploration import ExplorationService
 from .profiles import ProfileService
+from ..db.core import Query
 from ..db.stats import StatsStore
 from ..db.exploration import ExplorationStore
 from ..db.profiles import ProfileStore
+
+class _LocalIntentPageStore(ExplorationStore):
+    """No inherited expansion, including a relation added after the bounded check."""
+    def direct_sources(self):return []
 
 @dataclass(frozen=True)
 class TaskReadScope:
@@ -111,9 +116,17 @@ class TaskRuntimeReads:
             if request.body:raise ValueError()
             query=urlsplit(request.target).query
             if len(query)>256:raise ValueError()
-            pairs=parse_qsl(query,keep_blank_values=True,strict_parsing=True,errors='strict',max_num_fields=2)
-            expected=[] if op in ('profiles','task') else [('task',str(self.scope.task_id))]
-            if pairs!=expected:raise ValueError()
+            pairs=parse_qsl(query,keep_blank_values=True,strict_parsing=True,errors='strict',max_num_fields=4 if op=='intents' else 2)
+            if op=='intents':
+                # Frontend intentsPage sends limit/task/before/page. Preserve the
+                # fixed task boundary; ExplorationService owns numeric bounds and
+                # the legacy-list versus page-envelope selection.
+                selectors=dict(pairs)
+                if (len(selectors)!=len(pairs) or set(selectors)-{'task','limit','before','page'}
+                        or selectors.get('task')!=str(self.scope.task_id)):raise ValueError()
+            else:
+                expected=[] if op in ('profiles','task') else [('task',str(self.scope.task_id))]
+                if pairs!=expected:raise ValueError()
             if op=='findings':
                 # The scoped findings service owns its guard and source/asset
                 # grants. Never nest our possibly non-reentrant guard around it.
@@ -134,7 +147,13 @@ class TaskRuntimeReads:
                 if op=='stats':
                     response=StatsService(self.stats,runtime_snapshot=self.runtime_snapshot).get(request)
                 elif op=='intents':
-                    response=ExplorationService(lambda task:self.graph if task==str(self.scope.task_id) else None)._handle('intents',request)
+                    if ('page' in selectors or 'before' in selectors) and self.executor.fetch_all(Query(
+                            'SELECT 1 FROM task_relations WHERE task_id=$1 LIMIT 1',(self.scope.task_id,))):
+                        # Generic paging merges inherited tasks. This fixed-task
+                        # capability has no authority for those sources.
+                        return error_response(503,'Inherited intent paging unavailable')
+                    store=_LocalIntentPageStore(self.executor,self.scope.exploration_id) if ('page' in selectors or 'before' in selectors) else self.graph
+                    response=ExplorationService(lambda task:store if task==str(self.scope.task_id) else None)._handle('intents',request)
                 elif op=='profiles':response=ProfileService(self.profiles)._handle('list',request)
                 elif op=='findings':response=self.findings_service.handle(request)
                 else:response=base.dispatch(request)

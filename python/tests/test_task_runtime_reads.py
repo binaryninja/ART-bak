@@ -16,6 +16,9 @@ class Tests(unittest.TestCase):
             if q.sql.startswith('SELECT exploration_id FROM tasks WHERE'):return [(9,)]
             if q.sql.startswith('SELECT kind, count(*)'):return [('fact',1)]
             if q.sql.startswith('SELECT id,name,format,'):return []
+            if 'AND ($3 <= 0 OR id < $3)' in q.sql:return []
+            if q.sql.startswith('SELECT source.id, source.exploration_id'):raise AssertionError('No inherited source reads authorized')
+            if q.sql.startswith('SELECT 1 FROM task_relations'):return []
             return old_all(q)
         def one(q):
             if q.sql.startswith("SELECT count(*) FILTER (WHERE state='running')"):return (0,)
@@ -76,3 +79,55 @@ class Tests(unittest.TestCase):
             lifecycle_guard=lambda s:nullcontext(),runtime_snapshot=lambda s:None,findings_service=f.service)
         with self.assertRaises(PermissionError):reads.validate_bindings()
         self.assertEqual(f.f.db.calls,[])
+
+    def test_frontend_intents_page_query_and_legacy_shape(self):
+        self.f.build(read_services=self.reads)
+        status,body=self.request('/api/exploration/intents','limit=300&task=5&before=0&page=1')
+        self.assertEqual(status,200)
+        self.assertEqual(body,{'items':[],'has_more':False})
+        status,body=self.request('/api/exploration/intents','task=5')
+        self.assertEqual(status,200);self.assertIsInstance(body,list)
+
+    def test_paged_intents_reject_foreign_duplicate_unknown_and_bad_bounds(self):
+        self.f.build(read_services=self.reads)
+        for query in ('limit=300&task=6&before=0&page=1', 'task=05&page=1',
+                      'task=5&task=5&page=1', 'task=5&limit=1&limit=2',
+                      'task=5&extra=1', 'limit=300&before=0&page=1',
+                      'task=5&before=-1&page=1', 'task=5&page=0',
+                      'task=5&limit=NaN', 'task=5&before=9223372036854775808'):
+            with self.subTest(query=query):
+                self.assertEqual(self.request('/api/exploration/intents',query)[0],400)
+        self.allowed=False
+        self.assertEqual(self.request('/api/exploration/intents','limit=300&task=5&before=0&page=1')[0],403)
+        self.assertEqual(self.request('/api/exploration/intents','limit=300&task=5&before=0&page=1',auth=False)[0],401)
+
+    def test_paged_intents_does_not_implicitly_grant_inherited_sources(self):
+        self.f.build(read_services=self.reads)
+        original=self.reads.executor.fetch_all
+        def read(query):
+            if query.sql.startswith('SELECT 1 FROM task_relations'):return [(1,)]
+            if query.sql.startswith('SELECT source.id, source.exploration_id'):
+                raise AssertionError('Inherited source metadata must not be read')
+            return original(query)
+        self.reads.executor.fetch_all=read
+        status,body=self.request('/api/exploration/intents','limit=300&task=5&before=0&page=1')
+        self.assertEqual(status,503);self.assertNotIn('items',body)
+
+    def test_populated_page_cursor_limit_and_source_isolation(self):
+        from datetime import datetime,timezone
+        self.f.build(read_services=self.reads)
+        original=self.reads.executor.fetch_all;seen=[]
+        def read(query):
+            if 'AND ($3 <= 0 OR id < $3)' in query.sql:
+                seen.append(query.params)
+                ids=[n for n in (12,11,10) if not query.params[2] or n<query.params[2]]
+                return [(n,'intent',{'text':'synthetic'},0,'done','','','','',datetime(2026,1,1,tzinfo=timezone.utc)) for n in ids[:query.params[3]]]
+            if query.sql.startswith('SELECT source.id, source.exploration_id'):
+                raise AssertionError('No source expansion, even after relation check')
+            return original(query)
+        self.reads.executor.fetch_all=read
+        status,body=self.request('/api/exploration/intents','limit=1&task=5&before=0&page=1')
+        self.assertEqual(status,200);self.assertEqual([r['id'] for r in body['items']],['12']);self.assertTrue(body['has_more'])
+        status,body=self.request('/api/exploration/intents','task=5&before=12&limit=2')
+        self.assertEqual(status,200);self.assertEqual([r['id'] for r in body['items']],['11','10']);self.assertFalse(body['has_more'])
+        self.assertEqual(seen,[(9,'intent',0,2),(9,'intent',12,3)])
