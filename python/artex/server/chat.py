@@ -80,17 +80,17 @@ class ChatService:
         owner=getattr(original,'__self__',None)
         jwt=(owner.store,owner.codec,owner.key,owner.clock) if type(owner)is AuthService else None
         method=getattr(original,'__func__',None)
+        def transport_pins():
+            if router.authorize is not original:raise PermissionError('Router authority changed')
+            if jwt is not None and (getattr(owner.authorized,'__self__',None)is not owner or getattr(owner.authorized,'__func__',None)is not method or any(a is not b for a,b in zip((owner.store,owner.codec,owner.key,owner.clock),jwt))):raise PermissionError('JWT authority changed')
         def transport(request):
-            def pins():
-                if router.authorize is not original:raise PermissionError('Router authority changed')
-                if jwt is not None and (getattr(owner.authorized,'__self__',None)is not owner or getattr(owner.authorized,'__func__',None)is not method or any(a is not b for a,b in zip((owner.store,owner.codec,owner.key,owner.clock),jwt))):raise PermissionError('JWT authority changed')
-            pins()
+            transport_pins()
             if original(request)is not True:raise PermissionError('Router access denied')
-            pins();return True
-        router.add('POST','/api/conversations/{id}/messages',lambda request,params:self.handle(request,params['id'],_transport=transport))
-        router.add('POST','/api/conversations/{id}/stop',lambda request,params:self.handle(request,params['id'],stop=True,_transport=transport))
-        router.add('GET','/api/conversations/{id}/messages',lambda request,params:self.read(request,params['id']))
-        router.add('GET','/api/conversations/{id}/messages/{seq}',lambda request,params:self.read(request,params['id'],params['seq']))
+            transport_pins();return True
+        router.add('POST','/api/conversations/{id}/messages',lambda request,params:self.handle(request,params['id'],_transport=transport,_transport_pins=transport_pins))
+        router.add('POST','/api/conversations/{id}/stop',lambda request,params:self.handle(request,params['id'],stop=True,_transport=transport,_transport_pins=transport_pins))
+        router.add('GET','/api/conversations/{id}/messages',lambda request,params:self.read(request,params['id'],_transport=transport,_transport_pins=transport_pins))
+        router.add('GET','/api/conversations/{id}/messages/{seq}',lambda request,params:self.read(request,params['id'],params['seq'],_transport=transport,_transport_pins=transport_pins))
 
     def running(self,identifier):return self.dispatcher.running(identifier)
 
@@ -100,37 +100,9 @@ class ChatService:
             raise ChatUnavailable('Parent-bound activity store required')
         return activities
 
-    def read(self,request,raw_id,seq=None):
-        try:
-            if not re.fullmatch(r'[1-9][0-9]{0,18}',raw_id) or int(raw_id)>=2**63:raise ValueError()
-            identifier=int(raw_id)
-            conversation=self.store.get(identifier)
-            if conversation is None:return error_response(404,'Conversation not found')
-            if not isinstance(conversation,Conversation) or conversation.id!=identifier:raise ChatUnavailable()
-            if self.authorize(request,deepcopy(conversation)) is not True:return error_response(403,'Conversation access denied')
-            activities=self._activities(identifier)
-            query=parse_qs(urlsplit(request.target).query,keep_blank_values=True)
-            if any(len(v)!=1 for v in query.values()):raise ValueError()
-            def number(key,default=0):
-                value=query.get(key,[str(default)])[0]
-                if not re.fullmatch(r'-?[0-9]+',value) or not -(2**63)<=int(value)<2**63:raise ValueError()
-                return int(value)
-            if seq is not None:
-                if query or not re.fullmatch(r'[1-9][0-9]{0,18}',seq) or int(seq)>=2**63:raise ValueError()
-                return json_response(200,{'detail':activities.detail(int(seq))})
-            if set(query)-{'since','before','limit'}:raise ValueError()
-            limit=number('limit',200)
-            if limit>10000:raise ValueError()
-            if 'since' in query:
-                items,cursor=activities.list(number('since'),max(limit,1000));more=False
-            else:
-                before=number('before');items,more=activities.page(before,limit)
-                cursor=items[-1].id if items else before
-            return json_response(200,{'items':[activity_dto(item) for item in items],
-                'cursor':cursor,'running':self.running(identifier),'hasMore':more})
-        except ChatUnavailable:return error_response(503,'Conversation access or activity storage unavailable')
-        except (ValueError,TypeError):return error_response(400,'Invalid message query')
-        except Exception:return error_response(500,'Conversation activity read failed')
+    def read(self,request,raw_id,seq=None,*,_transport=None,_transport_pins=None):
+        from .conversation_activity_read import read_conversation_activity
+        return read_conversation_activity(self,request,raw_id,seq,_transport,_transport_pins)
 
     def _live(self,identifier,expected=None):
         conversation=self.store.get(identifier)
@@ -140,12 +112,14 @@ class ChatService:
             raise RunStopped('conversation_changed')
         return conversation
 
-    def handle(self,request,raw_id,*,stop=False,_transport=None):
+    def handle(self,request,raw_id,*,stop=False,_transport=None,_transport_pins=None):
         try:
             frozen=deepcopy(request);headers=request.headers
             original=(self.store,self.resolve,self.authorize,self.dispatcher,self.activities)
-            get=self.store.get
+            get=self.store.get;missing=object();executor=getattr(self.store,'executor',missing)
             def pure():
+                if _transport_pins is not None:_transport_pins()
+                if getattr(self.store,'executor',missing)is not executor:raise PermissionError('Conversation executor changed')
                 if request.headers is not headers or request!=frozen or any(a is not b for a,b in zip((self.store,self.resolve,self.authorize,self.dispatcher,self.activities),original)):
                     raise PermissionError('Conversation request changed')
                 current=original[0].get
