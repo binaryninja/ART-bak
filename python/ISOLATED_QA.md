@@ -1070,3 +1070,34 @@ callbacks revoking previously granted source or connector authority return403
 without graph content. One task's selector denial does not affect the other.
 Reads invoke no models/testing; POST does not enable mutation. All assets/scopes
 and provider responses are inert fixtures, not target tests or default permission.
+
+## Restricted final-assessment runner (stage 88)
+
+Manifest `826015fd8fe67bd712b9b20e98134a2c34bc136589e5d5b1b13634628034ad71`
+passed five actual PostgreSQL groups and twelve focused tests, including the
+post-turn execution fence. Actual native bounded list_goals, two inert provider
+turns and canonical JSONL produce a final journal receipt without changing task
+status or granting terminal authority. Model/read grants, expiry and generation
+drift deny access. An actual final journal UPDATE failure quarantines ownership;
+removing the failure does not permit retry or repeat inference. Positive timeout
+configuration remains explicit private test-pin injection, not admitted timed
+runtime. No live models, terminal settlement, automatic recovery or production
+readiness claim. Initial denied-read fixture was corrected to expect the actual
+safe one-turn stop rather than a second model call; no product change was needed.
+
+## Explicit development runtime loopback transport (stage 89)
+
+Manifest `f782a3eaadbefab54b4b8748a45a6e39923929057c96126d9878bed60136f305`
+passed four actual isolated loopback/PostgreSQL groups and nineteen focused tests.
+Real127.0.0.1 HTTP/JWT creates a task without inference; explicit pump start then
+completes the real graph runtime with inert responses. Finite SSE permits concurrent
+pause/read. Raw duplicate auth/length, Transfer-Encoding, network-path targets,
+foreign/cross-port Origin and oversized bodies are refused. An outstanding HTTP
+callback causes truthful unresolved shutdown with the pool retained; releasing it
+and retrying the explicit idempotent owner closes resources once. An initial
+fixture callback that paused an already-paused task was corrected; no product
+change was needed. This unresolved case is HTTP, not an ambiguous engine run.
+No public interface, forwarding, live model, real credentials or original frontend/
+CLI execution. Same-origin dev transport only; no production deployment or arbitrary
+blocking-provider cancellation guarantee. Host shutdown callbacks are explicit
+fixture authority, not a generic inferred lifecycle policy.

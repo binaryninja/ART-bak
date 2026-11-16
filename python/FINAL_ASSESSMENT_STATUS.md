@@ -1,4 +1,9 @@
-# Final assessment: journal prerequisite, not an executable final round
+# Final assessment journal component
+
+The journal alone does not execute a final model round. A separately reviewed
+read-only runner now composes it; see RESTRICTED_FINAL_RUNNER_STATUS.md. The
+journal-checkpoint limits below remain specific to this component, not a claim
+that the separate runner is absent.
 
 ## Implemented
 
