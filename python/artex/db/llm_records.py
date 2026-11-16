@@ -154,9 +154,38 @@ class LLMRecordStore:
         count=self.executor.execute(Query('''INSERT INTO llm_usage(task_id,exploration_id,worker,model,profile_name,latency_ms,input_tokens,output_tokens,cache_read,cache_write,status)
 VALUES (NULLIF($1,''),$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6,$7,$8,$9,$10,$11)''',params))
         if count!=1:raise RecordUnavailable('Usage insertion not confirmed')
-    def token_by_model(self,task):
+    def token_by_model(self,task,*,max_rows=None,max_bytes=None):
         task=self._scope(task)
-        rows=self.executor.fetch_all(Query("""SELECT COALESCE(NULLIF(model,''),'(unknown)') AS model,COUNT(*) AS calls,
+        sql="""SELECT COALESCE(NULLIF(model,''),'(unknown)') AS model,COUNT(*) AS calls,
 COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),COALESCE(SUM(cache_read),0),COALESCE(SUM(cache_write),0)
-FROM llm_usage WHERE COALESCE(task_id,'')=$1 GROUP BY model ORDER BY SUM(input_tokens)+SUM(output_tokens) DESC,model""",(task,)))
-        return [dict(zip(('model','calls','input_tokens','output_tokens','cache_read_tokens','cache_write_tokens'),row)) for row in rows]
+FROM llm_usage WHERE COALESCE(task_id,'')=$1 GROUP BY model ORDER BY SUM(input_tokens)+SUM(output_tokens) DESC,model"""
+        fields=('model','calls','input_tokens','output_tokens','cache_read_tokens','cache_write_tokens')
+        if max_rows is None and max_bytes is None:
+            rows=self.executor.fetch_all(Query(sql,(task,)))
+            return [dict(zip(fields,row)) for row in rows]
+        if (type(max_rows) is not int or not 1<=max_rows<=10000
+                or type(max_bytes) is not int or not 1024<=max_bytes<=16777216):
+            raise RecordInvalid('Explicit model aggregate bounds required')
+        # Bound transferred labels before materialization. Numeric aggregates have
+        # fixed output fields and are range-validated; never truncate a top-N total.
+        columns=','.join(fields)
+        bounded='WITH grouped('+columns+') AS ('+sql+"""), sized AS (
+SELECT *,SUM(octet_length(model)) OVER () AS label_bytes FROM grouped)
+SELECT CASE WHEN label_bytes<=$2 THEN model ELSE NULL END,calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens
+FROM sized ORDER BY input_tokens+output_tokens DESC,model LIMIT $3"""
+        rows=self.executor.fetch_all(Query(bounded,(task,max_bytes,max_rows+1)))
+        if len(rows)>max_rows:raise RecordUnavailable('Model aggregate bound exceeded')
+        from decimal import Decimal
+        output=[];label_bytes=0
+        for row in rows:
+            if len(row)!=6 or type(row[0]) is not str or not row[0] or len(row[0].encode())>max_bytes:
+                raise RecordUnavailable('Invalid model aggregate')
+            label_bytes+=len(row[0].encode())
+            if label_bytes>max_bytes:raise RecordUnavailable('Model label bound exceeded')
+            values=[row[0]]
+            for value in row[1:]:
+                if type(value) is Decimal and value.is_finite() and value==value.to_integral_value():value=int(value)
+                if type(value) is not int or not 0<=value<2**63:raise RecordUnavailable('Invalid model count')
+                values.append(value)
+            output.append(dict(zip(fields,values)))
+        return output
