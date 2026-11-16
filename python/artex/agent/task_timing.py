@@ -35,7 +35,7 @@ class PreparedTaskTiming:
             raise ValueError('Exact scope, timing policy and configuration authority required')
         self.scope=scope;self.policy=policy;self.configuration_current=configuration_current
         self._pins=(scope,policy,configuration_current,policy.revision,policy.clock,policy.wall_clock,policy.stamp_authorize,policy.dispatch_authorize)
-        self._lock=RLock();self._attempted=False;self._bound=None;self.store=None;self.kernel=None;self._resources=None
+        self._lock=RLock();self._attempted=False;self._bound=None;self.store=None;self.kernel=None;self._resources=None;self._observe=None
     def validate_bindings(self):
         s,p,c,r,mono,wall,stamp,dispatch=self._pins
         if self.scope is not s or self.policy is not p or self.configuration_current is not c or p.revision!=r or any(a is not b for a,b in zip((p.clock,p.wall_clock,p.stamp_authorize,p.dispatch_authorize),(mono,wall,stamp,dispatch))):
@@ -51,6 +51,7 @@ class PreparedTaskTiming:
             if (self.store,self.kernel)!=self._resources:raise TimingUnavailable('Timing resources changed')
             if timeout:
                 self.store._binding_check();self.kernel._check()
+                if self.kernel.observe!=self._observe:raise TimingUnavailable('Original clock observer changed')
         return True
     def bind(self,manager,outer,engine):
         from ..manager import TaskManager
@@ -76,9 +77,20 @@ class PreparedTaskTiming:
                 self.store=TaskDeadlineStore(outer.executor,manager=manager,handle=outer,receipt=receipt,
                     lifecycle_guard=outer.coordinator.guard,authorize=self._pins[6])
                 self.kernel=OwnedGenerationClock(self.store,timeout,monotonic_clock=self._pins[4])
-                self._resources=(self.store,self.kernel)
+                self._resources=(self.store,self.kernel);self._observe=self.kernel.observe
             self.validate_bindings()
             return True
+    def execution_status(self):
+        """Read the original shared clock without allocating or stamping it."""
+        self.validate_bindings()
+        if self._bound is None or self._bound[6]<=0 or self.kernel is None:
+            raise TimingUnavailable('Original positive timing binding required')
+        observation=self.kernel.observe()
+        self.validate_bindings()
+        if observation is None:return 'busy'
+        if observation.lease is None:return 'unstamped'
+        if observation.lease is not self.store.lease:raise TimingUnavailable('Original execution clock changed')
+        return 'expired' if observation.expired else 'live'
     def wrap(self,scope,role,binding):
         from .planner import PlannerScope
         from .worker import WorkerScope

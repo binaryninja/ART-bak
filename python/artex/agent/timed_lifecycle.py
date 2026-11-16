@@ -156,6 +156,41 @@ class PreparedTimedLifecycle:
             entry=self._entries.get(handle)
             if entry is None or entry.failed or entry.actions is None or entry.handle is not handle or entry.token is not handle.token:raise TimedLifecycleUnavailable('Original registered actions unavailable')
             return entry.actions
+    def validate_execution_registration(self,handle,actions):
+        """Original complete registration, not admission/schema authority.
+
+        This validation permits the already-owned engine frame; unlike initial
+        registration it does not require the outer handle to be idle.
+        """
+        self.validate_bindings()
+        with self._lock:
+            entry=self._entries.get(handle)
+            if (type(actions) is not PreparedTimedActions or entry is None or entry.failed
+                or entry.actions is not actions or entry.handle is not handle or entry.token is not handle.token
+                or actions.handle is not handle or actions.receipt is not entry.receipt
+                or actions.timing is not entry.timing or actions.finalizer is None):
+                raise TimedLifecycleUnavailable('Original complete execution registration required')
+            products=tuple(entry.products)
+        app,runtime,host,manager,runner,manual,executor,policy=self._pins
+        timing=actions.timing
+        if (handle.manager is not manager or handle.executor is not executor or handle.phase!='engine'
+            or handle._receipt is not actions.receipt or handle._child.timing is not timing
+            or timing.policy is not policy.timing_policy or timing._bound is None
+            or timing._bound[1] is not handle or timing._bound[2] is not handle._child
+            or timing._bound[3] is not actions.receipt or handle.prepared_timeout_seconds<=0
+            or (timing.scope.task_id,timing.scope.exploration_id,timing.scope.run_id,timing.scope.revision)!=(actions.receipt.task_id,actions.receipt.exploration_id,actions.receipt.run_id,handle.policy_revision)
+            or policy.final_plan is None or actions.finalizer.plan is not policy.final_plan
+            or actions.finalizer.observer is not actions.observer
+            or any(not any(p is c for p in products) for c in (actions.observer,actions.frontier,actions.finalizer))):
+            raise TimedLifecycleUnavailable('Timed execution ownership changed')
+        with manual._condition:
+            if (manual._sealed or manual._components.get(actions.observer)!='observer'
+                or manual._components.get(actions.frontier)!='frontier'
+                or manual._components.get(actions.finalizer)!='finalizer'):
+                raise TimedLifecycleUnavailable('Original manual lifecycle unavailable')
+        timing.validate_bindings();handle.validate_prepared_receipt(actions.receipt)
+        if not manager.owns_generation(handle.task_id,handle.token,handle):raise TimedLifecycleUnavailable('Original timed execution retired')
+        self.validate_bindings();return True
     def status(self):
         self.validate_bindings()
         with self._lock:return TimedLifecycleStatus(sum(e.actions is not None and not e.failed for e in self._entries.values()),sum(e.failed for e in self._entries.values()),self._pins[7].final_plan is not None,False)

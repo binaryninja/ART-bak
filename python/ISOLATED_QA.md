@@ -1587,3 +1587,32 @@ The saved harness, manifest and integration/focused logs accompany this report.
 
 ### Limits
 This is in-process authenticated WSGI with real PostgreSQL, not listener/browser/frontend acceptance. No default route activation, execution/approval action or broad final-provider rerun. SQL raw byte bounds were previously actual-tested in stage116 and are exercised here only through focused tests, not a new oversized actual SQL fixture. Dedicated parent/raw/correlation mutation negatives cover the listed boundaries, not a guarantee against arbitrary mutually mutating policy callbacks. No blanket timed runtime or project parity claim.
+
+## Stage 119: original catalog compatibility failures
+
+The initial prerequisites62 manifest `3df5f7f60e9b1d965b5e8e4e69312b447112288d34626b3c20c06daecbaa53b7` failed on native OID JSON strings. The revised prerequisites63 manifest `d8a2ea62cc812e19121671a80a123216f1fbf401c7f8d95167ef96acc2f7c973` passed that boundary but failed on native kind-specific constraint inheritance flags. Both failed runs remain distinct from the final acceptance below; neither used normalized catalog descriptors.
+
+## Stage 119 final revised candidate: PASS
+Exact frozen source; manifest SHA256 `9f5afd3cf7d00a395537afff2f501615d8c4ec593037ec200f82d4e4b8f050e2`. Distinct source copy, no overlays or native descriptor coercion. Earlier prerequisites62/63 failures remain preserved separately.
+
+Three actual PostgreSQL groups passed, including 13 hostile DDL variants and two session-resolution variants. 19 focused test executions passed.
+
+- Original fresh schema plus all five actual extension installers yield an accepted PG17 observation with source_readiness false. Exactly one catalog fetch occurs; bootstrap sequence last_value/is_called remains unchanged and query contains no nextval invocation.
+- Each actual alteration refused, transaction rolled back, final pristine positive succeeds: extra column, nullable required field, revision default2, serial increment2, RLS, missing status CHECK, additional CHECK, extra index, removed sequence ownership, serial default replaced by literal1, removed task FK, CHECK NO INHERIT, varchar typmod substitution.
+- Actual temporary-table shadow and nonpublic search-path shadow refuse. No product search_path mutation occurs; fixture deliberately changes its private session only.
+
+The native OID JSON and constraint-kind inheritance corrections now pass actual descriptors, not only synthetic fixture expectations. No fixture adjustment needed for this final run. Thirteen DDL cases deliberately discriminate against a proven passing clean baseline.
+
+### Execution and limits
+Established approved credentialless disposable user/network+bwrap namespace, loopback PostgreSQL17.11, psycopg3.3.9/Python3.13. No external requests, model/tool effects or user data. All DDL is fixture-only, rolled back; original installation confined to a new temporary database. This validates extension-v1 descriptor observation only, not full source schema/security/privileges/readiness, positive runtime admission, arbitrary future DDL, or other PG major versions. No mutating sequence call performed. PG120 source unchanged and not rerun.
+
+Harness, exact manifest and logs accompany the recorded evidence.
+
+## Stage 120 notification metadata: PASS
+Exact frozen source, same frozen Python snapshot as stage119, manifest SHA256 `3df5f7f60e9b1d965b5e8e4e69312b447112288d34626b3c20c06daecbaa53b7`.
+
+Five actual PostgreSQL/service groups and 13 focused executions passed. Actual three selected settings/defaults and six counters verified; enabled parsing remains exact and digest value raw. Future pending creation yields negative backlog age. Dedicated actual sessions in Pacific/Kiritimati and Pacific/Honolulu prove sent_today uses database session midnight, not forced UTC. Oversized UTF8 settings null all selected values in SQL before transfer and prevent stats followup. Config denial plus postSQL/postserialization revocations withhold DTO.
+
+Two fixture corrections preserved: notification_events requires finding_id (added synthetic44); psycopg3 RawCursor constructor must be `psycopg.RawCursor(connection)`, not connection.cursor(cursor_factory=...). Neither is a product defect. Final fresh run passes without product changes.
+
+Same proven credentialless disposable bwrap/user/network namespace, fresh PG17.11, psycopg3.3.9, Python3.13. Loopback only; no provider/network destinations/delivery attempts. In-process standalone service only, no HTTP route registration or runtime mutation claims. Settings and counters are separate source queries, not a crossquery transactional snapshot guarantee. Exact snapshot excludes later validator fix.

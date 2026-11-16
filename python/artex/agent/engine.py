@@ -74,6 +74,7 @@ class TaskEngineHandle:
                 raise ValueError('Exact scoped process binding and cleanup authority required')
         self.process=self._process=process
         self.timing=timing;self._timing=timing
+        self._timed_execution=None;self._timed_bind_attempted=False
         self._cleanup_authorize=cleanup_authorize;self._cleanup_current=cleanup_current;self.cleanup=None;self._cleanup_owner=None
         self.activity_projector=activity_projector;self._activity_projector=activity_projector
         self.scope,self.token,self.store=scope,token,store
@@ -102,6 +103,43 @@ class TaskEngineHandle:
             if self._active or self._started:raise EngineUnavailable('Timing binding requires inert engine')
             self._timing.bind(manager,outer,self)
 
+    def bind_timed_execution(self,binder,actions):
+        from .timed_lifecycle import PreparedTimedLifecycle,PreparedTimedActions
+        if type(binder) is not PreparedTimedLifecycle or type(actions) is not PreparedTimedActions:
+            raise EngineUnavailable('Exact lifecycle registration required')
+        with self._condition:
+            if self._timed_bind_attempted or self._active or self._started:
+                raise EngineUnavailable('Timed execution binding cannot be retried')
+            self._timed_bind_attempted=True
+        try:
+            outer=actions.handle
+            if (self._timing is None or actions.timing is not self._timing or outer._child is not self
+                or self.cleanup is None or self.cleanup is not self._cleanup_owner
+                or binder.application.host.owns_work(binder.application.runner) is not True):
+                raise EngineUnavailable('Original owned prepared engine required')
+            check=binder.validate_execution_registration
+            if check(outer,actions) is not True:raise EngineUnavailable('Timed registration unavailable')
+            self._timed_execution=(binder,actions,outer,check,self._timing.execution_status)
+            self._execution_registration()
+            return True
+        except BaseException:
+            with self._condition:self._unresolved=True
+            raise EngineUnresolved('Timed execution binding retained for reconciliation') from None
+    def _execution_registration(self):
+        value=self._timed_execution
+        if value is None:return None
+        binder,actions,outer,check,status=value
+        if (binder.validate_execution_registration!=check or self._timing.execution_status!=status or actions.timing is not self._timing
+            or outer._child is not self or self.token is not outer.token
+            or check(outer,actions) is not True):raise EngineUnavailable('Timed registration changed')
+        return actions
+    def _execution_status(self):
+        actions=self._execution_registration()
+        if actions is None:return None
+        status=self._timing.execution_status()
+        self._execution_registration()
+        return status
+
     def bind_process(self,manager,outer):
         if self.process is not self._process:raise EngineUnavailable('Process binding changed')
         if self._process is not None:
@@ -119,24 +157,40 @@ class TaskEngineHandle:
         if not self._process_drained():raise EngineUnresolved('Process effects require reconciliation')
         if self.timing is not self._timing:raise EngineUnavailable('Timing binding changed')
         if self._timing is not None:self._timing.validate_bindings()
+        self._execution_registration()
         if self.current(self.scope,self.token) is not True:raise EngineUnavailable('Engine generation changed')
         if self.token.cancelled:raise EngineUnavailable('Engine cancelled')
     def _snapshot(self):
         self._check()
         # Readiness is stronger than a bare model-ready boolean. No inference of
         # task ownership from the supplied exploration/session identifier.
-        rows=self.store.executor.fetch_all(Query('''SELECT id FROM tasks WHERE id=$1 AND exploration_id=$2
+        actions=self._execution_registration()
+        if actions is None:
+            rows=self.store.executor.fetch_all(Query('''SELECT id FROM tasks WHERE id=$1 AND exploration_id=$2
 AND status='running' AND NOT paused AND NOT queued AND deleted_at IS NULL AND archived_at IS NULL
 AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1)''',
-            (self.scope.task_id,self.scope.exploration_id)))
-        if rows not in ([(self.scope.task_id,)],[[self.scope.task_id]]):raise EngineUnavailable('Task lifecycle, deadline or ownership unsupported')
+                (self.scope.task_id,self.scope.exploration_id)))
+            if rows not in ([(self.scope.task_id,)],[[self.scope.task_id]]):raise EngineUnavailable('Task lifecycle, deadline or ownership unsupported')
+        else:
+            r=actions.receipt;timeout=actions.handle.prepared_timeout_seconds
+            rows=self.store.executor.fetch_all(Query('''SELECT t.id,t.first_run_at,t.deadline_at FROM tasks t
+JOIN public.artex_task_bootstrap b ON b.task_id=t.id AND b.exploration_id=t.exploration_id
+WHERE t.id=$1 AND t.exploration_id=$2 AND t.status='running' AND NOT t.paused AND NOT t.queued
+AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.timeout_seconds=$3
+AND b.run_id=$4 AND b.request_id=$5 AND b.config_digest=$6 AND b.owner_token=$7 AND b.revision=$8 AND b.phase='prepared'
+AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
+                (r.task_id,r.exploration_id,timeout,r.run_id,r.request_id,r.config_digest,r.owner_token,r.revision)))
+            lease=actions.timing.store.lease
+            expected=(r.task_id,None,None) if lease is None else (r.task_id,lease.clock.first_run_at,lease.clock.deadline_at)
+            if len(rows)!=1 or tuple(rows[0])!=expected:raise EngineUnavailable('Exact timed task snapshot unavailable')
+            self._check()
         nodes=self.store.nodes(self.max_nodes+1)
         if len(nodes)>self.max_nodes:raise EngineUnavailable('Graph exceeds engine bound')
         goals=[n for n in nodes if n.kind=='goal']
-        if not goals and not self.manual_mode:raise EngineUnavailable('Goal bootstrap required before engine admission')
+        if not goals and not self.manual_mode and actions is None:raise EngineUnavailable('Goal bootstrap required before engine admission')
         if any(n.kind=='intent' and n.state=='running' for n in nodes):raise EngineUnresolved('Unowned running intent requires reconciliation')
         complete=(bool(goals) or self.manual_mode) and all(n.state in ('met','abandoned') for n in goals) and not any(n.kind=='intent' and n.state in ('open','running','paused') for n in nodes)
-        return nodes,complete
+        return nodes,complete if actions is None else False
     def notify(self,event_id,kind,intent_id=0,detail=''):
         if not isinstance(event_id,str) or not event_id or len(event_id)>128 or kind not in ('done','finding','hint','manual'):raise ValueError('Invalid bounded engine event')
         if int64(intent_id,'intent ID')<0 or not isinstance(detail,str) or len(detail.encode('utf-8'))>8192:raise ValueError('Invalid event data')
@@ -169,11 +223,16 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
             if self._active:return EngineProgress('busy')
             if self._closed or self.token.cancelled:return EngineProgress('closed',cancelled=self.token.cancelled)
             self._active=True;self._thread=get_ident()
-        effects=False
+        effects=False;cleanup_finished=False
         try:
             with self.guard(self.scope):
+                self._check()
+                timing_status=self._execution_status()
+                if timing_status in ('expired','busy'):return EngineProgress('expiry_wait' if timing_status=='expired' else 'busy')
                 nodes,complete=self._snapshot()
                 if complete:return EngineProgress('idle',completion_ready=True)
+                timing_status=self._execution_status()
+                if timing_status in ('expired','busy'):return EngineProgress('expiry_wait' if timing_status=='expired' else 'busy')
                 active=any(n.kind=='intent' and n.state in ('open','running') for n in nodes)
                 open_goals=any(n.kind=='goal' and n.state=='open' for n in nodes)
                 with self._condition:
@@ -212,7 +271,8 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
                     identity=dict(wake.scope.identity(),limits_digest=hashlib.sha256(json.dumps(asdict(self.planner.limits),sort_keys=True,allow_nan=False).encode()).hexdigest(),tool_catalog_digest=self.planner._tool_catalog_digest)
                     if outcome.cleanup is not None:self.cleanup.project(outcome.cleanup,self.activity_projector,outcome.outcome,identity)
                     else:self.activity_projector.project('planner',wake.scope,outcome.outcome,identity)
-                if outcome.cleanup is not None:self.cleanup.finish(outcome.cleanup)
+                if outcome.cleanup is not None:
+                    self.cleanup.finish(outcome.cleanup);cleanup_finished=True
                 with self._condition:self._last_plan=now;self._wake=None
             else:
                 outcome=self.worker.run(worker_scope,uuid.uuid4().hex)
@@ -221,11 +281,17 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
                 if self.activity_projector is not None:
                     if outcome.cleanup is not None:self.cleanup.project(outcome.cleanup,self.activity_projector,outcome.outcome,worker_scope.identity(self.worker.limits))
                     else:self.activity_projector.project('worker',worker_scope,outcome.outcome,worker_scope.identity(self.worker.limits))
-                if outcome.cleanup is not None:self.cleanup.finish(outcome.cleanup)
+                if outcome.cleanup is not None:
+                    self.cleanup.finish(outcome.cleanup);cleanup_finished=True
                 with self._condition:
                     if len(self._event_ids)>=self.max_events:raise EngineUnresolved('Completed worker event requires reconciliation')
                     event_id=f'worker:{record.id}:{outcome.version}'
                     self._event_ids.add(event_id);self._events.append(dict(kind='done',intent_id=record.id,detail=outcome.state))
+            terminal=outcome.outcome
+            if terminal.result is not None and terminal.result.reason=='task_deadline_expired' and self._timed_execution is not None:
+                if not cleanup_finished or not terminal.persisted or terminal.stale or terminal.reused:
+                    raise EngineUnresolved('Task expiry cleanup unconfirmed')
+                return EngineProgress('expiry_wait',record.id if record else 0)
             # PlannerResult is observation, never an atomic completion decision.
             return EngineProgress(action,record.id if record else 0,cancelled=self.token.cancelled)
         except BaseException as error:
@@ -243,6 +309,7 @@ AND timeout_seconds=0 AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=
         Completion does not cancel the manager token. False keeps handle owned.
         """
         if not callable(complete):raise ValueError('Exact-token completion callback required')
+        if self._timed_execution is not None:return False
         with self._condition:
             if self._completed:return True
             if self._active or self._unresolved or self.token.cancelled or not self._process_drained():return False

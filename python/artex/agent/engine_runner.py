@@ -345,10 +345,14 @@ class EngineRunner:
             try:
                 self._timed_binding()
                 if self._host_work_check(self) is not True:raise TaskConflict('Owned-work slot lost')
-                binder.register_prepared(handle)
+                actions=binder.register_prepared(handle)
                 self._timed_binding()
-                if handle.prepared_timeout_seconds>0 and not binder.registered(handle):
-                    raise RuntimeUnavailable('Prepared actions not retained')
+                if handle.prepared_timeout_seconds>0:
+                    if not binder.registered(handle) or binder.actions(handle) is not actions:
+                        raise RuntimeUnavailable('Prepared actions not retained')
+                    if actions.finalizer is not None:
+                        handle._child.bind_timed_execution(binder,actions)
+                        self._timed_binding()
                 with self._lock:
                     if self._handles.get(str(task_id)) is not handle:raise TaskConflict('Prepared owner changed')
                     self._timed_attempts[handle]='registered'

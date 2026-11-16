@@ -211,7 +211,7 @@ class IntentWorker:
                         state={'worker_pause':'paused','task_pause':'open','planner_kill':'stopped'}.get(cancel_reason)
                         if state is None:raise WorkerUnresolved('Cancellation cause unavailable')
                     elif reason=='completed':state='done'
-                    elif reason in ('max_turns','timeout','token_budget','tool_budget'):state='exhausted'
+                    elif reason in ('max_turns','timeout','token_budget','tool_budget','task_deadline_expired'):state='exhausted'
                     else:state='blocked'
                     return state,cancel_reason if token.cancelled else None
             if transcript.cap is not None:

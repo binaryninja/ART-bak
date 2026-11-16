@@ -46,6 +46,7 @@
     "python/artex/server/main_sessions.py": "193ec9b75cfe99472747cced3d9e9ae90369d989a342f2e58cf119b114cd4f85",
     "python/artex/server/mcp_catalog.py": "4c04081de65c31c7085e960a65202aa46067f4bddba9e34da6e8039999d6cd0e",
     "python/artex/server/notification_history.py": "21425122d6e5b78f13335318e4429c1703e36d446cb019c7bff4c721d0de1add",
+    "python/artex/server/notification_meta.py": "0ef19a7154bda0f8cea99ae6e88e7876874515fe2fb4c101b02800e3689092dc",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/pool_health.py": "fee471d74dd3c09c9cf4b52f7a13327ab88ab58eb2a320f8964f4a0a8865ee94",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",

@@ -156,7 +156,7 @@ class InflightCleanupOwner:
             if active is None or active[0] is not rec.get('worker_token') or not active[2]:raise CleanupUnavailable('Worker settlement not owned')
             actual_reason=active[1] if active[0].cancelled else None
             if cancellation_reason!=actual_reason:raise CleanupUnavailable('Worker cancellation cause changed')
-        expected=({'worker_pause':'paused','task_pause':'open','planner_kill':'stopped'}.get(cancellation_reason) if cancellation_reason is not None else 'done' if reason=='completed' else 'exhausted' if reason in ('max_turns','timeout','token_budget','tool_budget') else 'blocked')
+        expected=({'worker_pause':'paused','task_pause':'open','planner_kill':'stopped'}.get(cancellation_reason) if cancellation_reason is not None else 'done' if reason=='completed' else 'exhausted' if reason in ('max_turns','timeout','token_budget','tool_budget','task_deadline_expired') else 'blocked')
         if state!=expected or state is None:raise CleanupUnavailable('Worker terminal mapping changed')
         try:
             # WorkerStore owns its guard; do not nest a potentially nonreentrant one.
