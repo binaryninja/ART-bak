@@ -91,8 +91,10 @@ class AlternativeGroupTests(unittest.TestCase):
         with self.assertRaises(audit.AuditError):audit.group_python_routes(rows[:2])
 
     def test_dynamic_alternatives_require_exact_owners_for_all_fourteen_paths(self):
-        self.assertEqual(len(audit.PYTHON_ALTERNATIVE_GROUPS),14)
-        for key in audit.PYTHON_ALTERNATIVE_GROUPS:
+        self.assertEqual(len(audit.PYTHON_ALTERNATIVE_GROUPS),15)
+        dynamic = [key for key in audit.PYTHON_ALTERNATIVE_GROUPS if key != ('GET','/api/report')]
+        self.assertEqual(len(dynamic),14)
+        for key in dynamic:
             rows=self.declarations(key)
             self.assertEqual(sum(r['function']=='TaskRuntimeReadRouter.bind' for r in rows),1)
             self.assertEqual(len(audit.group_python_routes(rows)),1)

@@ -38,7 +38,7 @@ class TaskReportStore:
         self._identity=(scope.task_id,scope.exploration_id,scope.revision)
     def check(self):
         e,s,c,g,a,b=self._original_pins
-        if self._pins is not self._original_pins or any(x is not y for x,y in zip((self.executor,self.scope,self.current,self.guard,self.authorize,self.global_assets_authorize),self._pins)) or (s.task_id,s.exploration_id,s.revision)!=self._identity:raise ReportDenied('Report binding changed')
+        if type(s.task_id) is not int or type(s.exploration_id) is not int or type(s.revision) is not str or self._pins is not self._original_pins or any(x is not y for x,y in zip((self.executor,self.scope,self.current,self.guard,self.authorize,self.global_assets_authorize),self._pins)) or (s.task_id,s.exploration_id,s.revision)!=self._identity:raise ReportDenied('Report binding changed')
     def validate_read(self):
         self.check();s=self._pins[1]
         for f,args in ((self._pins[2],(s,)),(self._pins[4],(s,)),(self._pins[5],(s,ASSET_TYPES)),(self._pins[4],(s,)),(self._pins[2],(s,))):

@@ -336,10 +336,18 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     if keyword.arg == 'public':
                         public = literal(keyword.value, environment)
                 metadata_optional = relative == 'python/artex/server/intercept_read_setup.py' and owner == '_InterceptReadApplication.__init__'
-                optional = owner.endswith('.register') or metadata_optional
+                reader_bundle_optional = (relative, owner) in {
+                    ('python/artex/server/catalog_read_setup.py', '_CatalogApplication.__call__'),
+                    ('python/artex/server/task_report_setup.py', '_ReportApplication.__init__'),
+                }
+                optional = owner.endswith('.register') or metadata_optional or reader_bundle_optional
                 dependencies = 'Injected auth store, password codec, signing key; deployer-supplied transport/listener'
                 if metadata_optional:
                     dependencies = 'Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation'
+                elif reader_bundle_optional:
+                    dependencies = 'Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation'
+                elif owner == 'TaskReportService.register':
+                    dependencies = 'Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing'
                 elif owner == 'TaskCategoryService.register':
                     dependencies = ('Explicit TaskCategoryService.register(router) call; injected category repository for list/create; '
                                     'live task manager required for rename/delete/task assignment; missing adapters return 503')
@@ -377,6 +385,7 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
 # (including a second occurrence at the same owner) still fails the audit.
 _ALTERNATIVE_BASE = 'python/artex/server/'
 PYTHON_ALTERNATIVE_GROUPS = {
+    ('GET','/api/report'): ('explicit-fixed-report-service-or-fenced-read-bundle', (('task_report.py','TaskReportService.register'),('task_report_setup.py','_ReportApplication.__init__'))),
     ('GET','/api/tasks/{id}/coverage'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}/coverage-graph'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}/asset-refs'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),

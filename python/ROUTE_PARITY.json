@@ -5,12 +5,12 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 190,
-    "python_route_declarations": 210,
-    "python_alternative_route_groups": 14,
-    "python_optional_service_routes": 184,
-    "matched_offline_contract_routes": 190,
-    "go_routes_without_python_registration": 71
+    "python_offline_contract_routes": 192,
+    "python_route_declarations": 213,
+    "python_alternative_route_groups": 15,
+    "python_optional_service_routes": 186,
+    "matched_offline_contract_routes": 192,
+    "go_routes_without_python_registration": 69
   },
   "source_sha256": {
     "server/finding_traffic.go": "bab6b887e04963a80b0a96711893e8d075d2ae22fb02efa64992eeefad664fa9",
@@ -22,7 +22,9 @@
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/audit.py": "93f5402b00ec4952336c75d77bebff2d711ecb098093c238269c5c7e8bdb732f",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
+    "python/artex/server/catalog_read_setup.py": "aa53a748281cac57f57bd9615e23456529a04e6da94ea41cc2b6b8cc47809de6",
     "python/artex/server/chat.py": "75978f25b2a9f3d8a9ee1e781b025643dffdebecdc00b90dc80ed3adb56fa63f",
+    "python/artex/server/chat_mentions.py": "4ab0af392fd43203f0ba4cd0bf8b45e255bc07686548b717fa8dfadc2a0a3db7",
     "python/artex/server/chat_setup.py": "719222f7e076b3eb52f73dbeb4b55a4d256bb74a9c767133e27caf1cbff96f48",
     "python/artex/server/command_history.py": "d31c3b12a75a9f03ed675cdd54c65baa15933364eca96c0f259d377e1c2ffccd",
     "python/artex/server/companies.py": "83523edb3e483bf0147fd5a2a014e9e642deb6cf58503eb7b555b8e162a5f362",
@@ -45,10 +47,11 @@
     "python/artex/server/logs.py": "ec8aedfb2aadd7830527a789ef92ed96116625a45077735181ab475c300f46ba",
     "python/artex/server/main_sessions.py": "193ec9b75cfe99472747cced3d9e9ae90369d989a342f2e58cf119b114cd4f85",
     "python/artex/server/mcp_catalog.py": "4c04081de65c31c7085e960a65202aa46067f4bddba9e34da6e8039999d6cd0e",
-    "python/artex/server/notification_channel_metadata.py": "bbb6ef521387ee5b3089efddd0cec7fd1eb0fddf4ab68b96d182c146be9a0d42",
+    "python/artex/server/notification_channel_metadata.py": "3fed249e23d5b93e05f90acfa87783b12d010e5b0886006f51a0d97af3f27d60",
     "python/artex/server/notification_channels_read.py": "436f97a3167524b1465f63289bb3b274cfa50a6cfffbaa578f21a8d125cba038",
     "python/artex/server/notification_history.py": "21425122d6e5b78f13335318e4429c1703e36d446cb019c7bff4c721d0de1add",
     "python/artex/server/notification_meta.py": "0ef19a7154bda0f8cea99ae6e88e7876874515fe2fb4c101b02800e3689092dc",
+    "python/artex/server/notification_metadata_setup.py": "9441a9bfd8a6e22de70d4de7aa722f678a0976d53ffbafd7ad5e698a668e2368",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/pool_health.py": "fee471d74dd3c09c9cf4b52f7a13327ab88ab58eb2a320f8964f4a0a8865ee94",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
@@ -70,9 +73,11 @@
     "python/artex/server/task_intent_assets.py": "65056a4d9453da6f28b5095e4e0d26af0b8b31870898555c8c951fa3556f7e35",
     "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
     "python/artex/server/task_read_builder.py": "d50919b09310dfca43e01f1ded80d7e942d7d0948e9c2ad3f87c180c84e33c19",
+    "python/artex/server/task_report.py": "9e794ab8b595f75b0edbcb5baacc8fb7290a57c0b3bb7da33b8ea55731dac92d",
+    "python/artex/server/task_report_setup.py": "73f31084632f437466832913f1b12f5c428db6d220170f54b4203dfab627fb0a",
     "python/artex/server/task_runtime_read_router.py": "eb66f16841e8e7976eb4f220b04704ca527a47452887c058eb3c6b1ea017eb3b",
     "python/artex/server/task_runtime_reads.py": "cedc5f07326f79719c1ed588ba38000e19558812789f94ed06bc875075fbe04e",
-    "python/artex/server/task_runtime_setup.py": "f2919a0ac49c1dbc808f041303e2442515f8dc0dbb03c7b1a54a3a2b4b620021",
+    "python/artex/server/task_runtime_setup.py": "50589dc0a21fbc4d608a48070d8185e2d0fdba24bcf3c6c42a7dd6c90fdbe38b",
     "python/artex/server/task_scope.py": "f84169cb61132b26b4b25f0eb17780b59b4bf1ac823bc744f8984eb6d7b0618d",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
@@ -4803,8 +4808,47 @@
       "expression": "\"GET /api/report\"",
       "method": "GET",
       "path": "/api/report",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/report",
+        "source": "python/artex/server/task_report.py",
+        "line": 38,
+        "function": "TaskReportService.register",
+        "handler": "lambda req, params: self.handle(req)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing",
+        "status": "optional offline contract; injected repository/live manager required",
+        "declarations": [
+          {
+            "method": "GET",
+            "path": "/api/report",
+            "source": "python/artex/server/task_report.py",
+            "line": 38,
+            "function": "TaskReportService.register",
+            "handler": "lambda req, params: self.handle(req)",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing",
+            "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/report",
+            "source": "python/artex/server/task_report_setup.py",
+            "line": 34,
+            "function": "_ReportApplication.__init__",
+            "handler": "lambda req, params: self._handle(req)",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
+          }
+        ],
+        "alternative_group": "explicit-fixed-report-service-or-fenced-read-bundle",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "GET /api/chat/mentions",
@@ -4815,8 +4859,33 @@
       "expression": "\"GET /api/chat/mentions\"",
       "method": "GET",
       "path": "/api/chat/mentions",
-      "python": null,
-      "status": "not registered in Python"
+      "python": {
+        "method": "GET",
+        "path": "/api/chat/mentions",
+        "source": "python/artex/server/catalog_read_setup.py",
+        "line": 73,
+        "function": "_CatalogApplication.__call__",
+        "handler": "lambda r, p: handle(r)",
+        "public": false,
+        "registration_mode": "optional explicit service registration",
+        "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+        "status": "optional offline contract; injected repository/live manager required",
+        "declarations": [
+          {
+            "method": "GET",
+            "path": "/api/chat/mentions",
+            "source": "python/artex/server/catalog_read_setup.py",
+            "line": 73,
+            "function": "_CatalogApplication.__call__",
+            "handler": "lambda r, p: handle(r)",
+            "public": false,
+            "registration_mode": "optional explicit service registration",
+            "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+            "status": "optional offline contract; injected repository/live manager required"
+          }
+        ]
+      },
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "pattern": "POST /api/chat",
@@ -9013,6 +9082,32 @@
       ]
     },
     {
+      "method": "GET",
+      "path": "/api/chat/mentions",
+      "source": "python/artex/server/catalog_read_setup.py",
+      "line": 73,
+      "function": "_CatalogApplication.__call__",
+      "handler": "lambda r, p: handle(r)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/chat/mentions",
+          "source": "python/artex/server/catalog_read_setup.py",
+          "line": 73,
+          "function": "_CatalogApplication.__call__",
+          "handler": "lambda r, p: handle(r)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
       "method": "POST",
       "path": "/api/conversations/{id}/messages",
       "source": "python/artex/server/chat.py",
@@ -12454,6 +12549,46 @@
     },
     {
       "method": "GET",
+      "path": "/api/report",
+      "source": "python/artex/server/task_report.py",
+      "line": 38,
+      "function": "TaskReportService.register",
+      "handler": "lambda req, params: self.handle(req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/report",
+          "source": "python/artex/server/task_report.py",
+          "line": 38,
+          "function": "TaskReportService.register",
+          "handler": "lambda req, params: self.handle(req)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing",
+          "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/report",
+          "source": "python/artex/server/task_report_setup.py",
+          "line": 34,
+          "function": "_ReportApplication.__init__",
+          "handler": "lambda req, params: self._handle(req)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ],
+      "alternative_group": "explicit-fixed-report-service-or-fenced-read-bundle",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
+    },
+    {
+      "method": "GET",
       "path": "/api/tasks/{id}",
       "source": "python/artex/server/task_runtime_read_router.py",
       "line": 53,
@@ -13815,6 +13950,18 @@
       "registration_mode": "auth router factory",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/mentions",
+      "source": "python/artex/server/catalog_read_setup.py",
+      "line": 73,
+      "function": "_CatalogApplication.__call__",
+      "handler": "lambda r, p: handle(r)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
+      "status": "optional offline contract; injected repository/live manager required"
     },
     {
       "method": "POST",
@@ -15302,6 +15449,30 @@
       "public": false,
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/report",
+      "source": "python/artex/server/task_report.py",
+      "line": 38,
+      "function": "TaskReportService.register",
+      "handler": "lambda req, params: self.handle(req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/report",
+      "source": "python/artex/server/task_report_setup.py",
+      "line": 34,
+      "function": "_ReportApplication.__init__",
+      "handler": "lambda req, params: self._handle(req)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation",
       "status": "optional offline contract; injected repository/live manager required"
     },
     {

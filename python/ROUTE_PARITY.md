@@ -22,12 +22,12 @@ Declaration counts retain every source location; alternatives are not simultaneo
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **190**.
-- python route declarations: **210**.
-- python alternative route groups: **14**.
-- python optional service routes: **184**.
-- matched offline contract routes: **190**.
-- go routes without python registration: **71**.
+- python offline contract routes: **192**.
+- python route declarations: **213**.
+- python alternative route groups: **15**.
+- python optional service routes: **186**.
+- matched offline contract routes: **192**.
+- go routes without python registration: **69**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -78,7 +78,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/auth/login` | `server/server.go:657` | Offline contract only: `python/artex/server/auth.py:107` |
 | GET | `/api/auth/status` | `server/server.go:655` | Offline contract only: `python/artex/server/auth.py:107` |
 | POST | `/api/chat` | `server/server.go:815` | Optional registration; adapters required: `python/artex/server/task_chat.py:42` |
-| GET | `/api/chat/mentions` | `server/server.go:814` | Not registered |
+| GET | `/api/chat/mentions` | `server/server.go:814` | Optional registration; adapters required: `python/artex/server/catalog_read_setup.py:73` |
 | POST | `/api/chat/upload` | `server/server.go:816` | Not registered |
 | GET | `/api/commands` | `server/server.go:793` | Optional registration; adapters required: `python/artex/server/command_history.py:26` |
 | GET | `/api/commands/stats` | `server/server.go:794` | Optional registration; adapters required: `python/artex/server/command_history.py:27` |
@@ -184,7 +184,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/notify/deliveries` | `server/server.go:810` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:123` |
 | POST | `/api/notify/deliveries/{id}/retry` | `server/server.go:811` | Not registered |
 | GET | `/api/notify/meta` | `server/server.go:804` | Optional registration; adapters required: `python/artex/server/intercept_read_setup.py:118` |
-| GET | `/api/report` | `server/server.go:813` | Not registered |
+| GET | `/api/report` | `server/server.go:813` | Optional registration; adapters required: `python/artex/server/task_report.py:38` (audited alternatives: `python/artex/server/task_report.py:38`, `python/artex/server/task_report_setup.py:34`) |
 | GET | `/api/settings` | `server/server.go:800` | Not registered |
 | PUT | `/api/settings` | `server/server.go:801` | Not registered |
 | POST | `/api/settings/python/detect` | `server/server.go:863` | Not registered |
@@ -336,6 +336,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/init` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/login` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/chat/mentions` at `python/artex/server/catalog_read_setup.py:73` (_CatalogApplication.__call__): Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation.
 - `POST /api/conversations/{id}/messages` at `python/artex/server/chat.py:77` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/conversations/{id}/stop` at `python/artex/server/chat.py:78` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/conversations/{id}/messages` at `python/artex/server/chat.py:79` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -477,6 +478,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/tasks/{id}/intent-assets` at `python/artex/server/task_intent_assets.py:15` (TaskIntentAssetsService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `PUT /api/tasks/{id}/llm` at `python/artex/server/task_profiles.py:89` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}/llm/resolution` at `python/artex/server/task_profiles.py:90` (TaskProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/report` at `python/artex/server/task_report.py:38` (TaskReportService.register): Explicit fixed task-report scope, bounded task graph reader and separate global asset grants; optional service registration, not active-task fallback or post-header transport fencing.
+- `GET /api/report` at `python/artex/server/task_report_setup.py:34` (_ReportApplication.__init__): Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation.
 - `GET /api/tasks/{id}` at `python/artex/server/task_runtime_read_router.py:53` (TaskRuntimeReadRouter.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}` at `python/artex/server/task_runtime_reads.py:95` (TaskRuntimeReads.bind): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/tasks/{id}` at `python/artex/server/tasks.py:209` (TaskService.register): build_application explicitly registers TaskService; injected manager/metrics/profile resolver required; create/resume also require cooperative runner and graph bootstrap; missing adapters return 503.

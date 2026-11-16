@@ -1706,3 +1706,32 @@ Exact manifest SHA256 `bf90fe64c3000aaa7178f3accdbaebdb8196be7a83c24fda2f2802202
 Credentialless user/network namespace + bubblewrap; fresh disposable PostgreSQL17.11 on isolated loopback; original schema plus explicit five receipt installers; dummy JWT/role profiles; fixed in-process provider responses only. No live credentials, providers, commands, targets, listeners or production effects. Real positive duration is present from the initial authenticated task INSERT, unlike earlier synthetic-positive component stages. Positive path remains an explicit opt-in narrow configuration, not a production readiness or all-feature parity claim. No process/activity-provider composition, restart recovery, complete frontend workflow, failure-matrix exhaustiveness or general race-free claim.
 
 Earlier seal/disposition failure reports and manifests remain separate. No historical results were relabeled.
+
+
+# Stage131: optional catalog GET composition
+
+Exact base published reader checkpoint `ab6b45a1768422d664458162759d16754f1862ce` plus named catalog_read_setup.py, modified server/chat_mentions.py and two dedicated test files. Manifest SHA256 `bd5e752ac964a640a55b35ea184b70cfde6bd89d4c11a8f6a715ee7bd582b0d2`. Shared immutable snapshot, no moving overlays.
+
+Three actual PostgreSQL17.11 groups and27 focused tests pass:
+
+- Actual JWT GET with original asset/finding/company tables;25 synthetic IP assets produce20 visible rows plus cursor then5 disjoint remaining rows. Authority callbacks receive all21 candidate asset IDs, including lookahead. Original application remains404.
+- Missing JWT and denied global grant reject before any product SQL; concrete asset grant denial returns403.
+- After start_response, asset grant revocation still checks all21 IDs; originalJWT callback replacement, executor substitution and preserved fourth-current callback revoking global grant all withhold body via RuntimeError. No replacement HTTP status or false403-after200 claim.
+
+The source-reviewed wrapper retains the issued source receipt and exact original selection/asset scope; it does not reconstruct authority from visible20items.27 tests additionally cover receipt substitution and route conflicts. No product or fixture corrections required.
+
+Existing approved credentialless namespace+bubblewrap and fresh isolated-loopback PostgreSQL. Only generated metadata and dummy JWT, no external calls, commands, sending, mention expansion or default registration. Finite cooperative policy checks, not a universal atomicity guarantee across arbitrarily mutually mutating callbacks.
+
+
+# Stage132: optional fixed-task report GET
+
+Immutable published reader base ab6b45a plus exact reviewed db/task_report.py, server/task_report.py, new server/task_report_setup.py and two dedicated setup test modules. No catalog wrapper or evolving runtime overlay. Final executable manifest SHA256 `9ef7912c565e3277402e259aa20ef435a9e09c88f747f533faee9289e5470fed`.
+
+Five actual PostgreSQL17.11 groups and26 focused tests pass:
+- Existing actual local graph findings, independently granted global two-IP count, foreign/fact/global-finding exclusion and exact selector/deleted task behavior remain correct.
+- Actual oversized UTF8 graph payload becomes SQL NULL sentinel, returns503 without transferring full payload. Count saturation cap not mass-populated or newly proven.
+- Preserved final-current callback revoking request grant after renderer blocks report.
+- Real original JWT wrapper returns local Markdown, rejects missingJWT and foreign/missing task selector, leaves original app404. Equal copied prepared receipt rejected.
+- After response headers, raw data grant revoke, originalJWT replacement, originalJWT clock callback revoking data grant at the preserved second-call boundary, and equal-valued int-to-float exploration scope mutation all abort body. One already-issued status is not falsely replaced. No active task fallback.
+
+No product or fixture corrections during execution. Initial snapshot preparation removed unrelated catalog overlay before final manifest or execution; only final manifest is acceptance evidence. Approved credentialless filesystem/network namespace and fresh isolated-loopback PG; generated task/graph/assets, dummyJWT, no provider/commands/external calls/default registration. Not a report execution, sanitization or arbitrary-policy atomicity claim.
