@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl,urlsplit
 import re
 from ..db.token_usage import TokenUsageStore,UsageDenied,UsageUnavailable
 from .core import json_response,error_response
+from .disclosure import DisclosureResponse
 
 class TokenUsageService:
     def __init__(self,store,*,authorize,max_response_bytes=2097152):
@@ -24,7 +25,8 @@ class TokenUsageService:
     def register(self,router):
         for path,op in (('/api/tokens/daily','daily'),('/api/tokens/conversations','conversations'),('/api/exploration/tokens','exploration')):
             router.add('GET',path,lambda req,params,a=op:self.handle(a,req,params))
-    def handle(self,op,request,params=None):
+    def handle(self,op,request,params=None,*,transport_disclosure=None,transport_authentication=None):
+        if (transport_disclosure is None)!=(transport_authentication is None) or any(f is not None and not callable(f) for f in (transport_disclosure,transport_authentication)):raise ValueError('Paired transport receipts required')
         policies=(self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),)
         def check():
             if any(a is not b for a,b in zip((self.authorize,getattr(self.store,'authorize',None),getattr(self.store,'current',None),),policies)):raise UsageDenied()
@@ -59,7 +61,29 @@ class TokenUsageService:
                 check();self.store.validate_read(op)
                 check();response=json_response(200,result)
                 if len(response.body)>self.max_bytes:raise UsageUnavailable()
-                return response
+            if transport_disclosure is None:return response
+            scope_identity=(self._scope.workspace,self._scope.task_id,self._scope.exploration_id)
+            def pure():
+                s=self.store
+                if (s is not self._store or s.executor is not self._executor or s._executor is not self._executor
+                        or s.scope is not self._scope or s._scope is not self._scope or s.guard is not self._guard
+                        or s._guard is not self._guard
+                        or (self._scope.workspace,self._scope.task_id,self._scope.exploration_id)!=scope_identity
+                        or any(a is not b for a,b in zip((self.authorize,s.authorize,s.current),policies))):raise UsageDenied()
+            def receipt():
+                pure();transport_disclosure()
+                with self._guard(self._scope):
+                    check();self.store.validate_read(op);check()
+                check()
+                # Callback-bearing guards/current phases end here. Independent
+                # raw request/source grants precede selector/JWT-only transport.
+                pure()
+                if policies[0](request,self._scope,op) is not True:raise UsageDenied()
+                pure()
+                if policies[1](self._scope,op) is not True:raise UsageDenied()
+                pure();transport_authentication();pure()
+            receipt()
+            return DisclosureResponse(response.status,response.body,response.headers,receipt)
         except UsageDenied:return error_response(403,'Token scope not authorized')
         except (ValueError,UnicodeError):return error_response(400,'Invalid token query')
         except Exception:return error_response(503,'Token accounting unavailable')
