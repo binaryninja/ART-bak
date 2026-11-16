@@ -124,7 +124,7 @@ class AgentHost:
         self._identity()
         if (type(owners) is not tuple or len(owners)>100000
                 or any(type(o) is not DeadlineOwnerSnapshot or o.state not in
-                       ('reserved','attached','suspended','quarantined')
+                       ('reserved','attached','suspended','quarantined','freezing','drained')
                        or type(o.task_id) is not str or not o.task_id.isascii()
                        or not o.task_id.isdecimal() or not 0<int(o.task_id)<2**63
                        for o in owners)
@@ -172,6 +172,27 @@ class AgentHost:
     def pause(self, task_id, *, timeout=5.0):
         result = self._invoke(lambda: self.manager.pause(task_id, timeout=timeout), admission=False)
         return result
+
+    def freeze_deadline(self,task_id,token,handle,lease,*,timeout=0.0):
+        """Explicit bounded host freeze/drain, not an expiry timer or settlement.
+
+        Can fence an active step like pause, but never cancels the manager token,
+        starts a final assessment, changes SQL status, or releases the lease.
+        Returns (exact freeze receipt, clean_drained). Repeating a pending freeze
+        only checks existing work; it never replays providers or tools.
+        """
+        if isinstance(timeout,bool) or not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or timeout<0:
+            raise ValueError('Finite nonnegative drain timeout required')
+        def freeze():
+            receipt=self.manager.reserve_deadline_freeze(task_id,token,handle,lease)
+            # No host or manager lock spans arbitrary child waiting.
+            try:
+                if not self._wait(handle,timeout):return receipt,False
+                return receipt,self.manager.confirm_deadline_drain(receipt,token,handle)
+            except BaseException:
+                self.manager.quarantine_deadline_freeze(receipt)
+                raise TaskConflict('Deadline drain unconfirmed; ownership retained') from None
+        return self._invoke(freeze,admission=False)
 
     def control_task(self, task_id, action):
         if action == 'pause':

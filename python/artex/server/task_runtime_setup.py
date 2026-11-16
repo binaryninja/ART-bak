@@ -55,7 +55,7 @@ class TaskRuntimeApplication:
 def build_task_runtime_application(runtime, signing_key, password_codec, *,
         live_last_activity, profile_available=None, capacity=1, max_pending=64,
         single_process=False, application_options=None, pump_interval=1.0,
-        pump_max_per_tick=8, pump_clock=monotonic, read_services=None):
+        pump_max_per_tick=8, pump_clock=monotonic, read_services=None, read_router=None):
     # Component type import stays local to avoid a setup/component import cycle.
     from ..agent.task_runtime import TaskRuntimeAssembly
     if type(runtime) is not TaskRuntimeAssembly:
@@ -67,6 +67,13 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
         raise ValueError('Explicit bounded pump configuration required')
     if runtime.validate_bindings() is not True:
         raise ValueError('Task runtime bindings unavailable')
+    if read_router is not None:
+        from .task_runtime_read_router import TaskRuntimeReadRouter
+        if read_services is not None or (isinstance(application_options,dict) and application_options.get('task_activity_service') is not None):
+            raise ValueError('Dynamic reads cannot coexist with fixed task read services')
+        if type(read_router) is not TaskRuntimeReadRouter or read_router.tasks.executor is not runtime.executor:
+            raise ValueError('Exact dynamic task router/executor required')
+        read_router.validate_bindings()
     if read_services is not None:
         from .task_runtime_reads import TaskRuntimeReads
         if type(read_services) is not TaskRuntimeReads or read_services.executor is not runtime.executor:
@@ -84,6 +91,9 @@ def build_task_runtime_application(runtime, signing_key, password_codec, *,
     if runtime.validate_bindings() is not True:
         raise RuntimeUnavailable('Task runtime bindings changed during assembly')
     read_app=None if read_services is None else read_services.bind(bootstrap.app)
+    if read_router is not None:
+        read_router.validate_bindings()
+        read_app=read_router.bind(bootstrap.app)
     pump=EnginePump(bootstrap.host,interval=pump_interval,
         max_per_tick=pump_max_per_tick,clock=pump_clock)
     return TaskRuntimeApplication(runtime,bootstrap,pump,read_app)

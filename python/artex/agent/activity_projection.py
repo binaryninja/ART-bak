@@ -1,7 +1,7 @@
 """Terminal-only task progress projected from canonical finalized transcripts.
 
 Source capture.go emits per-step text/tool/result records; this bounded first
-slice emits ONE durable result per planner/worker turn, with real terminal usage.
+slice emits ONE durable result per goals/planner/worker turn, with real terminal usage.
 It is not live token/tool streaming. A task-row lock serializes receipt lookup and
 insert; metadata receipts are private projection bookkeeping, not task completion.
 JSONL and PostgreSQL are not one transaction. Any failed projection quarantines
@@ -54,7 +54,7 @@ class ActivityProjector:
         if current(s) is not True:raise ProjectionUnavailable('Projection lifetime changed')
         pins()
     def project(self,role,scope,outcome,identity):
-        if role not in ('planner','worker') or not isinstance(outcome,ChatOutcome) or outcome.persisted is not True or outcome.stale:
+        if role not in ('goals','planner','worker') or not isinstance(outcome,ChatOutcome) or outcome.persisted is not True or outcome.stale:
             raise ProjectionUnavailable('Confirmed terminal turn required')
         identity=_scope_identity(identity)  # bounded canonical snapshot before any callback
         base=self.scope
@@ -82,7 +82,7 @@ class ActivityProjector:
                 generated=deepcopy(result.messages[receipt.prefix_length:])
                 detail=RunResult(result.reason,generated,result.usage,result.turns,result.tool_calls).text
                 if len(detail.encode('utf-8'))>self.max_bytes:raise ProjectionUnavailable('Progress result exceeds bound')
-                item=Activity(worker='planner' if role=='planner' else scope.owner,node_id=node,kind='result',
+                item=Activity(worker='planner' if role in ('goals','planner') else scope.owner,node_id=node,kind='result',
                     summary=detail.split('\n',1)[0][:400],detail=detail,is_error=result.reason not in ('completed','complete','end_turn','stop'),
                     metadata={'_artex_projection':marker})
                 for name in ('input_tokens','output_tokens','cache_read_tokens','cache_write_tokens'):

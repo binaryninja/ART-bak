@@ -338,11 +338,16 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
 # (including a second occurrence at the same owner) still fails the audit.
 _ALTERNATIVE_BASE = 'python/artex/server/'
 PYTHON_ALTERNATIVE_GROUPS = {
-    ('GET','/api/tasks/{id}'): ('fixed-task-read-overlay', (('tasks.py','TaskService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
-    ('GET','/api/stats'): ('fixed-task-read-overlay', (('stats.py','StatsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
-    ('GET','/api/exploration/intents'): ('fixed-task-read-overlay', (('exploration.py','ExplorationService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
-    ('GET','/api/llm/profiles'): ('fixed-task-read-overlay', (('profiles.py','ProfileService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
-    ('GET','/api/exploration/findings'): ('explicit-task-findings-or-global-and-fixed-overlay', (('findings.py','FindingService.register'),('task_findings.py','TaskFindingsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'))),
+    ('GET','/api/exploration/main-sessions'): ('explicit-fixed-or-dynamic-main-session-read', (('main_sessions.py','MainSessionsService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}'): ('explicit-fixed-or-dynamic-task-read-overlay', (('tasks.py','TaskService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/stats'): ('explicit-fixed-or-dynamic-task-read-overlay', (('stats.py','StatsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/intents'): ('explicit-fixed-or-dynamic-task-read-overlay', (('exploration.py','ExplorationService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/llm/profiles'): ('explicit-fixed-or-dynamic-task-read-overlay', (('profiles.py','ProfileService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/findings'): ('explicit-task-findings-or-global-and-read-overlays', (('findings.py','FindingService.register'),('task_findings.py','TaskFindingsService.register'),('task_runtime_reads.py','TaskRuntimeReads.bind'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/activity'): ('explicit-fixed-or-dynamic-activity-read', (('task_activity.py','TaskActivityService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/activity/history'): ('explicit-fixed-or-dynamic-activity-read', (('task_activity.py','TaskActivityService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/activity/stream'): ('explicit-fixed-or-dynamic-activity-read', (('task_activity.py','TaskActivityService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/activity/{seq}'): ('explicit-fixed-or-dynamic-activity-read', (('task_activity.py','TaskActivityService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
 }
 
 
@@ -410,7 +415,9 @@ def markdown(data: dict) -> str:
              'DELETE /api/assets is registered only to return unsupported 503; it is not a completed operation.',
              'Declarations do not prove execution readiness. Production limitations are in',
              '`artex/server/PORT_STATUS.md`. No route is labeled production-ready.', '',
-             '## Counts', '']
+             '## Counts', '',
+             'Unique method/path counts collapse only exact audited alternative declarations.',
+             'Declaration counts retain every source location; alternatives are not simultaneous mounts.', '']
     lines += [f'- {name.replace("_", " ")}: **{value}**.' for name, value in summary.items()]
     lines += ['', 'The earlier 252-route figure counted literals and simple concatenations but',
               'missed nine registrations from the side-question nested loop: three parent',

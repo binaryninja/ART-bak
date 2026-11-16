@@ -89,3 +89,12 @@ class AlternativeGroupTests(unittest.TestCase):
     def test_partial_duplicate_set_cannot_hide_missing_alternative(self):
         rows=self.declarations(('GET','/api/exploration/findings'))
         with self.assertRaises(audit.AuditError):audit.group_python_routes(rows[:2])
+
+    def test_dynamic_alternatives_require_exact_owners_for_all_ten_paths(self):
+        self.assertEqual(len(audit.PYTHON_ALTERNATIVE_GROUPS),10)
+        for key in audit.PYTHON_ALTERNATIVE_GROUPS:
+            rows=self.declarations(key)
+            self.assertEqual(sum(r['function']=='TaskRuntimeReadRouter.bind' for r in rows),1)
+            self.assertEqual(len(audit.group_python_routes(rows)),1)
+            with self.assertRaises(audit.AuditError):
+                audit.group_python_routes(rows+[dict(rows[-1])])

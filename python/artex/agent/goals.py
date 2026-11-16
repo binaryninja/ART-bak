@@ -86,7 +86,7 @@ class _Transcript:
             return self.owner.transcript.commit(session,self.original,replace(result,messages=deepcopy(self.original.messages[:-1])+deepcopy(result.messages)))
 
 class GoalPlanner:
-    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,validate_input,limits=Limits(),constraints=None,constraint_catalog=None,task_scope=None,scope_catalog=None):
+    def __init__(self,*,store,transcript,current,lifecycle_guard,provider_resolver,authorize,validate_input,limits=Limits(),constraints=None,constraint_catalog=None,task_scope=None,scope_catalog=None,activity_projector=None):
         if not isinstance(store,ExplorationStore) or store.read_only:raise ValueError('Writable scoped graph required')
         if any(not callable(f) for f in (current,lifecycle_guard,provider_resolver,authorize,validate_input)):raise ValueError('Explicit scope, provider and permission authority required')
         if any(not callable(getattr(transcript,n,None)) for n in ('begin_scoped','current','commit','finalized_result')):raise ValueError('Durable scoped transcript required')
@@ -105,6 +105,13 @@ class GoalPlanner:
                 raise ValueError('Task scope requires exact executor and shared lifecycle guard')
             if not isinstance(scope_catalog,CatalogTool) or scope_catalog.key!='add_task_scope' or scope_catalog.enabled is not True or 'goals' not in scope_catalog.agents or scope_catalog.deferred is not False or scope_catalog.kind!='builtin' or scope_catalog.exec:
                 raise ValueError('Explicit enabled native goals scope catalog required')
+        if activity_projector is not None:
+            from .activity_projection import ActivityProjector
+            if (type(activity_projector) is not ActivityProjector or activity_projector.executor is not store.executor
+                or activity_projector.transcript is not transcript or activity_projector.current is not current
+                or activity_projector.guard is not lifecycle_guard):
+                raise ValueError('Exact optional goals activity projector required')
+        self.activity_projector=activity_projector;self._activity_projector=activity_projector
         self.task_scope=task_scope
         self._task_scope_adapter=task_scope
         self._task_scope=task_scope.scope if task_scope is not None else None
@@ -117,6 +124,11 @@ class GoalPlanner:
         self.store,self.transcript,self.current,self.guard=store,transcript,current,lifecycle_guard
         self.resolver,self.authorize,self.validate_input,self.limits=provider_resolver,authorize,validate_input,limits
     def check(self,scope):
+        if self.activity_projector is not self._activity_projector:raise ChatUnavailable('Goals activity projector changed')
+        if self._activity_projector is not None:
+            p=self._activity_projector
+            if (p.scope!=scope or p.executor is not self._executor or p.transcript is not self.transcript
+                or p.current is not self.current or p.guard is not self.guard):raise ChatUnavailable('Goals activity binding changed')
         if self.store is not self._store or self.store.executor is not self._executor or self.store.read_only:raise ChatUnavailable('Goal owning resource changed')
         if not isinstance(scope,GoalScope):raise ValueError('Goal scope required')
         for id in (scope.task_id,scope.exploration_id,scope.run_id):
@@ -191,4 +203,9 @@ class GoalPlanner:
                 self.check(scope);result=self.transcript.finalized_result(scope.session_id,transcript.original)
                 if result is None:raise ChatUnavailable('Goal receipt unavailable')
                 outcome=replace(outcome,result=replace(result,messages=deepcopy(result.messages[len(transcript.original.messages)-1:])))
+        if self._activity_projector is not None:
+            # The bootstrap invocation is still owned here. This records only
+            # the finalized turn, NOT journal preparation or task completion.
+            # Failure propagates to bootstrap quarantine, never a model retry.
+            self._activity_projector.project('goals',scope,outcome,identity)
         return outcome

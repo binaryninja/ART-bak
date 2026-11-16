@@ -1,9 +1,9 @@
 # Bounded task progress and fixed-task overview
 
 Optional activity projection derives one terminal result and real usage record per
-confirmed planner/worker turn from the canonical scoped transcript receipt. It is
-not incremental model-token or tool-event capture. Goals initialization is not
-projected by this adapter. A task-row lock serializes receipt lookup and activity
+confirmed goals/planner/worker turn from the canonical scoped transcript receipt. It is
+not incremental model-token or tool-event capture. Goals initialization is projected as a terminal model turn before bootstrap
+preparation finishes, not as preparation or task-completion success. A task-row lock serializes receipt lookup and activity
 insert; duplicate reconciliation compares both the receipt and actual persisted
 payload/usage. Caller identity is copied before policy callbacks. JSONL and SQL
 are not one transaction: uncertainty quarantines execution rather than rerunning
@@ -26,9 +26,10 @@ Task finding reads use graph nodes, standalone triage metadata, direct-source
 provenance and separately authorized asset labels, not a global finding alias.
 Oversized, ambiguous, archived or unauthorized data fails closed.
 
-This is a fixed-scope view: other/new tasks require an explicitly authorized new
-binding. It is not automatic all-task frontend composition. Optional activity
+The original helper remains a fixed-scope view. A separately authorized dynamic
+router now constructs independent bindings per request; see
+DYNAMIC_TASK_READ_STATUS.md for its reviewed scope and limitations. Optional activity
 factory wiring is likewise fixed-scope and absent by default. Frontend request
 sequences are tested through WSGI without running the original frontend build or
-browser. Full dashboard/live-session parity, dynamic read resolution and packaged
-server deployment remain separate work. See ISOLATED_QA.md for bounded evidence.
+browser. Full dashboard/live-session parity and packaged server deployment remain
+separate work. See ISOLATED_QA.md for bounded evidence.

@@ -96,9 +96,14 @@ class TaskRuntimeAssembly:
         self.validate_bindings();return digest==revision
     def _goals(self,scope,current,guard):
         self.validate_bindings()
+        projector=None
+        if self._activity_authorize is not None:
+            from .activity_projection import ActivityProjector
+            projector=ActivityProjector(self.executor,scope,transcript=self.transcript,current=current,
+                lifecycle_guard=guard,authorize=self._activity_authorize)
         return GoalPlanner(store=ExplorationStore(self.executor,scope.exploration_id),transcript=self.transcript,
             current=current,lifecycle_guard=guard,provider_resolver=lambda s,m:self.providers.bind(s,'goals',m,current=current,lifecycle_guard=guard),
-            authorize=self._authorize,validate_input=self._input,limits=self._limits)
+            authorize=self._authorize,validate_input=self._input,limits=self._limits,activity_projector=projector)
     def engine_factory(self,row,token,scope,current,guard):
         # Owner's engine authority is intentionally false until next explicit
         # tick. Configuration reads here are not model execution admission.

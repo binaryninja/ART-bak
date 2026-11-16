@@ -1,9 +1,13 @@
 # Server port status
 
-This package is an **offline contract core**, not a runnable web server. Based on
+This package began as an **offline contract core** and now includes explicit opt-in
+WSGI application/runtime compositions. It does not launch a listener. The initial
+health/auth foundation was based on
 `server/auth.go` and response/routing/health contracts in `server/server.go`.
-No upstream executables, model calls, tools, network listeners, or external
-services were invoked during development.
+The original foundation tests used memory-only stores. Later component acceptance
+includes explicitly approved isolated Go/PostgreSQL and inert provider fixtures;
+see the dated QA evidence, not this historical foundation list, for those checks.
+No production listener or live-provider readiness is claimed.
 
 Implemented:
 - Request/JSON response/error envelopes and bounded JSON-object decoding.
@@ -21,12 +25,18 @@ expiration mandatory, signing keys at least 32 bytes, only explicit public route
 (no broad `/api/auth/*` exemption), English errors without exception details.
 Password changes retain upstream behavior: already-issued tokens are NOT revoked.
 
-Not implemented: real bcrypt adapter; PostgreSQL settings adapter; secure JWT-key
-storage/migration; HTTP listener/framework/ASGI/WSGI adapter; Go ServeMux path
-canonicalization, HEAD handling, or complete overlapping-pattern semantics; SSE,
-WebSocket, multipart uploads, CORS/body timeouts/rate limiting, cookies/CSRF
-policy, and all application routes beyond the five health/auth contracts.
-No engine, provider, filesystem, proxy, agent execution, or tool integration.
-Adapters must reject ambiguous duplicate authorization headers and define URL
-normalization before dispatch. Production deployment needs security review and
-end-to-end parity tests. Do not use the test codec as password storage.
+Current scope supersedes the original five-route prototype: the static inventory
+records **180 unique method/path registrations** (196 declarations for the reviewed
+stage 79 composition target, pending its generated report checkpoint), not 180 live or behaviorally equivalent endpoints. Optional
+services require explicit adapters, grants and lifecycle ownership; absence may
+mean an unregistered route or a fail-closed 503. See `ROUTE_PARITY.md` and
+`DYNAMIC_TASK_READ_STATUS.md` for current composition and evidence.
+
+WSGI, PostgreSQL-backed contracts, bounded SSE replay and narrowly authorized
+filesystem/multipart operations now have separate tests and optional composition.
+The historical statement that no routes beyond auth/health exist is obsolete.
+These additions do not establish complete Go ServeMux semantics, WebSockets,
+production listener/CORS/CSRF/rate-limit configuration, credential deployment,
+full frontend parity, positive runtime deadlines or recovery. No deployment or
+live-provider readiness is inferred. See the component status documents for
+specific tested boundaries. Do not use the test codec as password storage.

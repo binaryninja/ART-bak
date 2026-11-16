@@ -6,8 +6,8 @@
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
     "python_offline_contract_routes": 180,
-    "python_route_declarations": 186,
-    "python_alternative_route_groups": 5,
+    "python_route_declarations": 196,
+    "python_alternative_route_groups": 10,
     "python_optional_service_routes": 174,
     "matched_offline_contract_routes": 180,
     "go_routes_without_python_registration": 81
@@ -55,8 +55,10 @@
     "python/artex/server/task_host.py": "f8e58c51050ee01805e87c7563ce2e0f8e214069fb1d4948b52e8bca1244076f",
     "python/artex/server/task_intent_assets.py": "65056a4d9453da6f28b5095e4e0d26af0b8b31870898555c8c951fa3556f7e35",
     "python/artex/server/task_profiles.py": "f54ac2476fe40515a077f6263be1fc0d8937021a399d7de7d73fb22007152686",
+    "python/artex/server/task_read_builder.py": "418a51ad3b91147a12f1fa19738f9b3b1c2e2fa9efad51cb1b8cc8f52e341b80",
+    "python/artex/server/task_runtime_read_router.py": "bebef5ab14a387f7f21ef817d22bbf914c8c221e9f85b567f2072d66b31b2bd5",
     "python/artex/server/task_runtime_reads.py": "e7696a0048784fdc4b22260db5cfe7a9a67f475689389684e922d876aa85a870",
-    "python/artex/server/task_runtime_setup.py": "f2c684326c90c7618c315f09ca07027241fb69438c8a708054540e664efb16e7",
+    "python/artex/server/task_runtime_setup.py": "1ead0a5d1e4cb67ea25a299a0dead933b851cabdcfccd4dfaac995f60708c20b",
     "python/artex/server/task_scope.py": "f84169cb61132b26b4b25f0eb17780b59b4bf1ac823bc744f8984eb6d7b0618d",
     "python/artex/server/task_templates.py": "0a23f677c7e2b79c5610444efe7e5a931d07df1e9c1171a1ed7edb081aed5063",
     "python/artex/server/tasks.py": "abdf232187de69c528f7775b2ee0936bfc437a82101683d9ee54e6463a2c903e",
@@ -376,6 +378,18 @@
           {
             "method": "GET",
             "path": "/api/stats",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
+          },
+          {
+            "method": "GET",
+            "path": "/api/stats",
             "source": "python/artex/server/task_runtime_reads.py",
             "line": 96,
             "function": "TaskRuntimeReads.bind",
@@ -386,7 +400,7 @@
             "status": "offline contract only; production integration unverified"
           }
         ],
-        "alternative_group": "fixed-task-read-overlay",
+        "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
         "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -969,15 +983,27 @@
       "python": {
         "method": "GET",
         "path": "/api/tasks/{id}",
-        "source": "python/artex/server/task_runtime_reads.py",
-        "line": 95,
-        "function": "TaskRuntimeReads.bind",
-        "handler": "lambda req, params: checked_read(req, 'task')",
+        "source": "python/artex/server/task_runtime_read_router.py",
+        "line": 50,
+        "function": "TaskRuntimeReadRouter.bind",
+        "handler": "lambda req, params: owner._read(req, base, auth)",
         "public": false,
         "registration_mode": "auth router factory",
         "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
         "status": "offline contract only; production integration unverified",
         "declarations": [
+          {
+            "method": "GET",
+            "path": "/api/tasks/{id}",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
+          },
           {
             "method": "GET",
             "path": "/api/tasks/{id}",
@@ -1003,7 +1029,7 @@
             "status": "optional offline contract; injected repository/live manager required"
           }
         ],
-        "alternative_group": "fixed-task-read-overlay",
+        "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
         "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "offline contract only; production integration unverified"
@@ -2975,6 +3001,18 @@
           {
             "method": "GET",
             "path": "/api/exploration/findings",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/findings",
             "source": "python/artex/server/task_runtime_reads.py",
             "line": 101,
             "function": "TaskRuntimeReads.bind",
@@ -2985,7 +3023,7 @@
             "status": "offline contract only; production integration unverified"
           }
         ],
-        "alternative_group": "explicit-task-findings-or-global-and-fixed-overlay",
+        "alternative_group": "explicit-task-findings-or-global-and-read-overlays",
         "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -3470,6 +3508,18 @@
           {
             "method": "GET",
             "path": "/api/exploration/intents",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/intents",
             "source": "python/artex/server/task_runtime_reads.py",
             "line": 97,
             "function": "TaskRuntimeReads.bind",
@@ -3480,7 +3530,7 @@
             "status": "offline contract only; production integration unverified"
           }
         ],
-        "alternative_group": "fixed-task-read-overlay",
+        "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
         "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -3591,8 +3641,22 @@
             "registration_mode": "optional explicit service registration",
             "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
             "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/activity",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
           }
-        ]
+        ],
+        "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
     },
@@ -3628,8 +3692,22 @@
             "registration_mode": "optional explicit service registration",
             "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
             "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/activity/history",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
           }
-        ]
+        ],
+        "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
     },
@@ -3665,8 +3743,22 @@
             "registration_mode": "optional explicit service registration",
             "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
             "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/main-sessions",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
           }
-        ]
+        ],
+        "alternative_group": "explicit-fixed-or-dynamic-main-session-read",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
     },
@@ -3714,8 +3806,22 @@
             "registration_mode": "optional explicit service registration",
             "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
             "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/activity/stream",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
           }
-        ]
+        ],
+        "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
     },
@@ -3751,8 +3857,22 @@
             "registration_mode": "optional explicit service registration",
             "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
             "status": "optional offline contract; injected repository/live manager required"
+          },
+          {
+            "method": "GET",
+            "path": "/api/exploration/activity/{seq}",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
           }
-        ]
+        ],
+        "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+        "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
     },
@@ -6603,6 +6723,18 @@
           {
             "method": "GET",
             "path": "/api/llm/profiles",
+            "source": "python/artex/server/task_runtime_read_router.py",
+            "line": 50,
+            "function": "TaskRuntimeReadRouter.bind",
+            "handler": "lambda req, params: owner._read(req, base, auth)",
+            "public": false,
+            "registration_mode": "auth router factory",
+            "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+            "status": "offline contract only; production integration unverified"
+          },
+          {
+            "method": "GET",
+            "path": "/api/llm/profiles",
             "source": "python/artex/server/task_runtime_reads.py",
             "line": 98,
             "function": "TaskRuntimeReads.bind",
@@ -6613,7 +6745,7 @@
             "status": "offline contract only; production integration unverified"
           }
         ],
-        "alternative_group": "fixed-task-read-overlay",
+        "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
         "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
       },
       "status": "optional offline contract; injected repository/live manager required"
@@ -9080,6 +9212,18 @@
         {
           "method": "GET",
           "path": "/api/exploration/intents",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/intents",
           "source": "python/artex/server/task_runtime_reads.py",
           "line": 97,
           "function": "TaskRuntimeReads.bind",
@@ -9090,7 +9234,7 @@
           "status": "offline contract only; production integration unverified"
         }
       ],
-      "alternative_group": "fixed-task-read-overlay",
+      "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
       "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
@@ -9184,6 +9328,18 @@
         {
           "method": "GET",
           "path": "/api/exploration/findings",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/findings",
           "source": "python/artex/server/task_runtime_reads.py",
           "line": 101,
           "function": "TaskRuntimeReads.bind",
@@ -9194,7 +9350,7 @@
           "status": "offline contract only; production integration unverified"
         }
       ],
-      "alternative_group": "explicit-task-findings-or-global-and-fixed-overlay",
+      "alternative_group": "explicit-task-findings-or-global-and-read-overlays",
       "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
@@ -10104,8 +10260,22 @@
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
           "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/main-sessions",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
         }
-      ]
+      ],
+      "alternative_group": "explicit-fixed-or-dynamic-main-session-read",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
       "method": "GET",
@@ -10342,6 +10512,18 @@
         {
           "method": "GET",
           "path": "/api/llm/profiles",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
+        },
+        {
+          "method": "GET",
+          "path": "/api/llm/profiles",
           "source": "python/artex/server/task_runtime_reads.py",
           "line": 98,
           "function": "TaskRuntimeReads.bind",
@@ -10352,7 +10534,7 @@
           "status": "offline contract only; production integration unverified"
         }
       ],
-      "alternative_group": "fixed-task-read-overlay",
+      "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
       "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
@@ -10850,6 +11032,18 @@
         {
           "method": "GET",
           "path": "/api/stats",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
+        },
+        {
+          "method": "GET",
+          "path": "/api/stats",
           "source": "python/artex/server/task_runtime_reads.py",
           "line": 96,
           "function": "TaskRuntimeReads.bind",
@@ -10860,7 +11054,7 @@
           "status": "offline contract only; production integration unverified"
         }
       ],
-      "alternative_group": "fixed-task-read-overlay",
+      "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
       "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
@@ -10886,8 +11080,22 @@
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
           "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/activity",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
         }
-      ]
+      ],
+      "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
       "method": "GET",
@@ -10912,8 +11120,22 @@
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
           "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/activity/history",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
         }
-      ]
+      ],
+      "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
       "method": "GET",
@@ -10938,8 +11160,22 @@
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
           "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/activity/stream",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
         }
-      ]
+      ],
+      "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
       "method": "GET",
@@ -10964,8 +11200,22 @@
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
           "status": "optional offline contract; injected repository/live manager required"
+        },
+        {
+          "method": "GET",
+          "path": "/api/exploration/activity/{seq}",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
         }
-      ]
+      ],
+      "alternative_group": "explicit-fixed-or-dynamic-activity-read",
+      "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
       "method": "GET",
@@ -11568,15 +11818,27 @@
     {
       "method": "GET",
       "path": "/api/tasks/{id}",
-      "source": "python/artex/server/task_runtime_reads.py",
-      "line": 95,
-      "function": "TaskRuntimeReads.bind",
-      "handler": "lambda req, params: checked_read(req, 'task')",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
       "public": false,
       "registration_mode": "auth router factory",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "offline contract only; production integration unverified",
       "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/tasks/{id}",
+          "source": "python/artex/server/task_runtime_read_router.py",
+          "line": 50,
+          "function": "TaskRuntimeReadRouter.bind",
+          "handler": "lambda req, params: owner._read(req, base, auth)",
+          "public": false,
+          "registration_mode": "auth router factory",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "offline contract only; production integration unverified"
+        },
         {
           "method": "GET",
           "path": "/api/tasks/{id}",
@@ -11602,7 +11864,7 @@
           "status": "optional offline contract; injected repository/live manager required"
         }
       ],
-      "alternative_group": "fixed-task-read-overlay",
+      "alternative_group": "explicit-fixed-or-dynamic-task-read-overlay",
       "alternative_note": "Audited alternate composition only; never permission to mount duplicate handlers on one router."
     },
     {
@@ -14284,6 +14546,126 @@
       "registration_mode": "optional explicit service registration",
       "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
       "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/main-sessions",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/stats",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/intents",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/findings",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm/profiles",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/activity",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/activity/history",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/activity/stream",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
+    },
+    {
+      "method": "GET",
+      "path": "/api/exploration/activity/{seq}",
+      "source": "python/artex/server/task_runtime_read_router.py",
+      "line": 50,
+      "function": "TaskRuntimeReadRouter.bind",
+      "handler": "lambda req, params: owner._read(req, base, auth)",
+      "public": false,
+      "registration_mode": "auth router factory",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "offline contract only; production integration unverified"
     },
     {
       "method": "GET",

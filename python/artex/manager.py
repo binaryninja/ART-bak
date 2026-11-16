@@ -117,6 +117,12 @@ class DeadlineLease:
     clock: object = field(repr=False)
 
 
+@dataclass(frozen=True, eq=False)
+class DeadlineFreeze:
+    """Exact process-local freeze receipt. Never a terminal-write capability."""
+    task_id: str
+
+
 @dataclass
 class _DeadlineSlot:
     reservation: DeadlineReservation
@@ -133,6 +139,7 @@ class _DeadlineSlot:
     state: str = 'reserved'
     attempted: bool = False
     lease: DeadlineLease | None = None
+    freeze: DeadlineFreeze | None = None
 
 
 @dataclass
@@ -259,6 +266,8 @@ class TaskManager:
                 return False
             if allow_cancelled:
                 return True
+            deadline=self._deadline_slots.get(key)
+            if deadline is not None and deadline.state in ('freezing','drained','quarantined'):return False
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
@@ -387,6 +396,61 @@ class TaskManager:
                 return lease
         except BaseException:
             self.quarantine_deadline_owner(reservation)
+            raise
+
+    def reserve_deadline_freeze(self,task_id,token,handle,lease):
+        """Host-only admission fence, not proof of expiry or terminal authority.
+
+        Requires the full original installed owner, not merely a readable lease.
+        No SQL, callback, waiting or cancellation occurs under the registry lock.
+        Frozen execution cannot resume until a separately reviewed protocol exists.
+        """
+        key=_id(task_id)
+        with self._lock:
+            slot=self._deadline_slots.get(key)
+            if slot is None or slot.token is not token or slot.handle is not handle or slot.lease is not lease:
+                raise TaskConflict('Exact deadline execution owner required')
+            self._deadline_binding(slot)
+            if slot.freeze is not None:
+                if slot.state not in ('freezing','drained'):raise TaskConflict('Deadline freeze requires reconciliation')
+                return slot.freeze
+            if not self.validate_deadline_owner(lease):raise TaskConflict('Deadline owner is not freezable')
+            slot.freeze=DeadlineFreeze(key);slot.state='freezing'
+            return slot.freeze
+
+    def quarantine_deadline_freeze(self,freeze):
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(freeze,'task_id',None))
+            if type(freeze) is not DeadlineFreeze or slot is None or slot.freeze is not freeze:
+                raise TaskConflict('Exact freeze receipt required')
+            slot.state='quarantined'
+
+    def confirm_deadline_drain(self,freeze,token,handle):
+        """Check actual handle drain outside registry lock; retain all ownership.
+
+        A clean drained receipt still cannot commit done/timeout or run a final
+        model. Unknown effects remain quarantined; timeout does not release it.
+        """
+        with self._lock:
+            slot=self._deadline_slots.get(getattr(freeze,'task_id',None))
+            if type(freeze) is not DeadlineFreeze or slot is None or slot.freeze is not freeze or slot.token is not token or slot.handle is not handle or slot.state not in ('freezing','drained'):
+                raise TaskConflict('Exact freeze receipt required')
+            self._deadline_binding(slot)
+        try:
+            drained=handle.wait(0)
+            unresolved=getattr(handle,'unresolved',True)
+            if type(drained) is not bool or type(unresolved) is not bool:raise TaskConflict('Invalid drain evidence')
+            with self._lock:
+                if self._deadline_slots.get(freeze.task_id) is not slot or slot.freeze is not freeze:raise TaskConflict('Freeze ownership changed')
+                self._deadline_binding(slot)
+                if slot.state not in ('freezing','drained'):raise TaskConflict('Freeze state changed')
+                if unresolved:
+                    slot.state='quarantined';raise TaskConflict('Frozen work requires reconciliation')
+                if not drained:return False
+                slot.state='drained';return True
+        except BaseException:
+            with self._lock:
+                if self._deadline_slots.get(freeze.task_id) is slot:slot.state='quarantined'
             raise
 
     def validate_deadline_owner(self,lease,operation='read'):

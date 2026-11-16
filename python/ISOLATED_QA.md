@@ -978,3 +978,60 @@ Projection is terminal-result progress, not live model-token capture. Injected
 metadata fixtures are distinct from runtime-generated activity. No original
 frontend build/browser, live providers, automatic all-task scope or unbounded
 stream service was tested. Optional factory composition is reviewed separately.
+
+## Dynamic authorized task reads (stage 79, final policy/auth fixes)
+
+Manifest `59591807de5a902629f740670723fc4f07a27af466b136add7b5d0f5a63d20df`
+passed five actual PostgreSQL groups and 26 focused collected tests. The optional
+runtime wrapper received one dynamic read router before either task existed.
+Two HTTP-created tasks completed using fixed inert provider responses; the same
+unchanged application returned each task's real stats, intents and activity.
+Denied selectors and a replaced builder policy tuple refused before task SQL.
+Retained SSE streams stayed scoped across other-task reads and reconnects; selector
+revocation or persisted exploration retargeting closed them. Authentication
+callback replacement during profile serialization or first-frame SSE construction
+withheld disclosure.
+
+These are the listed Python HTTP contracts, not an entire frontend/browser pass.
+SSE remains finite committed terminal activity replay, not token streaming. No
+live providers, external targets, default grants, background pump, timed runtime,
+inherited activity or restart recovery were tested. An initial provisional fixture
+violated the exploration ownership unique constraint; the final fixture used a
+fresh unowned exploration without changing implementation behavior.
+
+## Goals initialization terminal activity (stage 80)
+
+Manifest `056d2d0fc47eee23fa7f7187f980896e732e1d046b7c80fd7deea9d15f3ef65e`
+passed four actual PostgreSQL groups and 12 focused tests. Actual runtime now
+projects four terminal receipts across three roles: goals, planner, worker,
+planner, with fixture usage totals 8/8. Duplicate receipt projection adds no
+usage; edited persisted detail refuses reconciliation. A temporary PG trigger
+rejecting goals activity insertion leaves the runtime unresolved with retained
+ownership and no repeated inference, even after removing the trigger.
+
+Separate explicit GoalPlanner same-key reconciliation reuses the canonical JSONL
+receipt, creates one activity, and adds neither inference nor duplicate goals on
+repeat. This is fixture-authorized core reconciliation, not automatic runtime
+recovery. Terminal progress is not bootstrap success or task completion; only the
+successful runtime's authoritative graph checks establish completion. All data,
+providers and DDL triggers were inert disposable fixtures. No external targets,
+positive timeout, restart recovery, live token capture or production execution.
+
+## Stage 81: dynamic main-session frontend boot sequence
+
+Immutable manifest `7524c2f9f3f5b1b6055a12f360e5dbd7b31bb5965639437249a8eada77888c57`.
+Three disposable PostgreSQL groups and seven focused tests passed. One application
+serves two tasks through main-session metadata, current `main:<seq>` history, then
+snapshot-cursor SSE. Cross-task isolation, reconnection and cancellation are
+verified. Main-session/activity rows are explicit synthetic fixtures, not evidence
+of main-chat execution. No reset/message submission or original frontend execution.
+
+## Stage 82: owned deadline freeze/drain prerequisite
+
+Immutable manifest `a209c5ca19f3f24a8794730cb716bb47ecf91623413c58cefdee72be0e623278`.
+Two disposable PostgreSQL groups and twelve focused tests passed. Actual registered
+lease freeze adds no SQL, status, clock or activity changes. Ownership remains
+retained; new admission/advancement is denied; exact pins and pending rechecks are
+verified. The fixture explicitly injects a positive prepared-timeout pin: this is
+NOT working positive-duration runtime. There is no expiry scheduler, final model
+assessment, terminal-write capability, automatic release or recovery claim.
