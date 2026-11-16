@@ -103,13 +103,15 @@ class ChatDispatcher:
         self._threads=[Thread(target=self._worker,name='artex-chat',daemon=False) for _ in range(workers)]
         for thread in self._threads:thread.start()
 
-    def submit(self,conversation_id,client_id,message,*,activities,run,worker=''):
+    def submit(self,conversation_id,client_id,message,*,activities,run,worker='',authorize=None):
         int64(conversation_id,'conversation ID')
         if conversation_id<=0:raise ValueError('Positive conversation ID required')
         if not isinstance(client_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',client_id):raise ValueError('Invalid client ID')
         if not isinstance(message,str) or not message.strip() or '\x00' in message or len(message.encode('utf-8'))>65536:raise ValueError('Invalid message')
         if not isinstance(worker,str) or len(worker)>120 or '\x00' in worker:raise ValueError('Invalid worker')
         if getattr(activities,'conversation_id',None)!=conversation_id or not callable(getattr(activities,'append_many_and_touch',None)) or not callable(run):raise ValueError('Explicit parent-scoped activity store and runner required')
+        if authorize is not None:
+            if not callable(authorize) or authorize() is not True:raise PermissionError('Conversation admission denied')
         key=(conversation_id,client_id)
         with self._condition:
             previous=self._receipts.get(key)

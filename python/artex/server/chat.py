@@ -22,7 +22,7 @@ import uuid
 from .core import json_response,error_response
 from ..db.conversations import Conversation
 from ..agent.chat import ChatAgent,ChatBusy,ChatUnavailable,ChatPersistenceError
-from ..agent.runtime import Limits,RunResult,RunStopped,BoundedAgent
+from ..agent.runtime import Limits,RunResult,RunStopped,BoundedAgent,EffectUncertain
 from ..chat_dispatch import DispatchConflict,DispatchUnavailable,DispatchPersistenceError
 from ..sidequestion import Model
 from ..agent.chat_compaction import ChatCompaction
@@ -74,8 +74,21 @@ class ChatService:
         self.dispatcher,self.activities=dispatcher,activities
 
     def register(self,router):
-        router.add('POST','/api/conversations/{id}/messages',lambda request,params:self.handle(request,params['id']))
-        router.add('POST','/api/conversations/{id}/stop',lambda request,params:self.handle(request,params['id'],stop=True))
+        original=router.authorize
+        if not callable(original):raise ValueError('Original router authority required')
+        from .auth import AuthService
+        owner=getattr(original,'__self__',None)
+        jwt=(owner.store,owner.codec,owner.key,owner.clock) if type(owner)is AuthService else None
+        method=getattr(original,'__func__',None)
+        def transport(request):
+            def pins():
+                if router.authorize is not original:raise PermissionError('Router authority changed')
+                if jwt is not None and (getattr(owner.authorized,'__self__',None)is not owner or getattr(owner.authorized,'__func__',None)is not method or any(a is not b for a,b in zip((owner.store,owner.codec,owner.key,owner.clock),jwt))):raise PermissionError('JWT authority changed')
+            pins()
+            if original(request)is not True:raise PermissionError('Router access denied')
+            pins();return True
+        router.add('POST','/api/conversations/{id}/messages',lambda request,params:self.handle(request,params['id'],_transport=transport))
+        router.add('POST','/api/conversations/{id}/stop',lambda request,params:self.handle(request,params['id'],stop=True,_transport=transport))
         router.add('GET','/api/conversations/{id}/messages',lambda request,params:self.read(request,params['id']))
         router.add('GET','/api/conversations/{id}/messages/{seq}',lambda request,params:self.read(request,params['id'],params['seq']))
 
@@ -127,8 +140,16 @@ class ChatService:
             raise RunStopped('conversation_changed')
         return conversation
 
-    def handle(self,request,raw_id,*,stop=False):
+    def handle(self,request,raw_id,*,stop=False,_transport=None):
         try:
+            frozen=deepcopy(request);headers=request.headers
+            original=(self.store,self.resolve,self.authorize,self.dispatcher,self.activities)
+            get=self.store.get
+            def pure():
+                if request.headers is not headers or request!=frozen or any(a is not b for a,b in zip((self.store,self.resolve,self.authorize,self.dispatcher,self.activities),original)):
+                    raise PermissionError('Conversation request changed')
+                current=original[0].get
+                if getattr(current,'__self__',None)is not getattr(get,'__self__',None) or getattr(current,'__func__',current)is not getattr(get,'__func__',get):raise PermissionError('Conversation selector changed')
             if not isinstance(raw_id,str) or not re.fullmatch(r'[1-9][0-9]{0,18}',raw_id) or int(raw_id)>=2**63:
                 return error_response(400,'Invalid conversation identifier')
             identifier=int(raw_id)
@@ -137,8 +158,27 @@ class ChatService:
             if conversation is None:return error_response(404,'Conversation not found')
             if not isinstance(conversation,Conversation) or conversation.id!=identifier:raise ChatUnavailable()
             if self.authorize(request,deepcopy(conversation)) is not True:return error_response(403,'Conversation access denied')
+            expected=(conversation.id,conversation.agent_key,conversation.llm_profile_id)
+            uncertain=[False];admitted=[False]
+            def check_authority():
+                if uncertain[0]:raise PermissionError('Conversation effect requires reconciliation')
+                pure();current=get(identifier)
+                if not isinstance(current,Conversation) or (current.id,current.agent_key,current.llm_profile_id)!=expected:
+                    raise PermissionError('Conversation selection changed')
+                if original[2](deepcopy(frozen),deepcopy(current))is not True:raise PermissionError('Conversation access denied')
+                if _transport is not None and _transport(deepcopy(frozen))is not True:raise PermissionError('Router access denied')
+                if original[2](deepcopy(frozen),deepcopy(current))is not True:raise PermissionError('Conversation access denied')
+                pure();return True
+            def admission():
+                try:return check_authority()
+                except Exception:
+                    # After durable queue admission, any observed authority loss
+                    # is sticky, including checks in outer streaming fences.
+                    if admitted[0]:uncertain[0]=True
+                    raise
+            admission()
             if stop:
-                return json_response(200,{'status':'stopping' if self.dispatcher.cancel(identifier) else 'idle'})
+                return json_response(200,{'status':'stopping' if original[3].cancel(identifier) else 'idle'})
             resources=self.resolve(request,deepcopy(conversation))
             if not isinstance(resources,ChatResources):raise ChatUnavailable()
             if len(request.body)>self.maximum:return error_response(413,'Request body too large')
@@ -179,14 +219,70 @@ class ChatService:
             ChatAgent(resources.transcript,resources.resolver,gate=resources.gate,tools=resources.tools,
                       capture=resources.capture,limits=resources.limits,clock=resources.clock,compaction=resources.compaction)
             def run(token):
+                admitted[0]=True
                 def check():
-                    token.check()
-                    self._live(identifier,conversation)
+                    token.check();admission();token.check()
                 def gate(context,action):
                     check();grant=resources.gate(context,action);check();return grant
+                def post_effect():
+                    try:admission()
+                    except Exception:
+                        uncertain[0]=True
+                        raise EffectUncertain('Conversation authority changed after invocation') from None
+                class CheckedProvider:
+                    def __init__(self,provider):self.provider=provider
+                    def complete(self,context,payload):
+                        callback=self.provider.complete;check()
+                        try:result=callback(context,payload)
+                        except BaseException:post_effect();raise
+                        post_effect();return result
+                    def stream(self,context,payload):
+                        iterator=None
+                        try:
+                            callback=self.provider.stream;check()
+                            try:iterator=iter(callback(context,payload))
+                            except BaseException:post_effect();raise
+                            post_effect()
+                            while True:
+                                try:admission()
+                                except Exception:
+                                    # Prior stream effects remain uncertain even
+                                    # if cleanup later restores the grant.
+                                    uncertain[0]=True
+                                    raise
+                                token.check()
+                                try:event=next(iterator)
+                                except StopIteration:post_effect();return
+                                except BaseException:post_effect();raise
+                                post_effect();yield event
+                        finally:
+                            if iterator is not None and callable(getattr(iterator,'close',None)):iterator.close()
                 def resolver(model):
-                    check();binding=resources.resolver(model);check();return binding
-                agent=ChatAgent(resources.transcript,resolver,gate=gate,tools=resources.tools,
+                    check();binding=resources.resolver(model);check()
+                    return replace(binding,provider=CheckedProvider(binding.provider))
+                methods={name:getattr(resources.transcript,name) for name in ('begin','current','commit')}
+                def transcript_call(name,args):
+                    def pins():
+                        for key,original_method in methods.items():
+                            current=getattr(resources.transcript,key)
+                            if getattr(current,'__self__',None)is not getattr(original_method,'__self__',None) or getattr(current,'__func__',current)is not getattr(original_method,'__func__',original_method):
+                                raise PermissionError('Transcript authority changed')
+                    admission();pins();result=methods[name](*args);admission();pins();return result
+                class CheckedTranscript:
+                    def begin(self,*args):return transcript_call('begin',args)
+                    def current(self,*args):return transcript_call('current',args)
+                    def commit(self,*args):return transcript_call('commit',args)
+                def checked_tool(tool):
+                    callback=tool.callback
+                    def invoke(context,arguments):
+                        check()
+                        try:result=callback(context,arguments)
+                        except BaseException:
+                            post_effect();raise
+                        post_effect();return result
+                    return replace(tool,callback=invoke)
+                tools=tuple(checked_tool(tool) for tool in resources.tools)
+                agent=ChatAgent(CheckedTranscript(),resolver,gate=gate,tools=tools,
                                 capture=resources.capture,limits=resources.limits,clock=resources.clock,compaction=resources.compaction)
                 check()
                 outcome=agent.run(conversation.session_id,client,message,model=resources.model,system=resources.system,
@@ -194,13 +290,15 @@ class ChatService:
                 if not outcome.persisted:raise ChatPersistenceError(outcome.result)
                 if outcome.reused:
                     if not outcome.turn.finalized:raise ChatPersistenceError()
-                    result=resources.durable_result(conversation.session_id,deepcopy(outcome.turn))
+                    admission();result=resources.durable_result(conversation.session_id,deepcopy(outcome.turn));admission()
                     if not isinstance(result,RunResult):raise ChatPersistenceError()
                     outcome=replace(outcome,result=result)
-                self._live(identifier,conversation)
+                admission()
                 return outcome
-            self.dispatcher.submit(identifier,client,message,activities=activities,run=run,worker=conversation.agent_key)
+            admission()
+            original[3].submit(identifier,client,message,activities=activities,run=run,worker=conversation.agent_key,authorize=admission)
             return json_response(202,{'status':'accepted'})
+        except PermissionError:return error_response(403,'Conversation access denied')
         except (ChatBusy,DispatchConflict):return error_response(409,'Conversation already running or unresolved')
         except (ChatPersistenceError,DispatchPersistenceError):return json_response(503,{'error':'Persistence unconfirmed; reconcile before retrying','persisted':False})
         except (ChatUnavailable,RunStopped,DispatchUnavailable):return error_response(503,'Conversation runtime unavailable or changed')

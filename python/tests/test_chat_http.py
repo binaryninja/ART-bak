@@ -45,7 +45,8 @@ class Queue:
     def cancel(self,id):
         if id not in self.jobs:return False
         self.jobs[id][0].cancelled=True;return True
-    def submit(self,id,client,message,*,activities,run,worker):
+    def submit(self,id,client,message,*,activities,run,worker,authorize=None):
+        if authorize is not None and authorize() is not True:raise PermissionError()
         key=(id,client)
         if key in self.receipts:
             if self.receipts[key]!=message:raise ChatBusy()
