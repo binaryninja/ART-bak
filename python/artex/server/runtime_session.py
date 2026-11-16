@@ -7,7 +7,7 @@ policies, schema changes or credential/provider discovery are provided.
 """
 from dataclasses import dataclass
 import math
-from threading import RLock
+from threading import RLock, Event
 from ..runtime_lease import RuntimeLease
 from .runtime_listener import RuntimeListener, ListenerStop
 
@@ -17,6 +17,12 @@ class SessionResult:
     started: bool
     stopped: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class ForegroundResult:
+    reason: str
+    shutdown: SessionResult
 
 
 class RuntimeSession:
@@ -33,6 +39,7 @@ class RuntimeSession:
         self._lock = RLock()
         self._busy = False
         self._state = 'new'
+        self._driving = False
         self.result = SessionResult(False, False, 'not_started')
         lease.claim(self)
 
@@ -94,3 +101,65 @@ class RuntimeSession:
             return self.result
         finally:
             with self._lock: self._busy = False
+
+    def run_until_stopped(self, stop_requested, *, poll_interval=0.1, shutdown_timeout=10):
+        """Explicit blocking development run, with no signal/process handlers.
+
+        The host supplies an Event and remains responsible for unresolved drain.
+        This method never exits the process or releases an unresolved lease.
+        Health is a finite observation, not proof of readiness or atomic liveness.
+        Do not independently start/tick/stop the session while this driver owns it.
+        """
+        if type(stop_requested) is not Event:
+            raise ValueError('An explicit stop Event is required')
+        if type(poll_interval) not in (int, float) or not math.isfinite(poll_interval) or not .01 <= poll_interval <= 1:
+            raise ValueError('Poll interval must be between 0.01 and 1 second')
+        self._timeout(shutdown_timeout)
+        with self._lock:
+            self._bindings()
+            if self._driving or self._busy or self._state != 'new':
+                raise RuntimeError('Foreground run requires an unused session')
+            self._driving = True
+        reason = 'runtime_unavailable'
+        try:
+            if stop_requested.is_set():
+                reason = 'stop_requested'
+            else:
+                result = self.start(shutdown_timeout=shutdown_timeout)
+                if not result.started:
+                    # start already attempted its one cleanup sequence. Do not
+                    # automatically retry possibly effectful unresolved cleanup.
+                    with self._lock: self._driving = False
+                    return ForegroundResult('startup_failed', result)
+                while True:
+                    if stop_requested.is_set():
+                        reason = 'stop_requested'
+                        break
+                    self._bindings()
+                    listener, lease = self._pins
+                    lease.validate()
+                    listener._check()
+                    pump = listener._bundle.pump
+                    if pump.failure:
+                        reason = 'pump_failed'
+                        break
+                    if listener._thread is None or not listener._thread.is_alive():
+                        reason = 'listener_stopped'
+                        break
+                    if pump._thread is None or not pump._thread.is_alive():
+                        reason = 'pump_stopped'
+                        break
+                    if stop_requested.wait(poll_interval):
+                        reason = 'stop_requested'
+                        break
+        except (KeyboardInterrupt, SystemExit):
+            reason = 'interrupted'
+        except BaseException:
+            reason = 'runtime_unavailable'
+        try:
+            shutdown = self.stop(shutdown_timeout)
+        except BaseException:
+            shutdown = SessionResult(False, False, 'stopped_unresolved')
+        finally:
+            with self._lock: self._driving = False
+        return ForegroundResult(reason, shutdown)
