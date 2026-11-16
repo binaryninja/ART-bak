@@ -92,6 +92,14 @@ class RuntimeLease:
         self._holder = owner
 
     @_locked
+    def transfer(self, owner, replacement):
+        """Transfer an existing claim without an unlocked/unclaimed interval."""
+        self.validate()
+        if owner is None or replacement is None or self._holder is not owner:
+            raise LeaseUnavailable('Exact current lease owner required')
+        self._holder = replacement
+
+    @_locked
     def release(self, *, owner=None):
         # A renamed/unlinked path is a validation failure, but the original
         # descriptor must still be releasable after the runtime has drained.

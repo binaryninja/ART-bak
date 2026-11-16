@@ -26,7 +26,7 @@ class ForegroundResult:
 
 
 class RuntimeSession:
-    def __init__(self, listener, lease):
+    def __init__(self, listener, lease, *, lease_owner=None):
         if type(listener) is not RuntimeListener or type(lease) is not RuntimeLease:
             raise ValueError('Exact development listener and acquired process lease required')
         lease.validate()
@@ -41,7 +41,10 @@ class RuntimeSession:
         self._state = 'new'
         self._driving = False
         self.result = SessionResult(False, False, 'not_started')
-        lease.claim(self)
+        if lease_owner is None:
+            lease.claim(self)
+        else:
+            lease.transfer(lease_owner, self)
 
     @staticmethod
     def _timeout(timeout):
