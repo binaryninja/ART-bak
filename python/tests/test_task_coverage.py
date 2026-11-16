@@ -18,7 +18,7 @@ class CoverageTests(unittest.TestCase):
     def test_aggregates_union_direct_sources_and_native_inet_contract(self):
         store=self.make([PARENT,SOURCES,[(3,)],[('ip',2,1),('service',4,2)]])
         self.assertEqual(store.coverage(),dict(enabled=True,scope_rows=3,denominator=6,tested=3,pct=.5,by_type=[dict(type='ip',total=2,tested=1),dict(type='service',total=4,tested=2)]))
-        self.assertEqual(self.approved,[(5,9),(6,10)]*3)
+        self.assertEqual(self.approved,[(5,9),(6,10)]*4)
         q=[q for _,q in self.db.calls if q][-1];self.assertEqual(q.params,([5,6],));self.assertIn('ts.net >>= try_inet(a.ip)',q.sql)
         self.assertIn('UNION',q.sql);self.assertNotIn('RECURSIVE',q.sql)
     def test_disabled_short_circuit_no_aggregate(self):
@@ -51,7 +51,7 @@ class CoverageTests(unittest.TestCase):
         store=self.make([PARENT,[],rows,[(4,8)],[('Company',)]])
         graph=store.coverage_graph();self.assertEqual(len(graph['nodes']),5)
         self.assertEqual(graph['edges'],[dict(src='a:1',dst='a:4'),dict(src='a:2',dst='a:1'),dict(src='a:3',dst='a:2'),dict(src='a:4',dst='c:8')])
-        self.assertEqual(self.connectors,[('root_domain','example.test'),('company',8)]*2)
+        self.assertEqual(self.connectors,[('root_domain','example.test'),('company',8)]*3)
         self.assertFalse(graph['nodes'][3]['in_scope']);self.assertTrue(graph['nodes'][2]['tested'])
     def test_connector_policy_required_before_global_query(self):
         store=self.make([PARENT,[],[asset(1,'subdomain',domain='app.example.test',root='example.test')]],connector_authorize=None)

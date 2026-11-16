@@ -82,7 +82,7 @@ class TaskCoverageStore:
         if self.authorize(self._scope,task,exp) is not True:raise CoverageDenied('Task context read not authorized')
         self._check()
     @contextmanager
-    def _context(self):
+    def _context(self,connector_grants=()):
         callbacks=(self.authorize,self.current,self.guard,self.connector)
         def policy_pins():
             if any(a is not b for a,b in zip(callbacks,(self.authorize,self.current,self.guard,self.connector))):
@@ -116,6 +116,14 @@ ORDER BY source.id LIMIT 9 FOR SHARE OF relation,source''',(self.scope.task_id,)
             policy_pins()
             for exp,task in exps.items():self._allow(task,exp)
             self._check();policy_pins()
+        # The original guard's exit is itself a host callback. Recheck the
+        # exact captured grants after it, without acquiring another guard/SQL.
+        policy_pins()
+        for kind,value in tuple(connector_grants):
+            self._connector(kind,value);policy_pins()
+        for exp,task in exps.items():
+            self._allow(task,exp);policy_pins()
+        self._check();policy_pins()
     def _bounded(self,value):
         if len(json.dumps(value,ensure_ascii=False,allow_nan=False).encode('utf-8'))>self.max_bytes:raise CoverageUnavailable('Coverage output exceeds bound')
         return value
@@ -173,7 +181,8 @@ ORDER BY en.id DESC LIMIT $4''',(ids,asset_id,self.scope.task_id,self.max_rows+1
         if not callable(self.connector) or self.connector(self._scope,kind,value) is not True:raise CoverageDenied('Connector read not authorized')
         self._check()
     def coverage_graph(self):
-        with self._context() as (tx,ids,exps,enabled):
+        connector_grants=[]
+        with self._context(connector_grants) as (tx,ids,exps,enabled):
             text_fields=('domain','root_domain','ip','url','service_type','app_name','page_title')
             size="+".join("octet_length(COALESCE(a."+field+",''))" for field in text_fields)
             def bounded(field):
@@ -219,6 +228,7 @@ ORDER BY en.id DESC LIMIT $4''',(ids,asset_id,self.scope.task_id,self.max_rows+1
             missing=sorted({n['root_domain'] for n in nodes if n['kind']=='subdomain' and n.get('root_domain') and n['root_domain'] not in roots})
             for root in missing:
                 self._connector('root_domain',root)
+                connector_grants.append(('root_domain',root))
                 found=tx.fetch_all(Query("SELECT id,COALESCE(company_id,0) FROM assets WHERE type='root_domain' AND domain=$1 LIMIT 1",(root,)))
                 self._check()
                 n=dict(key='r:'+root,kind='root_domain',domain=root,label=root,tested=False,in_scope=False)
@@ -228,6 +238,7 @@ ORDER BY en.id DESC LIMIT $4''',(ids,asset_id,self.scope.task_id,self.max_rows+1
                 add(n);roots[root]=n['key']
             for company in sorted(companies):
                 self._connector('company',company)
+                connector_grants.append(('company',company))
                 found=tx.fetch_all(Query('SELECT CASE WHEN octet_length(name)<=$2 THEN name ELSE NULL END FROM companies WHERE id=$1',(company,remaining)))
                 self._check()
                 if found:

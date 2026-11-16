@@ -9,8 +9,10 @@ class TaskFindingsService:
         if type(store) is not TaskFindingsStore or not callable(authorize):raise ValueError('Actual task findings store and request grant required')
         self.store=store;self.authorize=authorize;self._store=store
     def register(self,router):router.add('GET','/api/exploration/findings',lambda r,p:self.handle(r))
-    def handle(self,request):
+    def handle(self,request,*,disclosure=None):
         try:
+            if disclosure is not None and not callable(disclosure):raise ValueError()
+            extra=disclosure
             if request.body:raise ValueError()
             query=urlsplit(request.target).query
             if len(query)>128:raise ValueError()
@@ -21,6 +23,12 @@ class TaskFindingsService:
                 if self.store is not store or self.authorize is not grant:raise CoverageDenied('Finding request policy changed')
                 store._check()
                 if grant(request,store.scope) is not True:raise CoverageDenied('Finding read denied')
+                if self.store is not store or self.authorize is not grant:raise CoverageDenied('Finding request policy changed')
+                store._check()
+                if extra is not None:
+                    try:approved=extra()
+                    except PermissionError:raise CoverageDenied('Outer finding read denied') from None
+                    if approved is not True:raise CoverageDenied('Outer finding read denied')
                 if self.store is not store or self.authorize is not grant:raise CoverageDenied('Finding request policy changed')
                 store._check();return True
             result,validate=store.read(allowed)

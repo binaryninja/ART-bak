@@ -118,9 +118,14 @@ class TaskRuntimeReads:
                 # The scoped findings service owns its guard and source/asset
                 # grants. Never nest our possibly non-reentrant guard around it.
                 self._allow(request,op)
-                response=self.findings_service.handle(request)
+                # The outer grant must run inside the canonical final source/asset
+                # validation, never after it has released a validated response.
+                def disclosure():
+                    self._allow(request,op)
+                    return True
+                response=self.findings_service.handle(request,disclosure=disclosure)
                 if len(response.body)>self.max_bytes:return error_response(503,'Task read response exceeds bound')
-                self._allow(request,op)
+                self.validate_bindings()
                 return response
             with self._pins[4](self.scope):
                 self._allow(request,op)

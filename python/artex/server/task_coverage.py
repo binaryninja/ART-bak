@@ -85,7 +85,12 @@ class TaskCoverageService:
                 live(scope)
                 response=json_response(200,output)
                 if len(response.body)>self.max_bytes:raise CoverageUnavailable('Coverage response exceeds bound')
-                return response
+            # Guard exit and serialization may revoke previously granted data.
+            # Reuse the same recorded selectors; no nested guard or extra SQL.
+            for k,v in tuple(granted_connectors):connector(scope,k,v)
+            for t,e in tuple(granted_sources):allow(scope,t,e)
+            live(scope);check()
+            return response
         except CoverageDenied:return error_response(403,'Task coverage read denied')
         except CoverageUnavailable:return error_response(503,'Task coverage capability unavailable')
         except (ValueError,TypeError,UnicodeError):return error_response(400,'Invalid task coverage request')
