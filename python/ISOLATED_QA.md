@@ -1664,3 +1664,25 @@ Stage 128 manifest: `9f067164bc6806931831d32d9d8dd1efacb40c7a2cc2c71e2d9cd8c1ac4
 Three actual PostgreSQL groups and 14 focused tests pass. The report includes only the selected task's graph findings, not facts, foreign explorations or the global findings table. Separate global asset counts, exact task selection, deleted-task handling and the actual UTF-8 payload sentinel were checked. The preserved late-current callback regression now denies disclosure after request authorization is revoked. No fixture or product corrections were needed during this run.
 
 Both snapshots contain the published base plus only their named standalone modules, tests and status. These were credentialless, disposable PostgreSQL 17.11 fixtures with synthetic data. They do not register default routes, expand mentions, call models, fetch URLs or execute report contents. Markdown is text, not an HTML sanitization guarantee. The source's large count cap was not populated to 100,001 rows, and no cross-statement atomic snapshot is claimed. Timed final-retirement and notification PATCH follow-on defects remain separate, unpublished work.
+
+
+# Stage129: corrected optional notification metadata PATCH boundary
+
+Snapshot: stage126 exact base plus the explicitly reviewed DB metadata store, service, optional wrapper and focused metadata tests. Manifest SHA256 `2e0d1a3d16604fdff14024e95e46fe0d4d7999276b7393c9a0e083445a168ab0`. No moving-source overlay during execution.
+
+Independent source review found the new final write authority is checked after callback-bearing source gates, immediately before each UPDATE and at the final transaction-exit boundary. Only code-owned identity/proposal checks follow it. This is finite cooperative authorization, not atomicity against arbitrarily mutually mutating policies.
+
+## Verified
+
+29 focused isolated tests passed, including unchanged original wrapper review and the two preserved late-current regressions. Four actual PostgreSQL 17.11 groups passed against fresh original schema, with actual JWT and injected synthetic policies:
+
+1. Metadata PATCH and pending/sending disable transition commit atomically; kind and config remain byte-for-byte unchanged. Product SQL does not read config. Original app has no route.
+2. Original JWT/global grant revocation during locked-row retrieval prevents UPDATE.
+3. Simulated lost acknowledgment after actual commit reports 503, unknown outcome, retry:false. Revocation at start_response withholds body after one 200 header; committed state remains, no automatic retry.
+4. Original current callback revokes global at the preserved pre-UPDATE position: 403, zero UPDATE calls, persisted row unchanged. Revocation after tentative UPDATE at preserved pre-commit position: one UPDATE executed, transaction rolled back, persisted row unchanged, 503 unknown/retry:false. This directly strengthens and supersedes the limited stage126 acceptance.
+
+## Isolation and limitations
+
+Existing approved user/network namespace plus credentialless bubblewrap filesystem, fresh temporary PostgreSQL reachable only on isolated loopback. No external provider, sending, credential use, production data, or default registration. Only generated synthetic metadata. Snapshot and harness immutable; no product corrections during this run.
+
+Initial attempts were blocked by full temporary storage and produced no acceptance result. Coordinator relocated unrelated completed snapshots without deleting evidence; unchanged stage129 then exited zero. These infrastructure attempts are not product failures or passes.

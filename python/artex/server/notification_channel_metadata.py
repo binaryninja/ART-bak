@@ -18,7 +18,7 @@ class ChannelMetadataService:
         s,e,scope,a=self._pins
         if self.store is not s or s.executor is not e or s.scope is not scope or self.authorize is not a:raise MetadataDenied()
         s.validate()
-    def handle(self,request):
+    def handle(self,request,*,write_authorize=None):
         try:
             m=re.fullmatch('/api/notify/channels/([1-9][0-9]{0,18})',request.path)
             if request.method!='PATCH' or not m or urlsplit(request.target).query or len(request.body)>65536:raise ValueError('Invalid channel metadata request')
@@ -28,6 +28,14 @@ class ChannelMetadataService:
         original=(request.method,request.target,request.body)
         try:
             self._check()
+            if write_authorize is not None and not callable(write_authorize):raise ValueError('Explicit final write authority required')
+            def final_write(scope,patch):
+                self._check()
+                if original!=(request.method,request.target,request.body) or patch is not p:raise MetadataDenied()
+                allowed=write_authorize(request,scope,p)
+                self._check()
+                if original!=(request.method,request.target,request.body):raise MetadataDenied()
+                return allowed is True
             def authorize(scope,patch):
                 self._check()
                 if original!=(request.method,request.target,request.body) or patch is not p:raise MetadataDenied()
@@ -35,7 +43,7 @@ class ChannelMetadataService:
                 self._check()
                 if original!=(request.method,request.target,request.body):raise MetadataDenied()
                 return allowed is True
-            id=self._pins[0].patch(p,request_authorize=authorize)
+            id=self._pins[0].patch(p,request_authorize=authorize,write_authorize=final_write if write_authorize is not None else None)
             return json_response(200,{'id':id})
         except MetadataMissing:return error_response(404,'Notification channel not found')
         except MetadataDenied:return error_response(403,'Channel metadata mutation denied')

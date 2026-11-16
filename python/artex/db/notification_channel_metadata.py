@@ -52,9 +52,10 @@ class ChannelMetadataStore:
     def validate(self):
         e,s,n,r,a,c,g=self._pins
         if self.executor is not e or self.scope is not s or (s.name,s.revision)!=(n,r) or self.authorize is not a or self.current is not c or self.guard is not g:raise MetadataDenied()
-    def patch(self,p,*,request_authorize):
+    def patch(self,p,*,request_authorize,write_authorize=None):
         if type(p) is not ChannelMetadataPatch or type(p.changes_json) is not str or not callable(request_authorize):raise ValueError('Exact immutable patch required')
         if proposal(p.channel_id,json.loads(p.changes_json))!=p:raise ValueError('Canonical normalized patch required')
+        if write_authorize is not None and not callable(write_authorize):raise ValueError('Explicit final write authority required')
         original=(p.channel_id,p.changes_json);values=json.loads(p.changes_json);attempted=False
         e,s,n,r,a,c,g=self._pins
         def check():
@@ -72,6 +73,12 @@ class ChannelMetadataStore:
             check()
             if c(s) is not True:raise MetadataDenied()
             check()
+        def write_gate():
+            # Optional outer authority must run after callback-bearing store gates.
+            # Only code-owned binding/proposal checks follow it before the effect.
+            check()
+            if write_authorize is not None and write_authorize(s,p) is not True:raise MetadataDenied()
+            check()
         try:
             allow()
             with g(s):
@@ -88,14 +95,15 @@ class ChannelMetadataStore:
                             if key not in values:continue
                             params.append(json.dumps(values[key],ensure_ascii=False,separators=(',',':')) if key=='filter' else values[key])
                             columns.append(key+'=$'+str(len(params))+('::jsonb' if key=='filter' else ''))
-                        allow();attempted=True
+                        allow();write_gate();attempted=True
                         count=tx.execute(Query('UPDATE notification_channels SET '+','.join(columns)+' WHERE id=$1',tuple(params)))
                         if type(count) is not int or count!=1:raise MetadataUncertain()
                         if previous and values.get('enabled') is False:
-                            allow()
+                            allow();write_gate()
                             count=tx.execute(Query('UPDATE notification_deliveries SET state=$2,last_error=$3 WHERE channel_id=$1 AND state IN ($4,$5)',(p.channel_id,'skipped','Channel disabled','pending','sending')))
                             if type(count) is not int or count<0:raise MetadataUncertain()
                     allow() # Original write authority immediately before transaction exit.
+                    write_gate() # Outer grant after the final callback-bearing pre-commit gate.
                 allow()
             allow();return p.channel_id
         except BaseException:
