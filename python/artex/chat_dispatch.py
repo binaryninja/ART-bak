@@ -15,8 +15,15 @@ from an explicitly persisted ChatOutcome. Failed/uncertain activity persistence
 retains busy ownership for operator reconciliation; close reports it, not success.
 Callbacks already blocked in I/O cannot be preempted. Explicit construction starts
 non-daemon threads; host must close/drain them. No provider/tool defaults exist.
+Issued cancellation tokens retain their exact job through cancel/on_cancel callback
+operations and terminal Future callbacks. After retirement, cancel/on_cancel refuse;
+cancelled/check remain readable. Completion callbacks cannot reentrantly admit a
+new turn for that same conversation until they return. Standalone Cancellation is
+unchanged. Drain timeouts budget cooperative waits, not synchronous callbacks or
+lock acquisition, and cancellation callbacks cannot drain their own dispatcher.
 """
 from collections import deque
+from contextlib import contextmanager
 from concurrent.futures import Future
 from dataclasses import dataclass,replace
 from threading import Condition,Event,RLock,Thread,current_thread
@@ -50,6 +57,15 @@ class Cancellation:
             try:callback()
             except BaseException:pass  # token remains set; no secret-bearing callback errors logged
 
+class _OwnedCancellation(Cancellation):
+    """Issued job token: callbacks cannot outlive or reopen its queue ownership."""
+    def __init__(self,owner,job):
+        super().__init__();self._owner=owner;self._job=job
+    def cancel(self):
+        with self._owner._token_operation(self._job):super().cancel()
+    def on_cancel(self,callback):
+        with self._owner._token_operation(self._job):super().on_cancel(callback)
+
 @dataclass(frozen=True)
 class Receipt:
     id:str
@@ -74,6 +90,8 @@ class _Job:
     worker:str
     token:Cancellation
     uncertain:bool=False
+    cancellations:int=0
+    settled:bool=False
 
 class ChatDispatcher:
     def __init__(self,*,workers=1,capacity=4,max_receipts=10000,single_process=False):
@@ -81,7 +99,7 @@ class ChatDispatcher:
         if any(type(v) is not int or v<=0 for v in (workers,capacity,max_receipts)):raise ValueError('Positive dispatcher bounds required')
         if workers>64 or capacity>10000 or max_receipts>1000000:raise ValueError('Dispatcher bounds too large')
         self._limit=workers+capacity;self._max_receipts=max_receipts
-        self._condition=Condition(RLock());self._queue=deque();self._busy={};self._receipts={};self._closed=False;self._failures=0
+        self._condition=Condition(RLock());self._queue=deque();self._busy={};self._receipts={};self._closed=False;self._failures=0;self._cancellations={}
         self._threads=[Thread(target=self._worker,name='artex-chat',daemon=False) for _ in range(workers)]
         for thread in self._threads:thread.start()
 
@@ -105,6 +123,7 @@ class ChatDispatcher:
             future=Future();future.set_running_or_notify_cancel()
             receipt=Receipt(uuid.uuid4().hex,conversation_id,client_id,future)
             job=_Job(receipt,message,activities,run,worker,Cancellation())
+            job.token=_OwnedCancellation(self,job)
             # In-progress admission cannot be reused as successful before durability.
             job.uncertain=True
             self._busy[conversation_id]=job;self._receipts[key]=job
@@ -127,9 +146,36 @@ class ChatDispatcher:
 
     def cancel(self,conversation_id):
         int64(conversation_id,'conversation ID')
-        with self._condition:job=self._busy.get(conversation_id)
-        if job is None:return False
-        job.token.cancel();return True
+        with self._condition:
+            job=self._busy.get(conversation_id)
+            if job is None:return False
+            operation=object();self._cancellations[operation]=current_thread();job.cancellations+=1
+        self._cancel_registered(operation,[job]);return True
+
+    @contextmanager
+    def _token_operation(self,job):
+        with self._condition:
+            if self._busy.get(job.receipt.conversation_id)is not job:
+                raise DispatchUnavailable('Issued cancellation token retired')
+            operation=object();self._cancellations[operation]=current_thread();job.cancellations+=1
+        try:yield
+        finally:self._finish_cancellation(operation,[job])
+
+    def _finish_cancellation(self,operation,jobs):
+        with self._condition:
+            self._cancellations.pop(operation,None)
+            for job in jobs:
+                job.cancellations-=1
+                if not job.cancellations and job.settled and not job.uncertain and self._busy.get(job.receipt.conversation_id)is job:
+                    self._busy.pop(job.receipt.conversation_id,None)
+            self._condition.notify_all()
+
+    def _cancel_registered(self,operation,jobs):
+        # Reserve under the same lock as job selection, before callbacks can
+        # race settlement/close. Never run user callbacks under that lock.
+        try:
+            for job in jobs:job.token.cancel()
+        finally:self._finish_cancellation(operation,jobs)
 
     def _worker(self):
         while True:
@@ -165,13 +211,15 @@ class ChatDispatcher:
                 error=DispatchPersistenceError('Terminal activity persistence unconfirmed')
                 job.uncertain=True
             with self._condition:
-                if not job.uncertain:self._busy.pop(job.receipt.conversation_id,None)
                 if error is not None:self._failures+=1
                 try:
                     if error is not None:job.receipt.future.set_exception(error)
                     else:job.receipt.future.set_result(outcome)
                 except BaseException:
                     pass  # Future callbacks cannot kill the owned worker after settlement.
+                job.settled=True
+                if not job.uncertain and not job.cancellations and self._busy.get(job.receipt.conversation_id)is job:
+                    self._busy.pop(job.receipt.conversation_id,None)
                 self._condition.notify_all()
 
     def close(self,*,cancel=False,timeout=None):
@@ -179,10 +227,19 @@ class ChatDispatcher:
         if current_thread() in self._threads:raise DispatchUnavailable('Worker cannot join its own dispatcher')
         deadline=None if timeout is None else time.monotonic()+timeout
         with self._condition:
+            if current_thread() in self._cancellations.values():
+                raise DispatchUnavailable('Cancellation callback cannot drain its own dispatcher')
             self._closed=True;jobs=list(self._busy.values());self._condition.notify_all()
-        if cancel:
-            for job in jobs:job.token.cancel()
+            operation=None
+            if cancel and jobs:
+                operation=object();self._cancellations[operation]=current_thread()
+                for job in jobs:job.cancellations+=1
+        if operation is not None:self._cancel_registered(operation,jobs)
         for thread in self._threads:thread.join(None if deadline is None else max(0,deadline-time.monotonic()))
         with self._condition:
+            while self._cancellations:
+                remaining=None if deadline is None else max(0,deadline-time.monotonic())
+                if remaining==0:break
+                self._condition.wait(remaining)
             alive=sum(t.is_alive() for t in self._threads);unresolved=sum(j.uncertain for j in self._busy.values())
-            return DrainResult(not alive and not self._busy,alive,unresolved,self._failures)
+            return DrainResult(not alive and not self._busy and not self._cancellations,alive,unresolved,self._failures)
