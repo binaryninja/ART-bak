@@ -53,6 +53,17 @@ class BootstrapHandle:
         self._configuration=(model,system,policy_revision,request_id,str(raw),exp,task.get('timeout_seconds',0))
         self._condition=Condition(RLock());self._active=False;self._thread=None
         self._phase='installed';self._child=None;self._receipt=None;self._unresolved=False;self._completed=False
+        self._continuation=self._continuation_pin=None
+    @classmethod
+    def _from_continuation(cls,owner,cap,task,token,old):
+        from .task_continuation import TaskContinuationOwner
+        if cls is not BootstrapHandle or type(owner) is not TaskContinuationOwner or type(old) is not BootstrapHandle:raise BootstrapConflict('Original continuation owner required')
+        receipt=TaskContinuationOwner.construction_receipt(owner,cap,old,token)
+        handle=cls(task,token,coordinator=old.coordinator,manager=old.manager,
+            model=old.model,system=old.system,policy_revision=old.policy_revision,
+            request_id=old.request_id,engine_factory=old._factory)
+        handle._continuation=handle._continuation_pin=(owner,cap,receipt)
+        return handle
     @property
     def prepared_timeout_seconds(self):
         """Constructor-owned timeout; positive requires verified explicit cap."""
@@ -70,6 +81,7 @@ class BootstrapHandle:
     def phase(self):
         with self._condition:return self._phase
     def _binding(self):
+        if self._continuation is not self._continuation_pin:raise BootstrapConflict('Continuation binding changed')
         if self.timed_admission is not self._timed_admission:raise BootstrapConflict('Timed admission changed')
         if self._timed_admission is not None:
             if self._timed_admission.validate_bindings!=self._admission_check:raise BootstrapConflict('Timed admission validation changed')
@@ -137,7 +149,13 @@ class BootstrapHandle:
             if initial:self._phase='initializing'
         try:
             if initial:
-                receipt=self.coordinator.run_admitted(self)
+                if self._continuation is None:
+                    receipt=self.coordinator.run_admitted(self)
+                else:
+                    from .task_continuation import TaskContinuationOwner
+                    owner,cap,expected=self._continuation
+                    receipt=TaskContinuationOwner.activate(owner,cap,self)
+                    if receipt is not expected:raise BootstrapConflict('Original continuation receipt changed')
                 with self._condition:self._receipt=receipt;self._phase='prepared'
                 self._owned()
                 scope=self.scope

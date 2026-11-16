@@ -57,10 +57,11 @@ class PollResult:
     pending: int = 0
     deadline_owners: int = 0
     deadline_pending: int = 0
+    continuation_owners: int = 0
 
     @property
     def all_settled(self):
-        return not self.busy and self.running == 0 and self.pending == 0 and self.deadline_owners == 0
+        return not self.busy and self.running == 0 and self.pending == 0 and self.deadline_owners == 0 and self.continuation_owners == 0
 
 
 @dataclass(frozen=True)
@@ -215,6 +216,13 @@ class AgentHost:
         # as a failed create/start and encourage a duplicate retry. Poll explicitly.
         return result
 
+    def install_continuation(self,owner):
+        """Explicit same-process zero-timeout continuation; no default enablement."""
+        return self._invoke(lambda:self.runner.install_continuation(owner),admission=True)
+
+    def resume_suspended(self,task_id):
+        return self._invoke(lambda:self.manager.resume_suspended(task_id),admission=True)
+
     def start(self, task_id, *, seed_first_intent=False):
         return self._invoke(lambda: self.manager.start(task_id, seed_first_intent=seed_first_intent), admission=True)
 
@@ -308,8 +316,11 @@ class AgentHost:
             handles = self._handles()
             running = sum(not self._wait(handle,0) for handle in handles)
             owners=self._deadline_inventory()
+            continuations=self.manager.suspension_owners()
+            self._identity()
+            if type(continuations) is not tuple or len(continuations)>100000 or any(type(v) is not tuple or len(v)!=2 or type(v[0]) is not str or not v[0].isascii() or not v[0].isdecimal() or v[1] not in ('reserving','pausing','paused','resuming','installed','quarantined') for v in continuations):raise RuntimeUnavailable('Invalid continuation inventory')
             return PollResult(False, settled, running, len(handles) - running,
-                              len(owners),sum(o.state != 'suspended' for o in owners))
+                              len(owners),sum(o.state != 'suspended' for o in owners),len(continuations))
         finally:
             with self._condition:
                 self._settling = False
@@ -345,7 +356,7 @@ class AgentHost:
                     state = self.poll()
                     return DrainResult(False, state)
             state = self.poll()
-            return DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0, state)
+            return DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0 and state.continuation_owners == 0, state)
         finally:
             with self._condition:
                 self._draining = False

@@ -44,6 +44,7 @@ class EngineRunner:
         self._bootstrap_factory=bootstrap_factory
         self._readiness,self._factory=readiness,factory
         self.max_pending=max_pending
+        self._continuation_owner=None
         self._lock=RLock(); self._handles={}; self._host=None; self._host_executor=None; self._host_manager=None
         self._frontier={};self._final_retirement={};self._host_settlement_check=None
         self._intent_control=None;self._intent_methods=None
@@ -451,10 +452,46 @@ class EngineRunner:
             self._final_retirement.pop(handle,None)
         return True
 
+    def install_continuation(self,owner):
+        from .task_continuation import TaskContinuationOwner
+        if type(owner) is not TaskContinuationOwner or self._host is None or owner.runner is not self or owner.host is not self._host or owner.manager is not self._host_manager:raise RuntimeUnavailable('Exact continuation owner required')
+        names=('reserve_pause','confirm_pause','prepare_resume','commit_resume','confirm_installed','quarantine','retained','validate_bindings')
+        methods=tuple(getattr(owner,n) for n in names)
+        if any(getattr(m,'__func__',None) is not getattr(TaskContinuationOwner,n) for n,m in zip(names,methods)):raise RuntimeUnavailable('Original continuation methods required')
+        owner.validate_bindings();self.claim_host(self._host)
+        with self._lock:
+            if self._continuation_owner is not None:
+                if self._continuation_owner is owner:return False
+                raise TaskConflict('Continuation owner already installed')
+            self._continuation_owner=owner
+        with self._host_manager._lock:
+            if self._host_manager._continuation_owner is not None and self._host_manager._continuation_owner is not owner:raise TaskConflict('Manager continuation owner changed')
+            self._host_manager._continuation_owner=owner
+            self._host_manager._continuation_runner=self
+            self._host_manager._continuation_methods=(names,methods)
+        return True
+
+    def install_resumed_handle(self,cap,handle):
+        owner=self._continuation_owner
+        if owner is None or cap.owner is not owner:raise RuntimeUnavailable('Original continuation required')
+        self._host_manager._continuation_binding(owner);self.claim_host(self._host)
+        if type(handle) is not BootstrapHandle or handle.manager is not self._host_manager or handle.executor is not self._host_executor or handle.scope is not None or handle.phase!='installed' or handle.token.cancelled or handle.unresolved or handle.wait(0) is not True:raise RuntimeUnavailable('Exact inert continuation required')
+        handle.validate_construction()
+        old=self._host_manager._continuation_installation(cap,handle,handle.token)
+        if not old.token.cancelled or old.unresolved or old.wait(0) is not True:raise TaskConflict('Previous generation not drained')
+        owner.validate_bindings()
+        if self._host_manager._continuation_installation(cap,handle,handle.token) is not old:raise TaskConflict('Suspension changed')
+        with self._lock:
+            key=handle.task_id
+            if self._handles.get(key) is not old or key in self._frontier:raise TaskConflict('Original runner ownership changed')
+            self._handles[key]=handle
+        return True
+
     def _retire_cancelled(self, key, handle):
         """Detach execution only after manager acknowledgement; never release a lease."""
         with self._lock:
             if key in self._frontier:return False
+        if self._continuation_owner is not None and self._continuation_owner.retained(handle):return False
         if self._timed_blocked(handle) or self._intent_retained(handle):return False
         if handle.unresolved or not handle.token.cancelled or handle.wait(0) is not True:
             return False

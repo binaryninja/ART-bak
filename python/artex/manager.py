@@ -242,6 +242,10 @@ class TaskManager:
         self._active = ''
         self._deadline_slots: dict[str, _DeadlineSlot] = {}
         self._unstamped_slots: dict[str, _UnstampedSlot] = {}
+        self._suspensions = {}
+        self._continuation_owner = None
+        self._continuation_runner = None
+        self._continuation_methods = None
 
     def load_existing(self):
         """Register persisted tasks without launching/resuming any execution."""
@@ -303,6 +307,8 @@ class TaskManager:
                 return False
             if allow_cancelled:
                 return True
+            continuation=self._suspensions.get(key)
+            if continuation is not None and continuation['phase'] not in ('reserving','pausing'):return False
             if key in self._unstamped_slots:return False
             deadline=self._deadline_slots.get(key)
             if deadline is not None and deadline.state in ('freezing','drained','assessing','settling','early_settling','quarantined'):return False
@@ -785,6 +791,7 @@ class TaskManager:
         try:key=_id(task_id)
         except TaskNotFound:return False
         with self._lock:
+            if key in self._suspensions:return False
             if key in self._unstamped_slots:return False
             if self._has_cleanup(key):return False
             slot=self._deadline_slots.get(key)
@@ -805,7 +812,7 @@ class TaskManager:
             _,row=self._require(key)
             return (row.get('status'),row.get('completed_at'),
                     key in self._runs,
-                    key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key))
+                    key in self._deadline_slots or key in self._unstamped_slots or key in self._suspensions or self._has_cleanup(key))
 
     def lifecycle_snapshot(self, task_id):
         with self._lock:
@@ -915,6 +922,7 @@ class TaskManager:
         self._runtime_required()
         with self._lock:
             key, row = self._require(task_id)
+            if key in self._suspensions:raise TaskConflict('Suspended generation requires exact continuation')
             if self._has_cleanup(key):raise TaskConflict('Retained cleanup prevents admission')
             if key in self._deadline_slots or key in self._unstamped_slots:
                 raise TaskConflict('Retained deadline requires explicit resume reconciliation')
@@ -1018,6 +1026,31 @@ class TaskManager:
                 self._deadline_binding(deadline_slot)
                 if deadline_slot.token is not run.token or deadline_slot.handle is not run.handle:
                     raise TaskConflict('Deadline attachment differs from paused generation')
+            continuation=self._continuation_owner if run.handle is not None else None
+            suspension=self._suspensions.get(key)
+            if suspension is not None and (suspension['phase']!='pausing' or suspension['old_run'] is not run):
+                raise TaskConflict('Suspension requires reconciliation')
+            if continuation is not None and suspension is None:
+                suspension={'owner':continuation,'cap':None,'old_run':run,'old_handle':run.handle,'old_token':run.token,'phase':'reserving','new_run':None,'new_handle':None}
+                self._suspensions[key]=suspension
+        if continuation is not None and suspension['cap'] is None:
+            cap=None
+            try:
+                self._continuation_binding(continuation)
+                cap=continuation.reserve_pause(run.handle)
+                self._continuation_binding(continuation)
+                with self._lock:
+                    if self._runs.get(key) is not run or self._suspensions.get(key) is not suspension:raise TaskConflict('Pause reservation changed')
+                    suspension['cap']=cap;suspension['phase']='pausing'
+            except BaseException:
+                if cap is not None:self._continuation_methods[1][5](cap)
+                with self._lock:
+                    if self._suspensions.get(key) is suspension:
+                        if cap is None:self._suspensions.pop(key,None)
+                        else:suspension['phase']='quarantined'
+                raise
+        with self._lock:
+            if self._runs.get(key) is not run:raise TaskConflict('Pause generation changed')
             run.token.cancel('paused_by_user')
         deadline = monotonic() + timeout
         if run:
@@ -1052,12 +1085,98 @@ class TaskManager:
                     self._deadline_binding(deadline_slot)
                     if deadline_slot.state!='attached':raise TaskConflict('Deadline owner no longer attachable')
                     deadline_slot.state='suspended'
-                self._runs.pop(key, None)
-                return {'id': key, 'paused': True, 'queued': False, 'status': 'paused'}
+                paused_snapshot=deepcopy(self._tasks[key])
+            if continuation is not None:
+                self._continuation_binding(continuation)
+                continuation.confirm_pause(suspension['cap'],paused_snapshot)
+                self._continuation_binding(continuation)
+            with self._lock:
+                if self._runs.get(key) is not run:raise TaskConflict('Pause owner changed after confirmation')
+                if suspension is not None:
+                    if self._suspensions.get(key) is not suspension or suspension['phase']!='pausing':raise TaskConflict('Suspension changed')
+                    suspension['phase']='paused'
+                self._runs.pop(key,None)
+            return {'id': key, 'paused': True, 'queued': False, 'status': 'paused'}
         except BaseException:
             with self._lock:
                 if deadline_slot is not None:deadline_slot.state='quarantined'
+                if suspension is not None:suspension['phase']='quarantined'
+            if continuation is not None:self._continuation_methods[1][5](suspension['cap'])
             raise
+
+    def _continuation_identity(self,owner):
+        if self._continuation_methods is None or self.runner is not self._continuation_runner or self._continuation_owner is not owner or getattr(self.runner,'_continuation_owner',None) is not owner:return False
+        names,methods=self._continuation_methods
+        return tuple(getattr(owner,n,None) for n in names)==methods
+
+    def _continuation_binding(self,owner):
+        if not self._continuation_identity(owner):raise RuntimeUnavailable('Continuation binding changed')
+        self._continuation_methods[1][-1]()
+        if not self._continuation_identity(owner):raise RuntimeUnavailable('Continuation binding changed')
+
+    def suspension_owners(self):
+        """Immutable local ownership inventory, never an execution grant."""
+        with self._lock:return tuple((key,slot['phase']) for key,slot in self._suspensions.items())
+
+    def validate_suspension(self,cap,old_handle,old_token,phase,new_handle=None,new_token=None):
+        """Callback-free exact same-process registry proof, never SQL authority."""
+        if phase not in ('pausing','paused','resuming','installed'):return False
+        with self._lock:
+            matches=[(key,slot) for key,slot in self._suspensions.items() if slot['cap'] is cap]
+            if len(matches)!=1:return False
+            key,slot=matches[0];row=self._tasks.get(key)
+            if not self._continuation_identity(slot['owner']) or slot['phase']!=phase or slot['old_handle'] is not old_handle or slot['old_token'] is not old_token:return False
+            if row is None or row.get('status')!='running' or row.get('deleted_at') is not None or row.get('archived_at') is not None or row.get('timeout_seconds')!=0:return False
+            if phase=='pausing':return self._runs.get(key) is slot['old_run']
+            if phase=='paused':return key not in self._runs and row.get('paused') is True
+            run=slot['new_run']
+            if run is None or self._runs.get(key) is not run or run.token is not new_token or run.uncertain:return False
+            if new_handle is not None and (slot['new_handle'] is not new_handle or run.handle is not new_handle):return False
+            return phase!='installed' or run.started is True and row.get('paused') is False
+
+    def _continuation_installation(self,cap,handle,token):
+        with self._lock:
+            for key,slot in self._suspensions.items():
+                if slot['cap'] is cap:
+                    if slot['new_handle'] is not handle or not self.validate_suspension(cap,slot['old_handle'],slot['old_token'],'resuming',new_token=token):raise TaskConflict('Original resume installation required')
+                    return slot['old_handle']
+            raise TaskConflict('Suspension unavailable')
+
+    def resume_suspended(self,task_id):
+        with self._lock:
+            key,row=self._require(task_id);slot=self._suspensions.get(key)
+            if slot is None or slot['phase']!='paused' or slot['owner'] is not self._continuation_owner or key in self._runs or row.get('paused') is not True or row.get('queued') is not False or row.get('status')!='running' or self._has_cleanup(key):raise TaskConflict('Exact clean suspension required')
+            if key in self._deadline_slots or key in self._unstamped_slots:raise TaskConflict('Timed/terminal ownership prevents continuation')
+            run=_Run();self._runs[key]=run;slot['new_run']=run;slot['phase']='resuming';snapshot=deepcopy(row)
+            owner=slot['owner'];cap=slot['cap']
+        handle=None
+        try:
+            self._continuation_binding(owner)
+            handle=owner.prepare_resume(cap,snapshot,run.token)
+            self._continuation_binding(owner)
+            with self._lock:
+                if self._suspensions.get(key) is not slot or self._runs.get(key) is not run:raise TaskConflict('Resume reservation changed')
+                slot['new_handle']=handle
+            updated=owner.commit_resume(cap,handle)
+            self._continuation_binding(owner)
+            self.runner.install_resumed_handle(cap,handle)
+            self._continuation_binding(owner)
+            with self._lock:
+                if self._suspensions.get(key) is not slot or self._runs.get(key) is not run or run.token.cancelled:raise TaskConflict('Resume installation changed')
+                self._merge_lifecycle(key,updated);run.handle=handle;run.started=True;slot['phase']='installed'
+            owner.confirm_installed(cap,handle)
+            self._continuation_binding(owner)
+            with self._lock:
+                if self._suspensions.get(key) is not slot or slot['phase']!='installed' or self._runs.get(key) is not run:raise TaskConflict('Resume acknowledgement changed')
+                del self._suspensions[key]
+            return {'id':key,'paused':False,'queued':False,'status':'running'}
+        except BaseException:
+            with self._lock:
+                slot['phase']='quarantined';run.uncertain=True
+                if handle is not None:run.handle=handle
+            self._continuation_methods[1][5](cap)
+            raise RuntimeUnavailable('Resume outcome requires reconciliation; owners retained') from None
+        finally:run.ready.set()
 
     def control_task(self, task_id, action):
         if action == 'pause':
@@ -1068,6 +1187,8 @@ class TaskManager:
             key, row = self._require(task_id)
             if not row.get('paused'):
                 raise TaskConflict('Task is not paused')
+        with self._lock:has_suspension=key in self._suspensions
+        if has_suspension:return self.resume_suspended(key)
         if not self.start(key):
             raise TaskConflict('Task start was cancelled or already in progress')
         return {'id': key, 'paused': False, 'queued': False, 'status': 'running'}
@@ -1077,6 +1198,7 @@ class TaskManager:
             raise ValueError('Completion status must be done, failed or timeout')
         with self._lock:
             key, row = self._require(task_id)
+            if key in self._suspensions:return False
             run = self._runs.get(key)
             if self._has_cleanup(key):return False
             if key in self._deadline_slots or key in self._unstamped_slots:

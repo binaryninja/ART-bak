@@ -1870,3 +1870,23 @@ Exact eight-file manifest SHA256 `5a9ea55daca6f42e20815d3a621d3a83080387354f181d
 All10 Node tests pass under network-isolated credentialless bubblewrap, Node24.22.1. Only pure authored helper imports and original changed API function extracted into inert VM with stub fetch executed. Tests read changed source as text for call-site assertions; no application module imports, npm scripts, project initialization, network or real request executed. Node emitted its expected experimental stripTypeScriptTypes warning, no test failures.
 
 Cached official TypeScript5.9.3 parser reports zero syntax diagnostics for api.ts, sessions-tab.tsx, intercept/page.tsx and mutation-contract.d.mts. This is syntax parsing only, not type checking, module resolution, React rendering, Next build, browser interactions or whole-project QA. Existing registry-DNS/install blocker is neither retried nor resolved by this evidence. Exact raw timestamps/digests, strict unconfirmed mutation handling and explicit Python profile selection verified within stated test scope.
+
+
+# Stage141: same-process zero-timeout task continuation
+
+Immutable manifest `0cd18cae27491cb2bc8291487362275ec855510ccfe0e5f4f6cd6149d09d011c`. Reviewed standalone continuation owner/persistence plus bootstrap handle, manager, host, runner and dedicated tests over stage134-fix. No unrelated frontend/durable interception overlays.
+
+Actual original-schema PostgreSQL with initial authenticated timeout_seconds=0, real prepared receipt and fixed inert provider:
+- Denied task pause has no cancellation/model effect.
+- Actual blocked worker task pause cancels old task token, confirms canonical cleanup, reopens only its running claim, persists paused task with NULL clocks. Suspension is retained resource ownership, not drained success.
+- Resume creates fresh exact handle/token, clears paused using CAS, performs no provider call. First owned advance reuses exact original bootstrap receipt and installs new engine without goals replay. Next normal ticks claim worker; original token never regains authority.
+- Separate stale paused-row update refuses resume, retains owner/no-drain and refuses replay without provider calls.
+- Separate synthetic local BEFORE UPDATE trigger raises on resume, verifying real SQL rollback and retained uncertain suspension; task remains paused, repeated resume refused without providers.
+
+23 focused tests pass. No fixture timeout occurred. Actual installation-after-commit acknowledgment uncertainty, queued/timed/terminal refusal are not separately exercised against PG here; neighboring focused tests/source checks provide bounded evidence, not blanket runtime parity.
+
+Legacy reused fixture log labels say 'positive INSERT'/'manual lifecycle registered'; those labels are not factual timing assertions for this stage. Source assertions require initial timeout0 and NULL clocks, and this fixture does not install timed lifecycle/admission. No synthetic positive pin or gate override.
+
+Approved credentialless isolation and temporary original-schema PostgreSQL only. Inert provider returns fixed tool requests; no external targets, real process or model. This is same-process initialized zero-timeout continuation, not restart recovery or positive-timeout resume.
+
+Additional unchanged-source positive run included a separate preexisting paused intent. It remains paused through task pause/resume and new worker completion: no bulk intent reopening. This added fixture assertion passes.
