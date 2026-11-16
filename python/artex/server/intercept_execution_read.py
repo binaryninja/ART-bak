@@ -1,4 +1,5 @@
 """Read-only exact call/result navigation, not tool execution or approval."""
+from dataclasses import dataclass,field
 import re
 from urllib.parse import urlsplit,parse_qsl
 from ..db.intercept_execution_read import InterceptExecutionReader
@@ -21,6 +22,14 @@ def parse_request(request):
         if 0<n<2**63:hint=n
     return id,hint
 
+@dataclass(frozen=True,eq=False)
+class PreparedNavigation:
+    """Request-local code-owned response and pinned disclosure continuation."""
+    response:object
+    _validate:object=field(repr=False)
+    def validate(self):
+        self._validate()
+
 class InterceptExecutionReadService:
     def __init__(self,reader,*,authorize,raw_authorize,parent_authorize,current,lifecycle_guard,max_response_bytes=8388608):
         if type(reader) is not InterceptExecutionReader or any(not callable(p) for p in (authorize,raw_authorize,parent_authorize,current,lifecycle_guard)):raise ValueError('Exact reader and independent approval/raw/parent grants required')
@@ -31,50 +40,69 @@ class InterceptExecutionReadService:
         r,d,e,s,a,raw,p,c,g,b=self._pins
         if self.reader is not r or r.detail is not d or r.executor is not e or r.scope is not s or self.authorize is not a or self.raw_authorize is not raw or self.parent_authorize is not p or self.current is not c or self.guard is not g or type(self.max_bytes) is not int or self.max_bytes!=b:raise PermissionError()
         r.validate()
-    def handle(self,request):
-        try:
-            try:id,hint=parse_request(request)
-            except (ValueError,UnicodeError):raise InvalidExecutionRequest() from None
-            r,d,e,scope,a,raw,p,c,g,bound=self._pins;original=(request.method,request.target,request.body)
-            def check():
-                self._check()
-                if original!=(request.method,request.target,request.body) or c(scope) is not True:raise PermissionError()
-                self._check()
-                if original!=(request.method,request.target,request.body):raise PermissionError()
-            def allow():
-                check()
-                if a(request,scope,id,hint) is not True:raise PermissionError()
-                check()
-                if raw(request,scope,id,hint) is not True:raise PermissionError()
-                check()
-                if a(request,scope,id,hint) is not True:raise PermissionError()
-                check()
-            def parent_grant(parent):
-                saved=tuple((type(v),v) for v in (parent.kind,parent.id,parent.task_key,parent.exploration_id,parent.tool_use_id))
-                allow()
-                if p(request,scope,id,parent) is not True:raise PermissionError()
-                allow()
-                if saved!=tuple((type(v),v) for v in (parent.kind,parent.id,parent.task_key,parent.exploration_id,parent.tool_use_id)):raise PermissionError()
-                return True
-            def disclose(result):
-                allow()
-                for parent in result.parents:parent_grant(parent)
-                allow()
+    def prepare(self,request,*,selection):
+        if type(selection) is not tuple or len(selection)!=2 or type(selection[0]) is not int or (selection[1] is not None and type(selection[1]) is not int):raise InvalidExecutionRequest()
+        if selection!=parse_request(request):raise InvalidExecutionRequest()
+        return self._prepare(request,selection)
+    def _prepare(self,request,selection):
+        try:id,hint=parse_request(request)
+        except (ValueError,UnicodeError):raise InvalidExecutionRequest() from None
+        if (id,hint)!=selection:raise InvalidExecutionRequest()
+        r,d,e,scope,a,raw,p,c,g,bound=self._pins;original=(request.method,request.target,request.body)
+        def check():
+            self._check()
+            if original!=(request.method,request.target,request.body) or c(scope) is not True:raise PermissionError()
+            self._check()
+            if original!=(request.method,request.target,request.body):raise PermissionError()
+        def allow():
+            check()
+            if a(request,scope,id,hint) is not True:raise PermissionError()
+            check()
+            if raw(request,scope,id,hint) is not True:raise PermissionError()
+            check()
+            if a(request,scope,id,hint) is not True:raise PermissionError()
+            check()
+        def parent_grant(parent):
+            saved=tuple((type(v),v) for v in (parent.kind,parent.id,parent.task_key,parent.exploration_id,parent.tool_use_id))
             allow()
-            with g(scope):
-                allow();result=r.read(id,hint,authorize_parent=parent_grant);disclose(result)
-                response=json_response(result.status,result.body)
-                if len(response.body)>bound:raise RuntimeError('Navigation response exceeds bound')
-                # Fresh read validates original approval correlation, live parent
-                # and exact paired rows after serialization, never retargets the
-                # response when identity/content changed.
-                fresh=r.read(id,hint,authorize_parent=parent_grant)
-                if fresh!=result:raise PermissionError()
-                disclose(result)
-            # Guard exit is another boundary. Validate again before final grants.
+            if p(request,scope,id,parent) is not True:raise PermissionError()
+            allow()
+            if saved!=tuple((type(v),v) for v in (parent.kind,parent.id,parent.task_key,parent.exploration_id,parent.tool_use_id)):raise PermissionError()
+            return True
+        def disclose(result):
+            allow()
+            for parent in result.parents:parent_grant(parent)
+            allow()
+        allow()
+        with g(scope):
+            allow();result=r.read(id,hint,authorize_parent=parent_grant);disclose(result)
+            response=json_response(result.status,result.body)
+            if len(response.body)>bound:raise RuntimeError('Navigation response exceeds bound')
+            # Fresh read validates original approval correlation, live parent
+            # and exact paired rows after serialization, never retargets the
+            # response when identity/content changed.
             fresh=r.read(id,hint,authorize_parent=parent_grant)
             if fresh!=result:raise PermissionError()
-            disclose(result);return response
+            disclose(result)
+        # Guard exit is another boundary. Validate again before final grants.
+        fresh=r.read(id,hint,authorize_parent=parent_grant)
+        if fresh!=result:raise PermissionError()
+        disclose(result)
+        body=response.body;status=response.status;identity=result.identity;parents=result.parents
+        def validate():
+            allow()
+            fresh=r.read(id,hint,authorize_parent=parent_grant)
+            if fresh.identity!=identity or fresh.parents!=parents or fresh.status!=status or json_response(fresh.status,fresh.body).body!=body:raise PermissionError()
+            disclose(fresh)
+            if response.body!=body or response.status!=status:raise PermissionError()
+        return PreparedNavigation(response,validate)
+    def handle(self,request):
+        try:
+            try:selection=parse_request(request)
+            except (ValueError,UnicodeError):raise InvalidExecutionRequest() from None
+            prepared=self.prepare(request,selection=selection)
+            prepared.validate()
+            return prepared.response
         except InvalidExecutionRequest:return error_response(400,'Invalid intercept execution selector')
         except PermissionError:return error_response(403,'Intercept navigation read denied')
         except Exception:return error_response(500,'Intercept navigation unavailable')

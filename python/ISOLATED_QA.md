@@ -1566,3 +1566,24 @@ A runtime guard assertion enabled during each final run rejects nested lifetime 
 Fixture scope: genuine manual zero-timeout bootstrap plus explicitly synthetic positive prepared pins and real expired clock/freeze/journal. No natural positive application admission or timeout-gate bypass. Prior ordinary execution is frozen; this run does not claim cancellation of the original generation token while continuing final model execution. Typed OwnedFinalization forwarding, unused-generator lazy close and persistence-failure variants are not newly real-PG tested here; focused tests cover lazy/stale/budget/guard/close cases as named in logs. No full timed application or final terminal settlement claim.
 
 Approved credentialless namespace/bwrap, readonly source/cached dependencies, fresh loopback-only PostgreSQL and temporary canonical transcripts. Dummy fixture profile key only. No external provider/target, actual tool command, production data or public listener.
+
+## Stage 118: optional execution navigation metadata wrapper
+
+Exact frozen coordinator snapshot, copied Python source only with no moving overlays. Manifest SHA256 `83339e898e34cc3441b9843cfc615354766a6222ec1b3a3fc608a43d6a567ab6`.
+
+### Execution and results
+Five actual PostgreSQL/JWT acceptance groups passed; 26 focused test executions passed (`test_metadata_execution_setup`, `test_metadata_execution_setup_review`, `test_intercept_execution_read`, `test_intercept_execution_read_review`). No fixture correction or product modification was required.
+
+- Real original schema, synthetic task/intent/activity pair and intercept approval, actual JWT and optional `bind_metadata_reads(execution_service=...)`: HTTP200 paired navigation, 404 missing approval, 409 absent audit correlation, 410 deleted parent. Existing approval ignores conversation hint, rather than retargeting it. Original unwrapped application remains404.
+- Missing JWT, global/raw denial, unsupported selector and HEAD rejected before any reader SQL.
+- After `start_response` reports200, revoking raw or parent approval, replacing original JWT callback, changing paired activity contents, changing correlation/tool-use identity, or deleting parent all withhold body through RuntimeError. No replacement403 status is fabricated after headers.
+- Separate actual SQL mutations after response start change each prepared404/409/410 result; all original semantic response bodies are withheld rather than silently recomputed/retargeted.
+- Literal, dynamic and partial-segment conflicting HEAD routes reject binding without changing original router.
+
+### Isolation/reproduction
+Same previously approved disposable user/network namespace and bwrap mount isolation. Loopback-only PostgreSQL17.11 fresh database, psycopg3.3.9, Python3.13. No user credentials or host workspace mounts. Schema setup and mutations affect only generated fixture records. No subprocess tools, model providers, external requests, or real activity data.
+
+The saved harness, manifest and integration/focused logs accompany this report.
+
+### Limits
+This is in-process authenticated WSGI with real PostgreSQL, not listener/browser/frontend acceptance. No default route activation, execution/approval action or broad final-provider rerun. SQL raw byte bounds were previously actual-tested in stage116 and are exercised here only through focused tests, not a new oversized actual SQL fixture. Dedicated parent/raw/correlation mutation negatives cover the listed boundaries, not a guarantee against arbitrary mutually mutating policy callbacks. No blanket timed runtime or project parity claim.

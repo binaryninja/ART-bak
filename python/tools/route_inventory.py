@@ -298,6 +298,7 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                     'notification_history': '/api/notify/deliveries',
                     'detail': '/api/intercept/history/{id}',
                     'task_history': '/api/intercept/task/{taskID}',
+                    'execution': '/api/intercept/history/{id}/execution',
                 }
                 test = node.test
                 key = test.left.value if isinstance(test, ast.Compare) and isinstance(test.left, ast.Constant) else None

@@ -45,3 +45,28 @@ grants are refreshed at final disclosure. This uses finite repeated snapshots,
 not a distributed atomic snapshot or arbitrary-policy fixed point; host policies
 must cooperate with the lifetime guard. Three bounded reads are intentional and
 perform no SQL mutation. Unrelated historical audit/context is not returned.
+
+## Optional metadata composition (separate next slice)
+
+`bind_metadata_reads(execution_service=...)` explicitly adds only protected GET
+`/api/intercept/history/{id}/execution`. No default reader, task resolver, model,
+execution, decision or write is installed. Exact service/reader types, original
+methods and the shared executor are checked before construction effects.
+
+The service prepares a request-local frozen `PreparedNavigation` containing its
+response and code-owned disclosure continuation. The original `(id, conversation
+hint)` remains fixed. Each final continuation uses bounded exact reads to compare
+original status/body, correlation and parent identities; it never substitutes a
+new navigation target. Original approval/raw and parent activity grants are
+rechecked after outer JWT/global grants, before headers and after `start_response`.
+This also fences semantic 404/409/410 results. Revocation after headers aborts the
+body rather than claiming the emitted status can be replaced. These are finite
+cooperative snapshots, not a transaction across arbitrary mutable policies.
+
+Five new synthetic composition tests cover JWT-before-SQL, hint non-retargeting,
+post-header task deletion/activity drift, semantic-error parent revocation and
+mixed-template route conflicts. Two scanner tests accept only the exact protected
+optional declaration and reject different paths/guards/methods. Thirty selected
+composition, scanner and standalone tests pass. Seven independent composition
+tests passed; PostgreSQL stage 118 passed five actual database/JWT groups and
+26 focused executions. Route inventory was regenerated from the frozen source.
