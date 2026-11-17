@@ -154,10 +154,9 @@ function saveHarness(type, raw) {
   const context = vm.createContext({
     structuredClone,
     tool,
-    description: "synthetic",
-    rows: [row(type, raw)],
-    bound: ["planner"],
-    enabled: true,
+    draftRef: { current: { description: "synthetic", rows: [row(type, raw)], bound: ["planner"], enabled: true } },
+    operationRef: { current: null },
+    alive: { current: true },
     setSaving: (v) => events.push(["saving", v]),
     toast: { success: (v) => events.push(["success", v]), error: (v) => events.push(["error", v]) },
     onSaved: () => events.push(["saved"]),

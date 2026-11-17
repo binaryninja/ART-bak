@@ -173,43 +173,81 @@ function ToolEditor({
 }) {
   // traffic tools can't be bound/enabled until the global traffic capture switch is on.
   const trafficGated = TRAFFIC_TOOL_KEYS.has(tool.key) && !captureOn;
-  const [description, setDescription] = React.useState(tool.description);
-  const [bound, setBound] = React.useState<string[]>(tool.agents);
-  const [enabled, setEnabled] = React.useState(tool.enabled);
-  const [rows, setRows] = React.useState<ParamRow[]>(() => toRows(tool.schema));
+  type EditorDraft = { description: string; bound: string[]; enabled: boolean; rows: ParamRow[] };
+  const [editorDraft, setEditorDraft] = React.useState<EditorDraft>(() => ({
+    description: tool.description, bound: [...tool.agents], enabled: tool.enabled, rows: toRows(tool.schema),
+  }));
+  const draftRef = React.useRef(editorDraft);
+  const { description, bound, enabled, rows } = editorDraft;
   const [saving, setSaving] = React.useState(false);
+  const alive = React.useRef(false);
+  const operationRef = React.useRef<object | null>(null);
+  React.useLayoutEffect(() => {
+    alive.current = true;
+    setSaving(operationRef.current !== null);
+    return () => { alive.current = false; };
+  }, []);
 
+  function editDraft(patch: Partial<EditorDraft>) {
+    if (!alive.current) return;
+    const next = { ...draftRef.current, ...patch };
+    draftRef.current = next;
+    setEditorDraft(next);
+  }
+  const setDescription = (value: string) => editDraft({ description: value });
+  const setEnabled = (value: boolean) => editDraft({ enabled: value });
   const setRow = (i: number, patch: Partial<ParamRow>) =>
-    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const toggleAgent = (k: string) =>
-    setBound((b) => (b.includes(k) ? b.filter((x) => x !== k) : [...b, k]));
+    editDraft({ rows: draftRef.current.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const toggleAgent = (k: string) => {
+    const current = draftRef.current.bound;
+    editDraft({ bound: current.includes(k) ? current.filter((x) => x !== k) : [...current, k] });
+  };
 
   async function save() {
+    if (!alive.current || operationRef.current) return;
+    const submitted = draftRef.current;
+    const owner = {};
+    operationRef.current = owner;
     setSaving(true);
     try {
       await api.saveTool(tool.key, {
-        description,
-        schema: applyRows(tool.schema, rows),
-        agents: bound,
-        enabled,
+        description: submitted.description,
+        schema: applyRows(tool.schema, submitted.rows),
+        agents: [...submitted.bound],
+        enabled: submitted.enabled,
       });
-      toast.success(`Saved tool “${tool.key}”`);
+      if (!alive.current || operationRef.current !== owner) return;
+      toast.success(`Saved tool “${tool.key}”${draftRef.current !== submitted ? "; newer edits remain unsaved" : ""}`);
       onSaved();
-      onClose();
+      if (draftRef.current === submitted) onClose();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      if (alive.current && operationRef.current === owner) toast.error("Save failed: " + (e as Error).message);
     } finally {
-      setSaving(false);
+      if (operationRef.current === owner) {
+        operationRef.current = null;
+        if (alive.current) setSaving(false);
+      }
     }
   }
   async function reset() {
+    if (!alive.current || operationRef.current) return;
+    const submitted = draftRef.current;
+    const owner = {};
+    operationRef.current = owner;
+    setSaving(true);
     try {
       await api.resetTool(tool.key);
-      toast.success(`Restored “${tool.key}” to code defaults`);
+      if (!alive.current || operationRef.current !== owner) return;
+      toast.success(`Restored “${tool.key}” to code defaults${draftRef.current !== submitted ? "; newer edits remain unsaved" : ""}`);
       onSaved();
-      onClose();
+      if (draftRef.current === submitted) onClose();
     } catch (e) {
-      toast.error("Restore failed: " + (e as Error).message);
+      if (alive.current && operationRef.current === owner) toast.error("Restore failed: " + (e as Error).message);
+    } finally {
+      if (operationRef.current === owner) {
+        operationRef.current = null;
+        if (alive.current) setSaving(false);
+      }
     }
   }
 
@@ -318,7 +356,7 @@ function ToolEditor({
         <Button size="sm" onClick={save} disabled={saving}>
           <SaveIcon /> Save
         </Button>
-        <Button size="sm" variant="outline" onClick={reset}>
+        <Button size="sm" variant="outline" onClick={reset} disabled={saving}>
           <RotateCcwIcon /> Restore defaults
         </Button>
       </div>
@@ -382,13 +420,21 @@ function ToolGridCard({ tool, onClick }: { tool: Tool; onClick: () => void }) {
 
 export default function ToolsPage() {
   const [tools, setTools] = React.useState<Tool[]>([]);
+  const [catalogError, setCatalogError] = React.useState<string | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [captureOn, setCaptureOn] = React.useState(false);
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
   const [customEdit, setCustomEdit] = React.useState<Tool | "new" | null>(null);
 
   const reload = React.useCallback(() => {
-    api.tools().then(setTools).catch(() => setTools([]));
+    api.tools().then((items) => {
+      setTools(items);
+      setCatalogError(null);
+    }).catch((error) => {
+      // A failed refresh is not an empty catalog: dropping known rows would
+      // unmount the selected editor and discard any newer unsaved draft.
+      setCatalogError(typeof error?.message === "string" && error.message ? error.message : "Tool catalog unavailable");
+    });
   }, []);
   React.useEffect(() => {
     reload();
@@ -432,6 +478,13 @@ export default function ToolsPage() {
           />
         </div>
       </div>
+
+      {catalogError && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
+          <span>Tool catalog refresh failed: {catalogError}. Previously loaded tools and editor drafts are retained.</span>
+          <Button size="sm" variant="outline" onClick={reload}>Retry catalog</Button>
+        </div>
+      )}
 
       <Tabs defaultValue="system">
         <TabsList>
@@ -516,7 +569,7 @@ export default function ToolsPage() {
                 agents={agents}
                 captureOn={captureOn}
                 onSaved={reload}
-                onClose={() => setSelectedKey(null)}
+                onClose={() => setSelectedKey((current) => current === selected.key ? null : current)}
               />
             </>
           )}
