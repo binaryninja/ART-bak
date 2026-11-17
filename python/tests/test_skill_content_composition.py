@@ -27,9 +27,11 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.calls,[0]*4)
         for i in range(4):self.assertEqual(self.request(i)[0],200)
         (self.c.f.f.skill/'refs').mkdir();(self.c.f.f.skill/'refs'/'a').write_text('nested')
-        self.assertEqual(self.request(path='/api/skills/sample/files/refs%2Fa')[0],200)
+        # PATH_INFO is already URI-decoded; a remaining percent must not be decoded again.
+        self.assertEqual(self.request(path='/api/skills/sample/files/refs%2Fa')[0],400)
+        self.assertEqual(self.request(path='/api/skills/sample/files/refs/a')[0],200)
         self.assertEqual(self.request(method='POST')[0],405)
-        self.assertEqual(self.request(method='HEAD')[0],400)
+        self.assertEqual(self.request(method='HEAD')[0],200)
     def test_optional_pair_and_omission(self):
         for values in ({'content_service':None},{'authorize_content':None}):
             with self.assertRaises(ValueError):self.bind(**values)

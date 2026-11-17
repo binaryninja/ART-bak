@@ -8,7 +8,7 @@ from .core import Request,json_response,error_response
 class InvalidRequest(ValueError):pass
 
 def parse_request(request):
-    if request.method!='GET' or request.body or len(request.target)>2048:raise InvalidRequest()
+    if request.method not in ('GET','HEAD') or request.body or len(request.target)>2048:raise InvalidRequest()
     try:
         parts=urlsplit(request.target)
         if parts.scheme or parts.netloc or parts.query or parts.fragment:raise ValueError()

@@ -8,6 +8,8 @@ import re
 from .auth import AuthService
 from .core import Router,error_response
 from .wsgi import WSGIApplication
+from . import skill_read_transport as _transport
+_DECODE=_transport.decode_skill_request
 from .skill_files_read import SkillFilesReadService
 from . import skill_files_read as _source
 from ..skills.file_listing import SkillFileListingReader
@@ -44,13 +46,14 @@ class _SkillFilesApplication:
         self._methods=tuple((_key(getattr(o,n)),o,n) for o,n in pairs)
     def _check(self):
         app,base,auth,owner,svc,reader,executor,scope,grant,bound=self._pins
-        if _source.parse_request is not _PARSER or self.original is not app or app.router is not base or base.authorize is not auth or self.files is not svc or svc.reader is not reader or reader.scope.root is not executor or reader.scope is not scope or self.authorize_global is not grant or type(app.max_body_bytes) is not int or app.max_body_bytes!=bound or tuple(base._routes)!=self._routes:raise PermissionError()
+        if _transport.decode_skill_request is not _DECODE or _source.parse_request is not _PARSER or self.original is not app or app.router is not base or base.authorize is not auth or self.files is not svc or svc.reader is not reader or reader.scope.root is not executor or reader.scope is not scope or self.authorize_global is not grant or type(app.max_body_bytes) is not int or app.max_body_bytes!=bound or tuple(base._routes)!=self._routes:raise PermissionError()
         if any(a is not b for a,b in zip((owner.store,owner.codec,owner.key,owner.clock),self._auth_pins)) or any(a is not b for a,b in zip((svc.authorize,reader.authorize,reader.current,reader.guard),self._policies)):raise PermissionError()
         if any(not _same(getattr(o,n),k) for k,o,n in self._methods):raise PermissionError()
         svc._check()
     def __call__(self,environ,start_response):
         if not _MATCH.fullmatch(environ.get('PATH_INFO','')):return self.original(environ,start_response)
         outer=self;state={};result={}
+        head=str(environ.get('REQUEST_METHOD','')).upper()=='HEAD'
         def pure():
             outer._check()
             req=state['request'];sel=state['selection']
@@ -81,7 +84,10 @@ class _SkillFilesApplication:
             def dispatch(self,req):
                 try:outer._check()
                 except Exception:return error_response(503,'Skill file listing unavailable')
-                return staged.dispatch(req)
+                if outer._pins[2](req) is not True:return error_response(401,'Unauthorized')
+                try:decoded=_DECODE(req)
+                except (ValueError,UnicodeError):return error_response(400,'Invalid skill file listing request')
+                return staged.dispatch(decoded)
         def capture(status,headers,exc_info=None):result.update(status=status,headers=headers)
         body=WSGIApplication(Dispatch(),max_body_bytes=self._pins[9])(environ,capture)
         successful=result['status'].startswith('200 ')
@@ -105,7 +111,7 @@ class _SkillFilesApplication:
         if successful:
             try:disclose()
             except Exception:
-                response=error_response(403,'Skill file listing denied');body=[response.body]
+                response=error_response(403,'Skill file listing denied');body=[] if head else [response.body]
                 result.update(status='403 Forbidden',headers=[('Content-Type','application/json'),('Content-Length',str(len(response.body))),('X-Content-Type-Options','nosniff')]);successful=False
         start_response(result['status'],result['headers'])
         if successful:

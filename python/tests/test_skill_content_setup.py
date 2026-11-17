@@ -23,7 +23,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.request('/api/skills/sample/files/refs/a')[0],200)
     def test_methods_and_other_routes(self):
         for method in ('POST','PUT','DELETE'):self.assertEqual(self.request(method=method)[0],405)
-        self.assertEqual(self.request(method='HEAD'),(400,b''))
+        self.assertEqual(self.request(method='HEAD'),(200,b''))
         self.assertEqual(self.request('/api/health',token=False)[0],200)
     def test_atomic_route_conflicts_all_methods(self):
         for path in ('/api/skills/sample/files/a','/api/skills/{x}/files/a/b','/a{x}/skills/{n}/f{y}/{z}'):

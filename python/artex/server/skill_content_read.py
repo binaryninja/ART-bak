@@ -11,7 +11,7 @@ class InvalidContentRequest(ValueError): pass
 
 
 def parse_request(request):
-    if request.method!='GET' or request.body or len(request.target)>4096:
+    if request.method not in ('GET','HEAD') or request.body or len(request.target)>4096:
         raise InvalidContentRequest()
     try:
         parts=urlsplit(request.target)

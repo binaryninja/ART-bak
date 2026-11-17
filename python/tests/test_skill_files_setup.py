@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
         status,body=self.request();self.assertEqual(status,200);self.assertIn(b'secret-name',body)
     def test_methods_and_unrelated_route(self):
         for method in ('POST','PUT','DELETE'):self.assertEqual(self.request(method=method)[0],405)
-        self.assertEqual(self.request(method='HEAD'),(400,b''))
+        self.assertEqual(self.request(method='HEAD'),(200,b''))
         self.assertEqual(self.t.request('/api/health',token=False,application=self.bundle.application)[0],200)
     def test_atomic_conflicts(self):
         for path in ('/api/skills/sample/files','/api/skills/{s}/files','/a{x}/skills/sample/f{y}'):
