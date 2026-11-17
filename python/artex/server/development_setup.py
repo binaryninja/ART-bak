@@ -40,15 +40,20 @@ class DevelopmentAssemblyFailed(RuntimeError):
 def prepare_development_runtime(runtime, owner, lease, tuning_bytes, *,
         signing_key, password_codec, live_last_activity, profile_available,
         read_revision, authorize_selector, read_current, read_guard, read_policies,
-        single_process, capacity=1, max_pending=64):
+        single_process, capacity=1, max_pending=64, frontend_origin=None):
     """Construct the real task/read/listener/session stack without starting it.
 
     read_policies is code-owned TaskReadBuilder keyword arguments, not JSON.
     Explicit host callbacks retain their original semantics. Capacity/ownership
     declarations are host inputs, not inferred from valid syntax or a lock file.
     No timed/manual tools, optional catalogs or execution capability is invented.
+    frontend_origin is separate code-owned authority for one loopback frontend,
+    never inferred from tuning JSON, a forwarded header or ambient environment.
     """
     tuning = parse_runtime_tuning(tuning_bytes)
+    listener_config = DevListenerConfig(tuning.port,tuning.max_connections,
+        tuning.socket_timeout,frontend_origin=frontend_origin)
+    listener_config.validate()
     if type(runtime) is not TaskRuntimeAssembly or type(owner) is not RuntimeResourceOwner or type(lease) is not RuntimeLease:
         raise ValueError('Exact runtime, resource owner and acquired lease required')
     if type(owner.pool) is not ExecutorPool or runtime.executor is not owner.pool or single_process is not True:
@@ -78,7 +83,7 @@ def prepare_development_runtime(runtime, owner, lease, tuning_bytes, *,
             read_router=assembly.router)
         lease.validate()
         assembly.listener = RuntimeListener(assembly.application,owner,
-            DevListenerConfig(tuning.port,tuning.max_connections,tuning.socket_timeout))
+            listener_config)
         assembly.session = RuntimeSession(assembly.listener,lease,lease_owner=assembly)
         return assembly
     except BaseException:

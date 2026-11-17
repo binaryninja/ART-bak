@@ -61,6 +61,15 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):self.build(read_policies=dict(self.policies,max_rows=1))
         with self.assertRaises(ValueError):self.build(single_process=False)
         self.assertEqual(self.f.f.f.db.calls,before);self.assertTrue(self.lease.validate())
+    def test_frontend_origin_is_explicit_authority_not_json_tuning(self):
+        before=list(self.f.f.f.db.calls)
+        with self.assertRaises(ValueError):self.build(frontend_origin='http://untrusted.invalid:3000')
+        data=json.loads(tuning());data['listener']['frontend_origin']='http://localhost:3000'
+        with self.assertRaises(ConfigInvalid):self.build(json.dumps(data).encode())
+        self.assertEqual(self.f.f.f.db.calls,before);self.assertTrue(self.lease.validate())
+        assembly=self.build(frontend_origin='http://localhost:3000');self.addCleanup(assembly.session.stop,1)
+        self.assertEqual(assembly.listener._config.frontend_origin,'http://localhost:3000')
+        self.assertIsNone(assembly.application.pump._thread);self.assertEqual(self.f.calls,[])
     def test_claimed_lease_rejected_before_assembly(self):
         owner=object();self.lease.claim(owner)
         try:

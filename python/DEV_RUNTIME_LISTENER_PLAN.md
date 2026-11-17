@@ -78,7 +78,10 @@ Host must be `127.0.0.1:<configured-port>` or `localhost:<configured-port>` (bar
 names only on port 80). If Origin exists, it must exactly equal `http://<Host>`.
 Foreign, `null` and cross-port development origins are rejected. This deliberately
 does not silently authorize Next port 3000 or provide CORS; same-origin serving or
-an explicitly reviewed narrower development proxy/origin policy is separate work.
+an explicitly selected narrower development frontend origin is required. The
+optional `DevListenerConfig.frontend_origin` accepts exactly one canonical HTTP
+`localhost` or `127.0.0.1` origin. Its default is `None`, preserving the original
+refusal. See `FRONTEND_ORIGIN_STATUS.md` for the authority and validation limits.
 This addresses the local listener's rebinding boundary, not production browser
 security or public exposure. Shutdown callback timing remains cooperative and
 bounded by the caller's implementation, not a preemptive cancellation guarantee.

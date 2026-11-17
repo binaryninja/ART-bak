@@ -14,7 +14,7 @@ both active outer invocations and unresolved inventory before closing resources.
 This does not discover untracked manual calls or resolve quarantined actions.
 """
 from dataclasses import dataclass
-import math,socket,threading,time
+import math,re,socket,threading,time
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer,WSGIRequestHandler,make_server
 from .task_runtime_setup import TaskRuntimeApplication
@@ -27,10 +27,21 @@ class DevListenerConfig:
     port:int=8787
     max_connections:int=8
     socket_timeout:float=10.0
+    # Explicit host-selected frontend/proxy origin, not configuration-file
+    # tuning or CORS permission. Keep the backend Host boundary unchanged.
+    frontend_origin:str|None=None
     def validate(self):
         if type(self.port) is not int or not 1<=self.port<=65535 or type(self.max_connections) is not int or not 1<=self.max_connections<=32:
             raise ValueError('Bounded loopback port/connections required')
         if type(self.socket_timeout) not in (int,float) or not math.isfinite(self.socket_timeout) or not .1<=self.socket_timeout<=60:raise ValueError('Bounded socket timeout required')
+        if self.frontend_origin is not None:
+            value=self.frontend_origin
+            match=re.fullmatch(r'http://(?:127\.0\.0\.1|localhost)(?::([1-9][0-9]{0,4}))?',value) if type(value) is str else None
+            # Browser origin serialization omits the default HTTP port. Accept
+            # only canonical literal loopback authorities, never DNS aliases,
+            # credentials, paths, wildcards, forwarded headers or arbitrary URLs.
+            if match is None or match.group(1) is not None and (int(match.group(1))==80 or int(match.group(1))>65535):
+                raise ValueError('One canonical HTTP loopback frontend origin required')
 
 @dataclass(frozen=True)
 class RuntimeResourceOwner:
@@ -68,7 +79,10 @@ class QuietRuntimeHandler(WSGIRequestHandler):
         if port==80:hosts.update(('127.0.0.1','localhost'))
         host=self.headers.get('Host','')
         origin=self.headers.get('Origin')
-        if host not in hosts or origin is not None and origin not in {'http://'+host}:
+        origins={'http://'+host}
+        if self.server.config.frontend_origin is not None:
+            origins.add(self.server.config.frontend_origin)
+        if host not in hosts or origin is not None and origin not in origins:
             self.send_error(403,'Local origin required');return False
         lengths=self.headers.get_all('Content-Length',[])
         invalid=invalid or bool(self.headers.get_all('Transfer-Encoding',[]))
