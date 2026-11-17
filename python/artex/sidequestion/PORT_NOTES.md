@@ -20,7 +20,13 @@ aggregation; cooperative cancellation; generation-checked persistence callback.
   it separately; partial stream usage is retained in `AnswerError.answer`.
 - The token estimate is conservative UTF-8 serialized block sizing with 4/3
   allowance, **not exact norma compaction parity** or model tokenization. Summary
-  chunks are shrunk further if this estimate would exceed the input budget.
+  chunks are fitted to the largest character-aligned prefix of the bounded byte
+  allowance when this estimate would exceed the input budget. Binary search
+  accounts for Python's JSON-escape costs without discarding half a chunk and
+  prematurely exhausting the shared 12-call cap. Every summary request retains
+  its 2048-token output reserve and 512-token safety margin. Nonpositive model
+  windows use the same 200000-token fallback as Go for both answer and summary
+  preparation.
 - `Capture` is explicit; Go QueryDeps/context Bind/Attach hooks, routing-pool
   integration, and automatic post-completion checkpoints are not wired. Caller
   must capture only concrete main-agent calls, not auxiliary summaries.
@@ -45,9 +51,20 @@ aggregation; cooperative cancellation; generation-checked persistence callback.
 
 `PYTHONPATH=python python -m unittest discover -s python/tests -p test_sidequestion.py -v`
 
-15 tests pass, with deterministic local fake providers only. Covers capture
+19 tests pass, with deterministic local fake providers only. Covers capture
 isolation, budgets, completed-history filtering, tool grouping, streaming fallback
 and truncation, replay cursors and stale-generation save rejection, rolling history,
 snapshot cache reuse, summary rejection, cancellation, bounded recovery and call
-caps. No source Go was executed; no network, installation, credentials or real
-model calls were used.
+caps. The budget regressions include nonpositive windows, 20 long replies in a
+32000-token window, restart reuse of the resulting summary, exact ASCII/multibyte/
+escaped material preservation, summary reserve checks, and cancellation during a
+summary without advancing persisted memory or losing usage.
+
+`PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_sidequestion*.py' -v`
+
+62 tests pass across the standalone service and existing injected-adapter
+runtime/dispatch/database contracts. No source Go was executed; no network,
+installation, credentials or real model calls were used. Source comparison used
+`sidequestion/request.go` (`inputBudget`) and `sidequestion/context.go`
+(`summarize`, `loadHistory`, `Respond`); the chunk fitter preserves the source
+budget/call-cap contracts, but remains specific to the Python estimator.

@@ -153,8 +153,13 @@ def output_budget(request, configured=0):
     return min(budget, request['max_tokens']) if request.get('max_tokens', 0) > 0 else budget
 
 
+def _window_tokens(snapshot):
+    window = snapshot.model.window_tokens
+    return window if window > 0 else 200000
+
+
 def input_budget(snapshot, output):
-    window = snapshot.model.window_tokens or 200000
+    window = _window_tokens(snapshot)
     return window - output - min(8192, max(128, window // 20))
 
 
@@ -345,7 +350,7 @@ class _ContextBuilder:
         self.memory = deepcopy(replay.memory)
         self.recent, self.usage = [], {}
         self.info, self.calls = ContextInfo(), 0
-        self.window = snapshot.model.window_tokens or 200000
+        self.window = _window_tokens(snapshot)
         self.update, self.cancelled = update, cancelled
 
     def progress(self, phase):
@@ -373,12 +378,22 @@ class _ContextBuilder:
             part = text.encode('utf-8')[:chunk_bytes].decode('utf-8', errors='ignore')
             request['messages'] = [user_text(prefix + part)]
             if estimate_input_tokens(request) + 2048 + 512 > self.window:
-                # Estimation includes a safety multiplier; shrink until it fits.
-                while part and estimate_input_tokens(request) + 2560 > self.window:
-                    part = part[:len(part) // 2]
-                    request['messages'] = [user_text(prefix + part)]
+                # Fit the largest character-aligned prefix of this bounded chunk.
+                # Halving wastes the shared 12-call allowance. Unlike Go's block
+                # estimator, ours includes JSON escapes, so measure each prefix
+                # rather than converting a token excess directly into bytes.
+                lower, upper = 0, len(part)
+                while lower < upper:
+                    middle = (lower + upper + 1) // 2
+                    request['messages'] = [user_text(prefix + part[:middle])]
+                    if estimate_input_tokens(request) + 2048 + 512 <= self.window:
+                        lower = middle
+                    else:
+                        upper = middle - 1
+                part = part[:lower]
                 if not part:
                     raise ContextBudgetError()
+                request['messages'] = [user_text(prefix + part)]
             self.calls += 1
             message, stop, usage = self.service.provider.complete(request)
             _add_usage(self.usage, usage)

@@ -132,6 +132,18 @@ def _get(value, name, default=None):
     return value.get(name, default) if isinstance(value, Mapping) else getattr(value, name, default)
 
 
+def _observe_stream_usage(usage, reported):
+    """Fold cumulative snapshots without changing malformed-value handling."""
+    for name in usage.__dataclass_fields__:
+        current, value = getattr(usage, name), _get(reported, name, 0)
+        if type(current) is int and current >= 0 and type(value) is int and value >= 0:
+            setattr(usage, name, max(current, value))
+        else:
+            # Keep existing validation/error boundaries: max(0, -1) or max(0,
+            # 0.0) would otherwise sanitize a counter rejected by settlement.
+            setattr(usage, name, current + value)
+
+
 def _json(value):
     return json.dumps(value, ensure_ascii=False, default=lambda x: asdict(x) if is_dataclass(x) else vars(x))
 
@@ -212,7 +224,7 @@ class Recorder:
                 for event in source:
                     kind = _get(event, 'type', '')
                     if kind in ('message_start', 'message_delta'):
-                        usage.add(_get(event, 'usage', {}))
+                        _observe_stream_usage(usage, _get(event, 'usage', {}))
                     if kind == 'message_delta':
                         stop = _get(event, 'stop_reason', '') or stop
                     if state['record'] and kind == 'text_delta':

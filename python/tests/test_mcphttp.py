@@ -15,7 +15,9 @@ class MockTransport:
 
 
 def response(result=None, id=1, **kwargs):
-    payload = {'jsonrpc': '2.0', 'id': id, 'result': result}
+    payload = {'jsonrpc': '2.0', 'id': id}
+    if 'error' not in kwargs:
+        payload['result'] = result
     payload.update(kwargs)
     return HTTPResponse(200, {}, json.dumps(payload).encode())
 

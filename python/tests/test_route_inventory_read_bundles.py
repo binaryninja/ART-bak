@@ -19,13 +19,13 @@ class ReadBundles(unittest.TestCase):
         self.assertEqual(rows,[])
     def test_report_alternative_is_exact_and_not_duplicate_permission(self):
         rows=[]
-        for file,owner,method in (('task_report.py','TaskReportService','register'),('task_report_setup.py','_ReportApplication','__init__')):
+        for file,owner,method in (('task_report.py','TaskReportService','register'),('task_report_setup.py','_ReportApplication','__init__'),('task_runtime_read_router.py','TaskRuntimeReadRouter','bind')):
             rows+=fixture.Tests().scan("        staged.add('GET','/api/report',handler)",file=file,owner=owner,method=method)
         grouped=fixture.fixture.audit.group_python_routes(rows)
         self.assertEqual(len(grouped),1)
-        self.assertEqual(len(grouped[0]['declarations']),2)
+        self.assertEqual(len(grouped[0]['declarations']),3)
         self.assertIn('alternative_group',grouped[0])
-        for bad in (rows+[rows[0]],rows+[dict(rows[0],function='Other.register')],[rows[0],dict(rows[1],public=True)]):
+        for bad in (rows+[rows[0]],rows+[dict(rows[0],function='Other.register')],rows[:2],[rows[0],dict(rows[1],public=True),rows[2]]):
             with self.assertRaises(fixture.fixture.audit.AuditError):fixture.fixture.audit.group_python_routes(bad)
     def test_owned_control_declaration_optional_subset(self):
         rows=fixture.Tests().scan("        staged.add('POST','/api/tasks/{id}/intents/{iid}/control',handler)",file='intent_control_setup.py',owner='_Application',method='__init__')

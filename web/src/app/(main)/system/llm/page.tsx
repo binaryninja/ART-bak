@@ -27,7 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import type { LLMPoolMember, LLMPoolStatus, LLMProfile, LLMRetryOverride } from "@/lib/types";
+import type { LLMPoolMember, LLMPoolStatus, LLMProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { ProfileRetryFields, RetryPolicyPanel, ZERO_OVERRIDE } from "./_components/retry";
@@ -298,78 +298,159 @@ function PoolSheet({
 // Model profile drawer (shared create/edit form)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function initialProfileDraft(profile: LLMProfile | null) {
+  return {
+    name: profile?.name ?? "",
+    format: (profile?.format === "openai" || profile?.format === "openai-responses"
+      ? profile.format
+      : "anthropic") as LLMProfile["format"],
+    model: profile?.model ?? "",
+    baseUrl: profile?.base_url ?? "",
+    proxy: profile?.proxy ?? "",
+    apiKey: "",
+    rps: String(profile?.rate_per_second ?? 0),
+    rpm: String(profile?.rate_per_minute ?? 0),
+    cw: String(profile?.context_window_k ?? 0),
+    thinkingType: fromStore(profile?.thinking_type),
+    effort: fromStore(profile?.reasoning_effort),
+    priority: String(profile?.priority ?? 0),
+    poolExclude: profile?.pool_exclude ?? false,
+    streaming: profile?.streaming ?? true,
+    maxTokens: String(profile?.max_tokens ?? 0),
+    maxTokensField: fromStore(profile?.max_tokens_field),
+    sessionHeaderKey: profile?.session_header_key ?? "",
+    retry: structuredClone(profile?.retry ?? ZERO_OVERRIDE),
+  };
+}
+
+// The transport's TypeScript return type is not a runtime receipt check. Never
+// turn an update into a create (or adopt another profile) from malformed JSON.
+function acknowledgedProfileId(receipt: unknown, submittedId: number | undefined): number | null {
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return null;
+  const id = (receipt as { id?: unknown }).id;
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null;
+  if (submittedId !== undefined && id !== submittedId) return null;
+  return id;
+}
+
 function ProfileSheet({
   profile,
   open,
+  isCurrent,
   onOpenChange,
   onSaved,
 }: {
   profile: LLMProfile | null; // null = create
   open: boolean;
+  isCurrent: () => boolean;
   onOpenChange: (o: boolean) => void;
   onSaved: (id: string) => void;
 }) {
-  const isNew = !profile;
-  const [name, setName] = React.useState("");
-  const [format, setFormat] = React.useState<"anthropic" | "openai" | "openai-responses">("anthropic");
-  const [model, setModel] = React.useState("");
-  const [baseUrl, setBaseUrl] = React.useState("");
-  const [proxy, setProxy] = React.useState("");
-  const [apiKey, setApiKey] = React.useState("");
-  const [keyHint, setKeyHint] = React.useState("");
-  const [rps, setRps] = React.useState("0");
-  const [rpm, setRpm] = React.useState("0");
-  const [cw, setCw] = React.useState("0"); // Context window (K tokens); 0 = default 200K
-  const [thinkingType, setThinkingType] = React.useState(NONE);
-  const [effort, setEffort] = React.useState(NONE);
-  const [priority, setPriority] = React.useState("0"); // Failover priority; higher first
-  const [poolExclude, setPoolExclude] = React.useState(false);
-  const [streaming, setStreaming] = React.useState(true); // true = streaming (default); false = non-streaming
-  const [maxTokens, setMaxTokens] = React.useState("0"); // Per-response output limit; 0 = omit
-  const [maxTokensField, setMaxTokensField] = React.useState(NONE); // Output-limit field; NONE = max_tokens
-  const [sessionHeaderKey, setSessionHeaderKey] = React.useState(""); // Custom session header; empty = omit
-  const [retry, setRetry] = React.useState<LLMRetryOverride>(ZERO_OVERRIDE); // Profile retry overrides; all zero = global settings
+  // The parent keys each open/switch as a separate session. Hydrate once: a
+  // background catalog refresh must never replace an unsaved draft.
+  const [draft, setDraft] = React.useState(() => initialProfileDraft(profile));
+  const draftRef = React.useRef(draft);
+  const {
+    name,
+    format,
+    model,
+    baseUrl,
+    proxy,
+    apiKey,
+    rps,
+    rpm,
+    cw,
+    thinkingType,
+    effort,
+    priority,
+    poolExclude,
+    streaming,
+    maxTokens,
+    maxTokensField,
+    sessionHeaderKey,
+    retry,
+  } = draft;
+  const keyHint = profile?.api_key_hint ?? "";
+  const [storedId, setStoredId] = React.useState(profile ? Number(profile.id) : undefined);
+  const profileId = React.useRef(storedId);
+  const isNew = storedId === undefined;
   const [testing, setTesting] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [saveUnverified, setSaveUnverified] = React.useState(false);
+  const saveUnverifiedRef = React.useRef(false);
   const [models, setModels] = React.useState<string[]>([]);
   const [loadingModels, setLoadingModels] = React.useState(false);
   const [modelsOpen, setModelsOpen] = React.useState(false);
+  type Operation = "models" | "test" | "save";
+  type Owner = { draft: typeof draft };
+  const requests = React.useRef<Record<Operation, Owner | null>>({ models: null, test: null, save: null });
+  const alive = React.useRef(false);
+  React.useLayoutEffect(() => {
+    alive.current = true;
+    setLoadingModels(requests.current.models !== null);
+    setTesting(requests.current.test !== null);
+    setSaving(requests.current.save !== null);
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
-  // Populate from the profile whenever opened (defaults for creation). Reopening the drawer
-  // starts cleanly without stale values from the previous profile.
-  React.useEffect(() => {
-    if (!open) return;
-    setName(profile?.name ?? "");
-    setFormat(profile?.format === "openai" || profile?.format === "openai-responses" ? profile.format : "anthropic");
-    setModel(profile?.model ?? "");
-    setBaseUrl(profile?.base_url ?? "");
-    setProxy(profile?.proxy ?? "");
-    setRps(String(profile?.rate_per_second ?? 0));
-    setRpm(String(profile?.rate_per_minute ?? 0));
-    setCw(String(profile?.context_window_k ?? 0));
-    setThinkingType(fromStore(profile?.thinking_type));
-    setEffort(fromStore(profile?.reasoning_effort));
-    setPriority(String(profile?.priority ?? 0));
-    setPoolExclude(profile?.pool_exclude ?? false);
-    setStreaming(profile?.streaming ?? true);
-    setMaxTokens(String(profile?.max_tokens ?? 0));
-    setMaxTokensField(fromStore(profile?.max_tokens_field));
-    setSessionHeaderKey(profile?.session_header_key ?? "");
-    setRetry(profile?.retry ?? ZERO_OVERRIDE);
-    setApiKey("");
-    setKeyHint(profile?.api_key_hint ?? "");
+  function editDraft(patch: Partial<typeof draft>) {
+    if (!alive.current || !isCurrent()) return;
+    const next = { ...draftRef.current, ...structuredClone(patch) };
+    draftRef.current = next;
+    setDraft(next);
+    if ("format" in patch || "baseUrl" in patch || "proxy" in patch || "apiKey" in patch) {
+      // A different endpoint/key can start a new list request immediately. The
+      // retired request may finish, but cannot publish or clear that new owner.
+      requests.current.models = null;
+      setLoadingModels(false);
+      setModels([]);
+      setModelsOpen(false);
+    }
+  }
+  function begin(kind: Operation): Owner | null {
+    if (!alive.current || !isCurrent() || saveUnverifiedRef.current || requests.current[kind]) return null;
+    const owner = { draft: draftRef.current };
+    requests.current[kind] = owner;
+    return owner;
+  }
+  function owns(kind: Operation, owner: Owner) {
+    return alive.current && isCurrent() && requests.current[kind] === owner;
+  }
+  function finish(kind: Operation, owner: Owner, setBusy: (busy: boolean) => void) {
+    if (requests.current[kind] !== owner) return;
+    requests.current[kind] = null;
+    if (alive.current && isCurrent()) setBusy(false);
+  }
+
+  function retireProbes() {
+    // A save can change stored-key fallback even if its profile ID is unchanged.
+    // Completed choices and pending probes belong to the pre-save context.
+    requests.current.models = null;
+    requests.current.test = null;
+    setLoadingModels(false);
+    setTesting(false);
     setModels([]);
     setModelsOpen(false);
-  }, [open, profile]);
-
-  const profileId = profile ? Number(profile.id) : undefined;
+  }
 
   async function loadModels() {
-    if (loadingModels) return;
+    const owner = begin("models");
+    if (!owner) return;
+    const submitted = owner.draft;
     setLoadingModels(true);
     setModels([]);
+    setModelsOpen(false);
     try {
-      const r = await api.fetchLLMModels(format, baseUrl, apiKey, proxy, profileId);
+      const r = await api.fetchLLMModels(
+        submitted.format,
+        submitted.baseUrl,
+        submitted.apiKey,
+        submitted.proxy,
+        profileId.current,
+      );
+      if (!owns("models", owner)) return;
       if (r.ok && r.models && r.models.length > 0) {
         setModels(r.models);
         setModelsOpen(true);
@@ -378,82 +459,108 @@ function ProfileSheet({
         toast.error(`Failed to load models: ${r.error ?? "No models returned"}`);
       }
     } catch (e) {
-      toast.error(`Model loading error: ${(e as Error).message}`);
+      if (owns("models", owner)) toast.error(`Model loading error: ${(e as Error).message}`);
     } finally {
-      setLoadingModels(false);
+      finish("models", owner, setLoadingModels);
     }
   }
 
   async function testConnection() {
-    if (testing) return;
+    const owner = begin("test");
+    if (!owner) return;
+    const submitted = owner.draft;
     setTesting(true);
     try {
-      // Test with the profile reasoning parameters to detect unsupported fields here,
-      // rather than during task execution. Send profile ID so an empty key field uses the stored key.
+      // Empty key uses the stored profile key; reasoning/streaming/header values
+      // are the exact submitted draft, even if the form changes while waiting.
       const r = await api.testLLM(
-        format,
-        model,
-        baseUrl,
-        apiKey,
-        proxy,
-        toStore(thinkingType),
-        toStore(effort),
-        profileId,
-        streaming,
-        sessionHeaderKey.trim(),
+        submitted.format,
+        submitted.model,
+        submitted.baseUrl,
+        submitted.apiKey,
+        submitted.proxy,
+        toStore(submitted.thinkingType),
+        toStore(submitted.effort),
+        profileId.current,
+        submitted.streaming,
+        submitted.sessionHeaderKey.trim(),
       );
-      // Display the reply to verify that the model actually responds, as in a conversation.
+      if (!owns("test", owner) || draftRef.current !== submitted) return;
       if (r.ok)
-        toast.success(`Connected · ${r.latency_ms ?? "?"}ms · ${r.model ?? model}`, {
+        toast.success(`Connected · ${r.latency_ms ?? "?"}ms · ${r.model ?? submitted.model}`, {
           description: r.reply ? `Reply: ${r.reply}` : undefined,
         });
       else toast.error(`Connection failed: ${r.error ?? "Unknown"}`);
     } catch (e) {
-      toast.error(`Test error: ${(e as Error).message}`);
+      if (owns("test", owner) && draftRef.current === submitted) toast.error(`Test error: ${(e as Error).message}`);
     } finally {
-      setTesting(false);
+      finish("test", owner, setTesting);
     }
   }
 
   async function save() {
-    if (!name.trim() || !model.trim()) {
+    if (!alive.current || !isCurrent() || saveUnverifiedRef.current || requests.current.save) return;
+    const submitted = draftRef.current;
+    if (!submitted.name.trim() || !submitted.model.trim()) {
       toast.error("Enter a name and model");
       return;
     }
-    if (saving) return;
+    const owner = begin("save");
+    if (!owner) return;
+    const submittedId = profileId.current;
+    const creating = submittedId === undefined;
     setSaving(true);
     try {
-      const { id } = await api.saveLLMProfile({
-        ...(profile ? { id: Number(profile.id) } : {}),
-        name: name.trim(),
-        format,
-        model: model.trim(),
-        base_url: baseUrl.trim(),
-        proxy: proxy.trim(),
-        api_key: apiKey,
-        rate_per_second: Number(rps) || 0,
-        rate_per_minute: Number(rpm) || 0,
-        context_window_k: Number(cw) || 0,
-        thinking_type: toStore(thinkingType),
-        reasoning_effort: toStore(effort),
-        priority: Number(priority) || 0,
-        pool_exclude: poolExclude,
-        streaming,
-        max_tokens: Math.max(0, Number(maxTokens) || 0),
-        // The field-name switch applies only to openai (Chat Completions); other formats use defaults.
-        // The backend repeats this normalization; avoid sending contradictory UI values.
-        max_tokens_field: format === "openai" ? toStore(maxTokensField) : "",
-        session_header_key: sessionHeaderKey.trim(),
-        retry,
+      const receipt = await api.saveLLMProfile({
+        ...(creating ? {} : { id: submittedId }),
+        name: submitted.name.trim(),
+        format: submitted.format,
+        model: submitted.model.trim(),
+        base_url: submitted.baseUrl.trim(),
+        proxy: submitted.proxy.trim(),
+        api_key: submitted.apiKey,
+        rate_per_second: Number(submitted.rps) || 0,
+        rate_per_minute: Number(submitted.rpm) || 0,
+        context_window_k: Number(submitted.cw) || 0,
+        thinking_type: toStore(submitted.thinkingType),
+        reasoning_effort: toStore(submitted.effort),
+        priority: Number(submitted.priority) || 0,
+        pool_exclude: submitted.poolExclude,
+        streaming: submitted.streaming,
+        max_tokens: Math.max(0, Number(submitted.maxTokens) || 0),
+        // Only Chat Completions accepts an alternative output-limit field.
+        max_tokens_field: submitted.format === "openai" ? toStore(submitted.maxTokensField) : "",
+        session_header_key: submitted.sessionHeaderKey.trim(),
+        retry: submitted.retry,
       });
-      if (isNew) toast.success(`Created: ${name.trim()} (select Set active on the card to enable)`);
-      else toast.success(profile?.is_default ? "Saved; active-profile changes apply immediately without restart" : "Saved");
+      if (!owns("save", owner)) return;
+      retireProbes();
+      const id = acknowledgedProfileId(receipt, submittedId);
+      if (id === null) {
+        // The server may have committed despite an invalid receipt. Keep the
+        // draft/target, but do not blindly create again or certify its key.
+        saveUnverifiedRef.current = true;
+        setSaveUnverified(true);
+        toast.error("Save outcome could not be verified. Reload this page before saving again.");
+        return;
+      }
+      // If a create succeeds while the user keeps editing, the next Save must
+      // update this acknowledged profile instead of creating a duplicate.
+      profileId.current = id;
+      setStoredId(id);
+      const changed = draftRef.current !== submitted;
+      if (changed) toast.success("Saved submitted values; newer edits remain unsaved");
+      else if (creating) toast.success(`Created: ${submitted.name.trim()} (select Set active on the card to enable)`);
+      else
+        toast.success(
+          profile?.is_default ? "Saved; active-profile changes apply immediately without restart" : "Saved",
+        );
       onSaved(String(id));
-      onOpenChange(false);
+      if (!changed && owns("save", owner)) onOpenChange(false);
     } catch (e) {
-      toast.error(`Save failed: ${(e as Error).message}`);
+      if (owns("save", owner)) toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
-      setSaving(false);
+      finish("save", owner, setSaving);
     }
   }
 
@@ -465,7 +572,7 @@ function ProfileSheet({
       >
         <SheetHeader className="px-4">
           <SheetTitle className="flex items-center gap-2">
-            {isNew ? "New model profile" : `Edit: ${profile?.name}`}
+            {isNew ? "New model profile" : `Edit: ${profile?.name ?? name}`}
             {profile?.is_default && (
               <Badge variant="outline" className="border-amber-400/50 text-amber-500">
                 Active
@@ -487,12 +594,12 @@ function ProfileSheet({
                 id="p-name"
                 placeholder="Example: OpenAI production"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => editDraft({ name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
               <Label>Format</Label>
-              <Select value={format} onValueChange={(v) => setFormat(v as "anthropic" | "openai" | "openai-responses")}>
+              <Select value={format} onValueChange={(v) => editDraft({ format: v as LLMProfile["format"] })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select format" />
                 </SelectTrigger>
@@ -513,7 +620,7 @@ function ProfileSheet({
                 className="font-mono"
                 placeholder="claude-opus-4-8"
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={(e) => editDraft({ model: e.target.value })}
               />
               {/* modal: this Popover is portaled to <body>, outside the Sheet scroll lock.
                   Without modal, the list renders but cannot scroll. Modal gives it the top scroll lock. */}
@@ -524,7 +631,7 @@ function ProfileSheet({
                     variant="outline"
                     size="icon"
                     className="shrink-0"
-                    disabled={loadingModels}
+                    disabled={loadingModels || saveUnverified}
                     onClick={loadModels}
                     title="Load available models from API"
                   >
@@ -539,7 +646,7 @@ function ProfileSheet({
                         type="button"
                         className="w-full shrink-0 rounded-md px-2 py-1.5 text-left font-mono text-xs hover:bg-accent hover:text-accent-foreground"
                         onClick={() => {
-                          setModel(m);
+                          editDraft({ model: m });
                           setModelsOpen(false);
                         }}
                       >
@@ -559,7 +666,7 @@ function ProfileSheet({
               className="font-mono"
               placeholder="https://api.openai.com/v1"
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
+              onChange={(e) => editDraft({ baseUrl: e.target.value })}
             />
           </div>
 
@@ -570,7 +677,7 @@ function ProfileSheet({
               className="font-mono"
               placeholder="socks5://user:pass@127.0.0.1:1080 · http://127.0.0.1:8080"
               value={proxy}
-              onChange={(e) => setProxy(e.target.value)}
+              onChange={(e) => editDraft({ proxy: e.target.value })}
             />
             <p className="text-muted-foreground text-xs">
               Only outbound LLM requests use this proxy. Supports http/https/socks5 and credentials (for example,
@@ -585,7 +692,7 @@ function ProfileSheet({
               className="font-mono"
               placeholder="For example, x-session-id (blank = omit)"
               value={sessionHeaderKey}
-              onChange={(e) => setSessionHeaderKey(e.target.value)}
+              onChange={(e) => editDraft({ sessionHeaderKey: e.target.value })}
             />
             <p className="text-muted-foreground text-xs">
               Every request includes this HTTP header with the <b>current session ID</b> (chat sessions such as
@@ -601,18 +708,18 @@ function ProfileSheet({
               type="password"
               placeholder={keyHint ? `Configured (${keyHint}); leave blank to keep unchanged` : "sk-…"}
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => editDraft({ apiKey: e.target.value })}
             />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="p-rps">Requests per second</Label>
-              <Input id="p-rps" type="number" min={0} value={rps} onChange={(e) => setRps(e.target.value)} />
+              <Input id="p-rps" type="number" min={0} value={rps} onChange={(e) => editDraft({ rps: e.target.value })} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="p-rpm">Requests per minute</Label>
-              <Input id="p-rpm" type="number" min={0} value={rpm} onChange={(e) => setRpm(e.target.value)} />
+              <Input id="p-rpm" type="number" min={0} value={rpm} onChange={(e) => editDraft({ rpm: e.target.value })} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="p-cw">Context window (K)</Label>
@@ -622,7 +729,7 @@ function ProfileSheet({
                 min={0}
                 max={1000}
                 value={cw}
-                onChange={(e) => setCw(e.target.value)}
+                onChange={(e) => editDraft({ cw: e.target.value })}
                 placeholder="200"
               />
             </div>
@@ -647,7 +754,7 @@ function ProfileSheet({
                 type="number"
                 className="w-24 shrink-0"
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => editDraft({ priority: e.target.value })}
               />
             </div>
             <div className="flex items-center justify-between gap-4 border-t pt-3">
@@ -658,7 +765,7 @@ function ProfileSheet({
                   that should not consume quota when other profiles fail.
                 </p>
               </div>
-              <Switch checked={poolExclude} onCheckedChange={setPoolExclude} aria-label="Exclude from failover" />
+              <Switch checked={poolExclude} onCheckedChange={(value) => editDraft({ poolExclude: value })} aria-label="Exclude from failover" />
             </div>
             <div className="flex items-center justify-between gap-4 border-t pt-3">
               <div className="grid gap-0.5">
@@ -669,7 +776,7 @@ function ProfileSheet({
                   at the cost of live progress.
                 </p>
               </div>
-              <Switch checked={streaming} onCheckedChange={setStreaming} aria-label="Streaming output" />
+              <Switch checked={streaming} onCheckedChange={(value) => editDraft({ streaming: value })} aria-label="Streaming output" />
             </div>
           </div>
 
@@ -691,7 +798,7 @@ function ProfileSheet({
                 min={0}
                 className="w-28 shrink-0"
                 value={maxTokens}
-                onChange={(e) => setMaxTokens(e.target.value)}
+                onChange={(e) => editDraft({ maxTokens: e.target.value })}
                 placeholder="0"
               />
             </div>
@@ -702,7 +809,7 @@ function ProfileSheet({
               </div>
               <Select
                 value={format === "openai" ? maxTokensField : NONE}
-                onValueChange={setMaxTokensField}
+                onValueChange={(value) => editDraft({ maxTokensField: value })}
                 disabled={format !== "openai"}
               >
                 <SelectTrigger className="w-56 shrink-0">
@@ -728,7 +835,7 @@ function ProfileSheet({
                   disabled; enabled sends enabled. This is independent of the effort below.
                 </p>
               </div>
-              <Select value={thinkingType} onValueChange={setThinkingType}>
+              <Select value={thinkingType} onValueChange={(value) => editDraft({ thinkingType: value })}>
                 <SelectTrigger className="w-32 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -749,7 +856,7 @@ function ProfileSheet({
                   field and enable reasoning through effort alone; configure it independently without sending the thinking switch.
                 </p>
               </div>
-              <Select value={effort} onValueChange={setEffort}>
+              <Select value={effort} onValueChange={(value) => editDraft({ effort: value })}>
                 <SelectTrigger className="w-32 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -764,15 +871,20 @@ function ProfileSheet({
             </div>
           </div>
 
-          <ProfileRetryFields value={retry} onChange={setRetry} />
+          <ProfileRetryFields value={retry} onChange={(value) => editDraft({ retry: value })} />
         </div>
 
+        {saveUnverified && (
+          <p role="alert" className="px-4 py-2 text-sm text-destructive">
+            Save outcome could not be verified. Copy any unsaved edits, then reload this page before saving again.
+          </p>
+        )}
         <div className="flex gap-2 border-t px-4 py-3">
-          <Button variant="outline" onClick={testConnection} disabled={testing}>
+          <Button variant="outline" onClick={testConnection} disabled={testing || saveUnverified}>
             {testing ? <Loader2Icon className="animate-spin" /> : <PlugZapIcon />}
             {testing ? "Testing…" : "Test connection"}
           </Button>
-          <Button onClick={save} disabled={saving} className="flex-1">
+          <Button onClick={save} disabled={saving || saveUnverified} className="flex-1">
             {saving && <Loader2Icon className="animate-spin" />}
             {!saving && (isNew ? <PlusIcon /> : <SaveIcon />)}
             {isNew ? "New" : "Save"}
@@ -789,13 +901,22 @@ export default function LLMPage() {
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
   const [pool, setPool] = React.useState<LLMPoolStatus | null>(null);
   const [poolOpen, setPoolOpen] = React.useState(false);
-  // Store drawer visibility separately from content: keep editing unchanged on close so the title does not flash from
-  // Edit X to New during the closing animation. editing = null means creation.
-  const [editOpen, setEditOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<LLMProfile | null>(null);
-  const openEditor = React.useCallback((p: LLMProfile | null) => {
-    setEditing(p);
-    setEditOpen(true);
+  // Preserve content during close animation; every open (including the same
+  // profile) gets a fresh keyed draft. The ref retires callbacks synchronously,
+  // before React commits a queued close/switch or unmounts the previous editor.
+  type Editor = { profile: LLMProfile | null; open: boolean; session: number };
+  const [editor, setEditor] = React.useState<Editor>({ profile: null, open: false, session: 0 });
+  const editorRef = React.useRef(editor);
+  const openEditor = React.useCallback((profile: LLMProfile | null) => {
+    const next = { profile: structuredClone(profile), open: true, session: editorRef.current.session + 1 };
+    editorRef.current = next;
+    setEditor(next);
+  }, []);
+  const changeEditorOpen = React.useCallback((session: number, open: boolean) => {
+    if (editorRef.current.session !== session) return;
+    const next = { ...editorRef.current, open };
+    editorRef.current = next;
+    setEditor(next);
   }, []);
 
   const loadPool = React.useCallback(async () => {
@@ -983,7 +1104,14 @@ export default function LLMPage() {
         </TabsContent>
       </Tabs>
 
-      <ProfileSheet profile={editing} open={editOpen} onOpenChange={setEditOpen} onSaved={() => void load()} />
+      <ProfileSheet
+        key={editor.session}
+        profile={editor.profile}
+        open={editor.open}
+        isCurrent={() => editorRef.current.open && editorRef.current.session === editor.session}
+        onOpenChange={(open) => changeEditorOpen(editor.session, open)}
+        onSaved={() => void load()}
+      />
       <PoolSheet open={poolOpen} onOpenChange={setPoolOpen} pool={pool} onReload={loadPool} />
     </div>
   );

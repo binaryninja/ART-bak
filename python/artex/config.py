@@ -43,6 +43,25 @@ class Config:
     skill_dir: str = ""
 
 
+class _JSONObject(list):
+    """Keep object member order/duplicates distinct from JSON arrays."""
+
+
+class _JSONInteger(str):
+    """Defer conversion so an overflowing port does not discard other fields."""
+
+
+# These tags are ASCII. Go's simple case folding also equates long s and Kelvin
+# sign with s/k; full Unicode casefold would incorrectly accept e.g. paßword.
+_FIELD_CASE = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZſK",
+                          "abcdefghijklmnopqrstuvwxyzsk")
+_DATABASE_FIELDS = frozenset(f.name for f in fields(Database))
+
+
+def _invalid_constant(value: str):
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
 def base_dir() -> Path:
     return Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(".")
 
@@ -57,21 +76,34 @@ def config_path() -> Path:
 
 def load() -> Config:
     try:
-        data = json.loads(config_path().read_text(encoding="utf-8"))
+        data = json.loads(config_path().read_text(encoding="utf-8"),
+                          object_pairs_hook=_JSONObject,
+                          parse_int=_JSONInteger,
+                          parse_constant=_invalid_constant)
     except (OSError, ValueError, UnicodeError):
         return Config()
-    if not isinstance(data, dict):
-        return Config()
-    raw = data.get("database", {})
-    values = {}
-    if isinstance(raw, dict):
-        for f in fields(Database):
-            value = raw.get(f.name)
-            expected = int if f.name == "port" else str
-            if type(value) is expected:
-                values[f.name] = value
-    return Config(Database(**values), data.get("skill_dir", "")
-                  if isinstance(data.get("skill_dir", ""), str) else "")
+    result = Config()
+    if not isinstance(data, _JSONObject):
+        return result
+    # Like encoding/json into Go structs, merge repeated objects and process
+    # members in order; null or incompatible values leave earlier values intact.
+    for key, value in data:
+        key = key.translate(_FIELD_CASE)
+        if key == "database" and isinstance(value, _JSONObject):
+            for name, item in value:
+                name = name.translate(_FIELD_CASE)
+                if name == "port" and isinstance(item, _JSONInteger):
+                    try:
+                        port = int(item)
+                    except ValueError:
+                        continue
+                    if -sys.maxsize - 1 <= port <= sys.maxsize:
+                        result.database.port = port
+                elif name in _DATABASE_FIELDS and name != "port" and type(item) is str:
+                    setattr(result.database, name, item)
+        elif key == "skill_dir" and type(value) is str:
+            result.skill_dir = value
+    return result
 
 
 def skill_dir() -> Path:

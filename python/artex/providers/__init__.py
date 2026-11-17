@@ -251,25 +251,47 @@ def parse_response(config, payload):
             blocks.append(b)
         stop, usage = data.get('stop_reason', ''), _usage(data.get('usage'), True)
     else:
-        if not data.get('choices'):
+        if not isinstance(data.get('choices'), list) or not data['choices']:
             raise ProtocolError("OpenAI returned no choices")
         choice = data['choices'][0]
-        message = choice.get('message') or {}
+        if not isinstance(choice, Mapping):
+            raise ProtocolError("Invalid OpenAI choice")
+        message = choice.get('message')
+        if message is None:
+            message = {}
+        if not isinstance(message, Mapping):
+            raise ProtocolError("Invalid OpenAI message")
+        for key in ('content', 'refusal', 'reasoning_content', 'reasoning', 'reasoning_text'):
+            if message.get(key) is not None and not isinstance(message[key], str):
+                raise ProtocolError("Only textual OpenAI response content is supported")
+        if choice.get('finish_reason') is not None and not isinstance(choice['finish_reason'], str):
+            raise ProtocolError("Invalid OpenAI finish reason")
         blocks = []
         reasoning = next((message[k] for k in ('reasoning_content', 'reasoning', 'reasoning_text') if message.get(k)), '')
         if reasoning:
             blocks.append({'type': 'thinking', 'thinking': reasoning})
         text = message.get('content') or message.get('refusal')
         if text:
-            if not isinstance(text, str):
-                raise ProtocolError("Only textual OpenAI response content is supported")
             blocks.append({'type': 'text', 'text': text})
-        for call in message.get('tool_calls') or []:
-            function = call['function']
-            blocks.append({'type': 'tool_use', 'id': call['id'], 'name': function['name'], 'input': _input(function.get('arguments'))})
+        tool_calls = message.get('tool_calls')
+        if tool_calls is None:
+            tool_calls = []
+        if not isinstance(tool_calls, list):
+            raise ProtocolError("Invalid OpenAI tool calls")
+        for call in tool_calls:
+            if not isinstance(call, Mapping) or call.get('type') not in (None, '', 'function'):
+                raise ProtocolError("Only OpenAI function tool calls are supported")
+            function = call.get('function')
+            if (not isinstance(function, Mapping) or not isinstance(call.get('id'), str) or not call['id']
+                    or not isinstance(function.get('name'), str) or not function['name']):
+                raise ProtocolError("Invalid OpenAI tool-call identity")
+            arguments = function.get('arguments')
+            # Match Go strings.TrimSpace, excluding Python-only U+001C..U+001F.
+            whitespace = '\t\n\v\f\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000'
+            if isinstance(arguments, str) and not arguments.strip(whitespace):
+                arguments = {}
+            blocks.append({'type': 'tool_use', 'id': call['id'], 'name': function['name'], 'input': _input(arguments)})
         refusal = message.get('refusal')
-        if refusal is not None and not isinstance(refusal, str):
-            raise ProtocolError('Invalid OpenAI refusal field')
         stop = 'refusal' if refusal else _stop(choice.get('finish_reason'))
         usage = _usage(data.get('usage'))
     result = {'role': 'assistant', 'content': blocks, 'model': data.get('model', config.model)}
@@ -380,7 +402,9 @@ def _anthropic_events(frames, model):
             usage['output_tokens'] = 0
             yield {'type': 'message_start', 'model': message.get('model', model), 'usage': usage}
         elif kind == 'content_block_start':
-            block = data.get('content_block') or {}
+            block = _mapping(data.get('content_block') or {})
+            if block.get('type') not in ('text', 'thinking', 'tool_use'):
+                raise ProtocolError("Unsupported Anthropic response content")
             index = data.get('index', 0)
             blocks[index] = block
             if block.get('type') == 'tool_use':
@@ -421,27 +445,61 @@ def _openai_events(frames, model):
             yield {'type': 'message_start', 'model': data.get('model', model), 'usage': _usage()}
         if data.get('usage') is not None:
             usage = _usage(data['usage'])
-        choices = data.get('choices') or []
+        choices = data.get('choices')
+        if choices is None:
+            choices = []
+        if not isinstance(choices, list):
+            raise ProtocolError("Invalid OpenAI streamed choices")
         if not choices:
             continue
         choice = choices[0]
-        delta = choice.get('delta') or {}
+        if not isinstance(choice, Mapping):
+            raise ProtocolError("Invalid OpenAI streamed choice")
+        delta = choice.get('delta')
+        if delta is None:
+            delta = {}
+        if not isinstance(delta, Mapping):
+            raise ProtocolError("Invalid OpenAI delta")
+        for key in ('content', 'refusal', 'reasoning_content', 'reasoning', 'reasoning_text'):
+            if delta.get(key) is not None and not isinstance(delta[key], str):
+                raise ProtocolError("Only textual OpenAI deltas are supported")
         if delta.get('refusal'):
-            if not isinstance(delta['refusal'], str):
-                raise ProtocolError('Invalid streamed refusal field')
             refused = True
+        if choice.get('finish_reason') is not None and not isinstance(choice['finish_reason'], str):
+            raise ProtocolError("Invalid OpenAI finish reason")
         if choice.get('finish_reason'):
             reason = _stop(choice['finish_reason'])
         thinking = next((delta[k] for k in ('reasoning_content', 'reasoning', 'reasoning_text') if delta.get(k)), '')
         if thinking:
             yield {'type': 'thinking_delta', 'text': thinking}
-        if text := delta.get('content') or delta.get('refusal'):
-            yield {'type': 'text_delta', 'text': text}
-        for call in delta.get('tool_calls') or []:
+        for key in ('content', 'refusal'):
+            if text := delta.get(key):
+                yield {'type': 'text_delta', 'text': text}
+        tool_calls = delta.get('tool_calls')
+        if tool_calls is None:
+            tool_calls = []
+        if not isinstance(tool_calls, list):
+            raise ProtocolError("Invalid OpenAI tool-call deltas")
+        for call in tool_calls:
+            if not isinstance(call, Mapping) or call.get('type') not in (None, '', 'function'):
+                raise ProtocolError("Only OpenAI function tool calls are supported")
             index = call.get('index', 0)
+            if type(index) is not int or index < 0:
+                raise ProtocolError("Invalid OpenAI tool-call index")
+            function = call.get('function')
+            if function is None:
+                function = {}
+            if not isinstance(function, Mapping):
+                raise ProtocolError("Invalid OpenAI tool-call function")
+            if call.get('id') is not None and not isinstance(call['id'], str):
+                raise ProtocolError("Invalid OpenAI tool-call identity")
+            for key in ('name', 'arguments'):
+                if function.get(key) is not None and not isinstance(function[key], str):
+                    raise ProtocolError("Invalid OpenAI tool-call fragment")
             state = calls.setdefault(index, {'id': '', 'name': '', 'pending': [], 'started': False})
-            function = call.get('function') or {}
             if call.get('id'):
+                if state['id'] and call['id'] != state['id']:
+                    raise ProtocolError("Changed OpenAI tool-call identity")
                 state['id'] = call['id']
             if function.get('name'):
                 if state['started'] and function['name'] != state['name']:

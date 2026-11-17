@@ -34,7 +34,7 @@ billable work. Cancellation is cooperative, not interruption of blocked calls.
 from dataclasses import dataclass, asdict
 from collections.abc import Mapping
 from time import monotonic
-from . import Recorder, Usage, _get, _json
+from . import Recorder, Usage, _get, _json, _observe_stream_usage
 from ..db.llm_records import LLMRecordStore, LLMRecord, LLMUsage
 
 
@@ -173,7 +173,7 @@ class PostgresRecorder:
             for event in source:
                 kind = _get(event,'type','')
                 if kind in ('message_start','message_delta'):
-                    usage.add(_get(event,'usage',{}))
+                    _observe_stream_usage(usage,_get(event,'usage',{}))
                 encoded = _json(event)
                 size += len(encoded.encode('utf-8')) + (1 if events else 0)
                 if len(events) >= self.max_events or size > self.max_body_bytes:

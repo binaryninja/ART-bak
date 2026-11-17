@@ -46,6 +46,8 @@ placeholder credentials, not live provider validation.
   and other finish reasons are normalized.
 - Anthropic cache usage folds cached tokens into total input, matching Norma.
   Streaming input is counted only at message_start, output at message_delta.
+  Each output count remains a cumulative snapshot, including when multiple
+  message_delta events arrive; it is not a per-event increment.
 - SSE framing tolerates byte boundaries, CRLF, comments and multiple data lines;
   limits individual lines/events to 8 MiB. Invalid JSON/UTF-8 is surfaced.
 - Non-2xx failures expose an HTTP status, not credentials or response contents.
@@ -66,6 +68,9 @@ placeholder credentials, not live provider validation.
   preserve that inconsistent behavior.
 - No Responses API, multimodal content, redacted-thinking blocks, or provider
   extensions beyond documented fields. Unsupported blocks fail explicitly.
+  Anthropic content_block_start uses the same supported block types as completion
+  parsing, so unsupported streamed blocks cannot silently produce a partial
+  success. Unknown event and delta types remain ignored for forward compatibility.
 - Explicit bounded establishment/empty-response/same-provider retry layers now
   exist in `retry.py`; they do not replay after delivered events. Rate limiting,
   ARTEX quota-aware routing and session-header configuration remain unavailable.

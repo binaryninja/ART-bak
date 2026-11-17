@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { sseUrl } from "@/lib/api";
+import { http, sseUrl } from "@/lib/api";
+import { createLogHistory, emptyLogHistory, LOG_ROW_LIMIT, logRowKey } from "@/lib/log-history-state.mjs";
 import { MOCK } from "@/lib/mock/enabled";
 import type { LogLine } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -37,84 +38,44 @@ function fmtTime(ts: string) {
 }
 
 export default function LogsPage() {
-  const [lines, setLines] = React.useState<LogLine[]>([]);
+  const [historyState, setHistoryState] = React.useState(emptyLogHistory);
+  const { lines, hasMore, loadingHistory, error } = historyState;
+  const history = React.useMemo(() => createLogHistory({
+    read: (path, signal) => http(path, { signal }),
+    onChange: setHistoryState,
+  }), []);
   const [q, setQ] = React.useState("");
   const [level, setLevel] = React.useState<"all" | LogLine["level"]>("all");
   const [paused, setPaused] = React.useState(false);
-  const [loadingHistory, setLoadingHistory] = React.useState(false);
-  const [hasMore, setHasMore] = React.useState(false);
   const bottom = React.useRef<HTMLDivElement>(null);
   const stick = React.useRef(true);
   const pausedRef = React.useRef(false);
   pausedRef.current = paused;
 
-  // Minimum db_id seen — used as the cursor for loading older history.
-  const minDbId = React.useMemo(() => {
-    let min = 0;
-    for (const l of lines) {
-      if (l.db_id && (min === 0 || l.db_id < min)) min = l.db_id;
-    }
-    return min;
-  }, [lines]);
-
-  // Live tail via SSE. on connect, replays whatever is in the ring (includes
-  // DB-restored history from the last 100 rows written before restart).
+  // SSE replays the ring on each connection. Rows can gain db_id after the
+  // original live frame; history and replay therefore share both identities.
   React.useEffect(() => {
+    history.activate();
     if (MOCK) {
-      setLines(MOCK_LOGS);
-      return;
+      for (const line of MOCK_LOGS) history.append(line);
+      return () => history.deactivate();
     }
+    let stopped = false;
     const es = new EventSource(sseUrl("/api/logs/stream?since=0"));
     es.onmessage = (e) => {
-      if (pausedRef.current) return;
+      if (stopped || pausedRef.current) return;
       try {
-        const l = JSON.parse(e.data) as LogLine;
-        setLines((prev) => (prev.some((x) => x.seq === l.seq) ? prev : [...prev, l].slice(-3000)));
+        history.append(JSON.parse(e.data));
       } catch {
         /* ignore malformed frame */
       }
     };
-    return () => es.close();
-  }, []);
-
-  // Mark "has more" once we have any db_id in view.
-  React.useEffect(() => {
-    if (minDbId > 1) setHasMore(true);
-  }, [minDbId]);
-
-  async function loadOlderHistory() {
-    if (loadingHistory) return;
-    setLoadingHistory(true);
-    try {
-      const params = minDbId > 0 ? `?before=${minDbId}&limit=200` : `?limit=200`;
-      const res = await fetch(`/api/logs/history${params}`);
-      if (!res.ok) return;
-      const data = await res.json() as { items: LogLine[]; has_more: boolean };
-      if (data.items?.length) {
-        // Assign synthetic seq numbers below current minimum to keep dedup working.
-        setLines((prev) => {
-          const minSeq = prev.reduce((m, l) => Math.min(m, l.seq ?? 0), 0);
-          const older = data.items.map((l, i) => ({
-            ...l,
-            seq: minSeq - data.items.length + i,
-          }));
-          // Prepend, dedup by db_id, cap at 5000.
-          const merged = [...older, ...prev];
-          const seen = new Set<number>();
-          const deduped = merged.filter((l) => {
-            if (!l.db_id) return true;
-            if (seen.has(l.db_id)) return false;
-            seen.add(l.db_id);
-            return true;
-          });
-          return deduped.slice(-5000);
-        });
-      }
-      setHasMore(data.has_more ?? false);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }
+    return () => {
+      stopped = true;
+      es.close();
+      history.deactivate();
+    };
+  }, [history]);
 
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -174,7 +135,7 @@ export default function LogsPage() {
           >
             {paused ? "Paused" : "Pause"}
           </Button>
-          <Button size="sm" variant="outline" className="h-8" onClick={() => setLines([])}>
+          <Button size="sm" variant="outline" className="h-8" onClick={() => history.clear()}>
             Clear
           </Button>
           <span className="ml-auto text-xs text-muted-foreground">
@@ -191,18 +152,24 @@ export default function LogsPage() {
           }}
           className="h-[calc(100vh-14rem)] overflow-auto rounded-lg border bg-card p-2 font-mono text-xs leading-relaxed"
         >
-          {hasMore && (
+          {!MOCK && hasMore && lines.length < LOG_ROW_LIMIT && (
             <div className="flex justify-center py-2">
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
                 disabled={loadingHistory}
-                onClick={loadOlderHistory}
+                onClick={() => history.loadOlder()}
               >
                 {loadingHistory ? "Loading…" : "Load earlier logs"}
               </Button>
             </div>
+          )}
+          {error && <p role="alert" className="py-2 text-center text-destructive">{error}</p>}
+          {lines.length >= LOG_ROW_LIMIT && (
+            <p className="py-2 text-center text-muted-foreground">
+              5,000-line limit reached. Clear the view to start a new window.
+            </p>
           )}
           {filtered.length === 0 ? (
             <p className="py-10 text-center text-muted-foreground">No logs yet.</p>
@@ -213,7 +180,7 @@ export default function LogsPage() {
                   ? l.text.slice(l.tag.length + 2).trimStart()
                   : l.text;
               return (
-                <div key={l.seq} className="flex items-start gap-2 px-1 py-0.5 hover:bg-muted/40">
+                <div key={logRowKey(l)} className="flex items-start gap-2 px-1 py-0.5 hover:bg-muted/40">
                   <span className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", levelDot[l.level])} />
                   <span className="shrink-0 tabular-nums text-muted-foreground">{fmtTime(l.ts)}</span>
                   {l.tag && (

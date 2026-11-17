@@ -4,6 +4,8 @@
 Supports the explicit ServeMux registrations, string concatenations, literal
 string loop and literal {path, kind} table used by this checkout. Python routes
 are resolved with ast from literal assignments/for loops and concatenations.
+The conversation service's exact handler-selection function is audited
+separately; general conditional loop state is intentionally unsupported.
 Unsupported route expressions fail the audit instead of silently claiming parity.
 This is a narrow static inventory, not a Go parser or an execution proof.
 """
@@ -180,6 +182,64 @@ def bind_target(target: ast.AST, value, environment: dict):
         raise AuditError('Unsupported literal loop target')
 
 
+# These source/owner pairs describe opt-in compositions, not auth factories.
+# They annotate declarations found below; this table never creates routes.
+PYTHON_OPTIONAL_OWNERS = {
+    ('python/artex/server/archive_catalog.py', 'build_archive_catalog_application'):
+        'Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation',
+    ('python/artex/server/missing_skill_setup.py', '_MissingSkillApplication.__call__'):
+        'Explicit global missing-skill statistics scope and bounded reader; original JWT application and final disclosure grants; no skill execution or default activation',
+    ('python/artex/server/skill_files_setup.py', '_SkillFilesApplication.__call__'):
+        'Explicit skill directory scope and bounded file-list reader; original JWT application and independent global/source disclosure grants; no file-content reads, execution or default activation',
+    ('python/artex/server/skill_create.py', 'bind_skill_creation'):
+        'Explicit skill creation service, exclusively guarded private root and original JWT/global mutation grants; create-only inert content, uncertain effects require reconciliation; no execution or default activation',
+    ('python/artex/server/skill_archive_import.py', 'bind_skill_archive_imports'):
+        'Explicit bounded archive import service, exclusively guarded private root and original JWT/global mutation grants; create-only installation, uncertain effects require quarantine; no execution or default activation',
+    ('python/artex/server/skill_directory_create.py', 'bind_skill_directory_creation'):
+        'Explicit skill directory service, exclusively guarded private root and original JWT/global mutation grants; existing parents required, uncertain effects require reconciliation; no file writes, execution or default activation',
+    ('python/artex/server/task_runtime_read_router.py', 'TaskRuntimeReadRouter.bind'):
+        'Explicit same-executor task read builder, original authenticated application and per-request selector/lifetime grants; independent source/global permissions; no active-task fallback, mutations or default activation',
+    ('python/artex/server/task_runtime_reads.py', 'TaskRuntimeReads.bind'):
+        'Explicit fixed task/exploration scope, executor, runtime snapshot and request/lifetime grants; original authenticated application and independent global permissions; findings require an explicitly supplied service; no mutations or default activation',
+    ('python/artex/server/tool_intercept_setup.py', '_MutationApplication.__call__'):
+        'Explicit tool-policy owner on an exclusively owned executor and original JWT/global mutation grants; unknown outcomes require reconciliation; no guard installation or default activation',
+}
+
+
+def conversation_table(node):
+    """Validate the complete audited registration shape, with source-only rows.
+
+    Do not interpret conditional loop state: assignments can carry between
+    iterations, and nested loops/imports can rebind a condition's name. This
+    exact function has only a literal table and two fixed handler expressions.
+    Any structural change requires a fresh audit rather than a guessed route.
+    """
+    message = 'Conversation registration shape needs explicit support'
+    if len(node.body) != 1 or not isinstance(node.body[0], ast.For):
+        raise AuditError(message)
+    expected = ast.parse('''def register(self, router):
+    for method, path, action in ():
+        if action == 'list':
+            from .conversation_list_read import bind_conversation_list
+            router.add(method, path, bind_conversation_list(self, router))
+        else:
+            router.add(method, path, lambda request, params, action=action: self._handle(action, request, params))
+''').body[0]
+    loop = node.body[0]
+    expected.body[0].iter = loop.iter
+    if ast.dump(node) != ast.dump(expected):
+        raise AuditError(message)
+    try:
+        rows = ast.literal_eval(loop.iter)
+    except (ValueError, TypeError) as exc:
+        raise AuditError('Conversation route table must contain literal string triples') from exc
+    if (not isinstance(rows, (list, tuple)) or
+            any(not isinstance(row, (list, tuple)) or len(row) != 3 or
+                any(type(value) is not str for value in row) for row in rows)):
+        raise AuditError('Conversation route table must contain literal string triples')
+    return loop.body[0], rows
+
+
 def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
     routes, hashes = [], {}
     for source in sorted((root / 'python/artex/server').rglob('*.py')):
@@ -242,6 +302,13 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 owner = (owner + '.' if owner else '') + node.name
                 environment = environment.copy()
+                if (relative == 'python/artex/server/conversations.py'
+                        and owner == 'ConversationService.register' and has_route(node)):
+                    branch, rows = conversation_table(node)
+                    for method, path, action in rows:
+                        call = branch.body[1].value if action == 'list' else branch.orelse[0].value
+                        walk(call, {'method': method, 'path': path, 'action': action}, owner)
+                    return
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 if has_route(node):
                     raise AuditError('Route registration embedded in assignment needs explicit support')
@@ -342,9 +409,12 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
                 }
                 intent_control_optional = relative == 'python/artex/server/intent_control_setup.py' and owner == '_Application.__init__'
                 skill_usage_optional = relative == 'python/artex/server/skill_usage_setup.py' and owner == '_SkillUsageApplication.__call__'
-                optional = owner.endswith('.register') or metadata_optional or reader_bundle_optional or intent_control_optional or skill_usage_optional
+                optional_dependencies = PYTHON_OPTIONAL_OWNERS.get((relative, owner))
+                optional = owner.endswith('.register') or metadata_optional or reader_bundle_optional or intent_control_optional or skill_usage_optional or optional_dependencies is not None
                 dependencies = 'Injected auth store, password codec, signing key; deployer-supplied transport/listener'
-                if metadata_optional:
+                if optional_dependencies is not None:
+                    dependencies = optional_dependencies
+                elif metadata_optional:
                     dependencies = 'Explicit typed metadata service selection; original JWT application, same executor and independent global/source/raw disclosure grants; no default activation'
                 elif reader_bundle_optional:
                     dependencies = 'Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation'
@@ -391,7 +461,14 @@ def python_inventory(root: Path) -> tuple[list[dict], dict[str, str]]:
 # (including a second occurrence at the same owner) still fails the audit.
 _ALTERNATIVE_BASE = 'python/artex/server/'
 PYTHON_ALTERNATIVE_GROUPS = {
-    ('GET','/api/report'): ('explicit-fixed-report-service-or-fenced-read-bundle', (('task_report.py','TaskReportService.register'),('task_report_setup.py','_ReportApplication.__init__'))),
+    ('GET','/api/report'): ('explicit-fixed-report-service-or-fenced-or-dynamic-read', (('task_report.py','TaskReportService.register'),('task_report_setup.py','_ReportApplication.__init__'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/intercept-rules'): ('explicit-fixed-or-dynamic-intercept-rule-read', (('intercept_rules.py','InterceptRuleService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/llm/records/by-model'): ('explicit-fixed-or-dynamic-model-usage-read', (('llm_records.py','LLMRecordService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/constraints'): ('explicit-fixed-or-dynamic-constraint-read', (('task_constraints.py','TaskConstraintService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/intent-assets'): ('explicit-fixed-or-dynamic-intent-asset-read', (('task_intent_assets.py','TaskIntentAssetsService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/llm/resolution'): ('explicit-fixed-or-dynamic-profile-resolution-read', (('task_profiles.py','TaskProfileService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/tasks/{id}/scope'): ('explicit-fixed-or-dynamic-scope-read', (('task_scope.py','TaskScopeService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
+    ('GET','/api/exploration/tokens'): ('explicit-fixed-or-dynamic-token-usage-read', (('token_usage.py','TokenUsageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}/coverage'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}/coverage-graph'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
     ('GET','/api/tasks/{id}/asset-refs'): ('explicit-coverage-service-or-dynamic-read', (('task_coverage.py','TaskCoverageService.register'),('task_runtime_read_router.py','TaskRuntimeReadRouter.bind'))),
@@ -476,7 +553,9 @@ def markdown(data: dict) -> str:
              '`artex/server/PORT_STATUS.md`. No route is labeled production-ready.', '',
              '## Counts', '',
              'Unique method/path counts collapse only exact audited alternative declarations.',
-             'Declaration counts retain every source location; alternatives are not simultaneous mounts.', '']
+             'Declaration counts retain every source location; alternatives are not simultaneous mounts.',
+             'Paths are compared literally, including placeholder names; Python-only entries may',
+             'use a different placeholder spelling for an existing Go URL shape.', '']
     lines += [f'- {name.replace("_", " ")}: **{value}**.' for name, value in summary.items()]
     lines += ['', 'The earlier 252-route figure counted literals and simple concatenations but',
               'missed nine registrations from the side-question nested loop: three parent',
@@ -484,6 +563,8 @@ def markdown(data: dict) -> str:
               'Go ServeMux implicit HEAD behavior for GET is not counted as an explicit route.', '',
               'The scanner fails on unsupported route expressions rather than silently dropping',
               'them. It handles this checkout\'s registration syntax, not arbitrary Go/Python.',
+              'The conversation handler branch requires its exact audited function shape;',
+              'conditional assignments, shadowing and loop-control changes need explicit support.',
               'Use `--check` to detect stale output after source changes. Source hashes are',
               'recorded in `ROUTE_PARITY.json`; line references identify the inspected code.', '',
               '## Method/path matrix', '',

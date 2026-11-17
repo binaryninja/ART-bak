@@ -70,9 +70,13 @@ class Transport(Protocol):
     def __call__(self, request: HTTPRequest) -> HTTPResponse: ...
 
 
+def _reject_json_constant(value: str) -> Any:
+    raise ValueError('non-JSON numeric constant')
+
+
 def _decode(raw: bytes | str) -> dict[str, Any]:
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, parse_constant=_reject_json_constant)
     except (ValueError, UnicodeDecodeError) as exc:
         raise MCPError('mcp: invalid JSON response') from exc
     if not isinstance(value, dict):
@@ -81,11 +85,13 @@ def _decode(raw: bytes | str) -> dict[str, Any]:
 
 
 def parse_sse(body: bytes, want_id: int) -> dict[str, Any]:
-    """Parse buffered SSE data frames, skipping notifications/unrelated IDs."""
+    """Parse buffered SSE data frames, skipping requests/notifications/other IDs."""
     if len(body) > MAX_RESPONSE_BYTES:
         raise MCPError('mcp: response exceeds byte limit')
     try:
-        lines = body.decode('utf-8').splitlines()
+        # SSE only recognizes CR/LF, not the Unicode separators that
+        # str.splitlines() would split inside otherwise valid JSON strings.
+        lines = re.split(r'\r\n|\r|\n', body.decode('utf-8-sig'))
     except UnicodeDecodeError as exc:
         raise MCPError('mcp: invalid UTF-8 event stream') from exc
     data: list[str] = []
@@ -97,11 +103,13 @@ def parse_sse(body: bytes, want_id: int) -> dict[str, Any]:
                 except MCPError:
                     response = {}
                 data = []
-                if type(response.get('id')) is int and response['id'] == want_id:
+                if ('method' not in response and type(response.get('id')) is int
+                        and response['id'] == want_id):
                     return response
-        elif line.startswith('data:'):
-            value = line[5:]
-            data.append(value[1:] if value.startswith(' ') else value)
+        else:
+            name, _, value = line.partition(':')
+            if name == 'data':
+                data.append(value[1:] if value.startswith(' ') else value)
     raise MCPError('mcp: no matching response in event stream')
 
 
@@ -162,8 +170,6 @@ class Client:
         if len(response.body) > MAX_RESPONSE_BYTES:
             raise MCPError('mcp: response exceeds byte limit')
         received = normalize_headers(response.headers)
-        if not self.session_id:
-            self.session_id = received.get('mcp-session-id', '')
         if not expect:
             return None
         if received.get('content-type', '').lower().startswith('text/event-stream'):
@@ -172,13 +178,19 @@ class Client:
             reply = _decode(response.body)
         if reply.get('jsonrpc') != '2.0' or type(reply.get('id')) is not int or reply['id'] != frame['id']:
             raise MCPError('mcp: invalid version or mismatched response id')
-        if reply.get('error') is not None:
+        if 'method' in reply:
+            raise MCPError('mcp: expected response, received request')
+        if ('result' in reply) == ('error' in reply):
+            raise MCPError('mcp: expected exactly one of result or error')
+        if 'error' in reply:
             error = reply['error']
             if not isinstance(error, dict) or type(error.get('code')) is not int or not isinstance(error.get('message'), str):
                 raise MCPError('mcp: malformed RPC error')
             raise RPCError(error['code'], error['message'])
-        if 'result' not in reply:
-            raise MCPError('mcp: missing result')
+        # Only a successful initialize response establishes a session. Keep it
+        # before the initialized notification so that notification carries it.
+        if frame['method'] == 'initialize' and not self.session_id:
+            self.session_id = received.get('mcp-session-id', '')
         return reply['result']
 
     def rpc(self, method: str, params: Any) -> Any:

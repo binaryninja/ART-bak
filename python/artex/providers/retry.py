@@ -20,7 +20,13 @@ Only side-effect-free model providers/transports may be wrapped. This does not
 wrap tool execution or guarantee provider billing idempotency. Cancellation and
 time bounds are cooperative: a blocking provider/transport must enforce its own
 timeout. Retry waits use <=50ms slices and check context before/after each slice.
+Context metadata accepts general mappings, matching the underlying provider;
+live cancellation checks still consult the original mapping. A response belongs
+to the retry transport until returned and is closed if cancellation interrupts
+that handoff, including cancellation derived directly from BaseException.
+Ordinary cleanup failures must not replace the handoff cancellation or cause replay.
 """
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 import math
@@ -76,7 +82,7 @@ class _Budget:
 
 class _Context(dict):
     def __init__(self, original, budget):
-        super().__init__(original if isinstance(original, dict) else {})
+        super().__init__(original if isinstance(original, Mapping) else {})
         self.original, self.budget = original, budget
     def check(self):
         check = getattr(self.original,'check',None)
@@ -90,7 +96,7 @@ class _Context(dict):
         err = getattr(self.original,'err',None)
         error = err() if callable(err) else None
         if error is not None: return error
-        if isinstance(self.original,dict):
+        if isinstance(self.original,Mapping):
             if self.original.get('cancelled'): return TransportCancelled('request canceled')
             runtime = self.original.get('runtime_context')
             check = getattr(runtime,'check',None)
@@ -137,9 +143,18 @@ class RetryTransport(_Layer):
                 response=self.transport(context,url,dict(headers),body,stream)
                 context.check()
             except Exception as error:
-                if response is not None: response.close()
+                if response is not None:
+                    try: response.close()
+                    except Exception: pass  # Preserve the handoff failure, as in the BaseException branch.
                 context.check()
                 if attempt >= self.policy.count('connect') or not _transient(error): raise
+            except BaseException:
+                # Async cancellation / generator exit must release a response
+                # obtained just before the context check, without retrying it.
+                if response is not None:
+                    try: response.close()
+                    except Exception: pass  # Keep cancellation primary; cleanup must not become a retryable error.
+                raise
             else:
                 if response.status not in (408,429,500,502,503,504) or attempt >= self.policy.count('connect'):
                     return response

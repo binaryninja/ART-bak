@@ -121,6 +121,7 @@ export default function AssetsPage() {
   const [dslError, setDslError] = React.useState("");
   const [refreshKey, setRefreshKey] = React.useState(0);
   const assetsRequestRef = React.useRef(0);
+  const metaRequestRef = React.useRef(0);
   const [rowsTab, setRowsTab] = React.useState("");
 
   // asset selection & delete
@@ -136,15 +137,20 @@ export default function AssetsPage() {
 
   // Companies + per-type counts (tab badges) — loaded on demand, no background polling.
   const loadMeta = React.useCallback(() => {
+    const request = ++metaRequestRef.current;
     api
       .companies()
-      .then(setCompanies)
+      .then((items) => {
+        if (metaRequestRef.current === request) setCompanies(items);
+      })
       .catch(() => {
         /* Keep the last successful company snapshot on a transient failure. */
       });
     api
       .assetCounts()
-      .then(setCounts)
+      .then((items) => {
+        if (metaRequestRef.current === request) setCounts(items);
+      })
       .catch(() => {
         /* Keep the last successful counters on a transient failure. */
       });
@@ -225,6 +231,7 @@ export default function AssetsPage() {
 
   React.useEffect(() => {
     loadMeta();
+    return () => { metaRequestRef.current++; };
   }, [loadMeta]);
 
   // Reset query + page + selection when switching tabs
@@ -971,44 +978,127 @@ function savedScopeText(company: Company): string {
     .join("\n");
 }
 
+// Each opening owns its initial draft and pending mutation. A refreshed company
+// object is metadata, not permission to replace an in-progress scope edit.
+function useAssetEditor<T extends object>(
+  identity: string | number,
+  initialDraft: () => T,
+  { freezeWhileSaving = false }: { freezeWhileSaving?: boolean } = {},
+) {
+  type Session = { identity: string | number; draft: T; pending: Operation | null };
+  type Operation = { session: Session; draft: T };
+  const [draft, setDraft] = React.useState(initialDraft);
+  const [openIdentity, setOpenIdentity] = React.useState<string | number | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const sessionRef = React.useRef<Session | null>(null);
+  const activeIdentity = React.useRef<string | number | null>(null);
+
+  React.useLayoutEffect(() => {
+    activeIdentity.current = identity;
+    if (!sessionRef.current || sessionRef.current.identity !== identity) {
+      sessionRef.current = null;
+      setOpenIdentity(null);
+    }
+    setBusy(sessionRef.current?.pending != null);
+    return () => { activeIdentity.current = null; };
+  }, [identity]);
+
+  function setOpen(next: boolean) {
+    if (activeIdentity.current !== identity) return;
+    if (next) {
+      if (sessionRef.current?.identity === identity) return;
+      const nextDraft = initialDraft();
+      sessionRef.current = { identity, draft: nextDraft, pending: null };
+      setDraft(nextDraft);
+      setOpenIdentity(identity);
+    } else {
+      sessionRef.current = null;
+      setOpenIdentity(null);
+    }
+    setBusy(false);
+  }
+
+  function edit(patch: Partial<T>) {
+    const session = sessionRef.current;
+    if (activeIdentity.current !== identity || session?.identity !== identity) return;
+    if (freezeWhileSaving && session.pending) return;
+    session.draft = { ...session.draft, ...patch };
+    setDraft(session.draft);
+  }
+
+  function beginSave(): Operation | null {
+    const session = sessionRef.current;
+    if (activeIdentity.current !== identity || session?.identity !== identity || session.pending) return null;
+    const operation = { session, draft: session.draft };
+    session.pending = operation;
+    setBusy(true);
+    return operation;
+  }
+
+  const owns = (operation: Operation) => activeIdentity.current === identity &&
+    sessionRef.current === operation.session && operation.session.pending === operation;
+  const changed = (operation: Operation) => operation.session.draft !== operation.draft;
+
+  function closeSaved(operation: Operation) {
+    if (sessionRef.current !== operation.session || operation.session.pending !== operation || changed(operation)) return;
+    if (activeIdentity.current === identity) setOpen(false);
+    else sessionRef.current = null;
+  }
+
+  function finishSave(operation: Operation) {
+    if (operation.session.pending !== operation) return;
+    const current = owns(operation);
+    operation.session.pending = null;
+    if (current) setBusy(false);
+  }
+
+  return { draft, open: openIdentity === identity, busy, setOpen, edit, beginSave, owns, changed, closeSaved, finishSave };
+}
+
 // Add companies in a right drawer, consistent with tasks and LLM edits.
 function CompanyDialog({ onSaved }: { onSaved: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  const [name, setName] = React.useState("");
-  const [scopeText, setScopeText] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
+  // Creation has no update continuation: keep the submitted draft fixed until
+  // acknowledgement so a remaining draft cannot accidentally create twice.
+  const editor = useAssetEditor("new-company", () => ({ name: "", scopeText: "" }), { freezeWhileSaving: true });
+  const { open, busy, setOpen, draft: { name, scopeText } } = editor;
+  const setName = (value: string) => editor.edit({ name: value });
+  const setScopeText = (value: string) => editor.edit({ scopeText: value });
   const parsedScope = React.useMemo(() => parseCompanyScopeText(scopeText), [scopeText]);
 
-  React.useEffect(() => {
-    if (!open) return;
-    setName("");
-    setScopeText("");
-  }, [open]);
-
   const submit = async () => {
-    if (!name.trim()) {
-      toast.error("Enter a company name");
-      return;
-    }
-    if (parsedScope.errors.length > 0) {
-      toast.error("Correct invalid asset scope entries");
-      return;
-    }
-    setBusy(true);
+    const operation = editor.beginSave();
+    if (!operation) return;
     try {
-      const res = await api.createCompany(name.trim(), parsedScope.rules);
+      const submitted = operation.draft;
+      const parsed = parseCompanyScopeText(submitted.scopeText);
+      if (!submitted.name.trim()) {
+        toast.error("Enter a company name");
+        return;
+      }
+      if (parsed.errors.length > 0) {
+        toast.error("Correct invalid asset scope entries");
+        return;
+      }
+      const res = await api.createCompany(submitted.name.trim(), parsed.rules);
+      if (!editor.owns(operation)) {
+        // Retire an acknowledged create if the same instance is inactive. A
+        // later effect setup must not expose it as an unsaved creation again.
+        editor.closeSaved(operation);
+        return;
+      }
       const added = res.scope_added ?? 0;
       const invalid = res.scope_invalid ?? 0;
       if (invalid > 0) toast.warning(`Company created with ${added} scope entries; ${invalid} invalid rows`);
       else toast.success(`Company created with ${added} scope entries`);
-      setOpen(false);
       onSaved();
+      editor.closeSaved(operation);
     } catch (e) {
+      if (!editor.owns(operation)) return;
       const msg = String((e as Error)?.message ?? e);
       if (/:\s*409$/.test(msg)) toast.error("Company already exists. Choose another name.");
       else toast.error(`Save failed: ${msg}`);
     } finally {
-      setBusy(false);
+      editor.finishSave(operation);
     }
   };
 
@@ -1025,18 +1115,20 @@ function CompanyDialog({ onSaved }: { onSaved: () => void }) {
           <SheetDescription>Configure the company and its asset scope. Keywords only guide agents and do not assign assets automatically.</SheetDescription>
         </SheetHeader>
         <div className="flex-1 overflow-y-auto p-6">
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="cn-name">Company name</FieldLabel>
-              <Input
-                id="cn-name"
-                placeholder="e.g. Acme Corp (unique name)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </Field>
-            <ScopeTextEditor id="cn-scope" value={scopeText} onValueChange={setScopeText} parsed={parsedScope} />
-          </FieldGroup>
+          <fieldset disabled={busy} aria-label="Company details" className="min-w-0">
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="cn-name">Company name</FieldLabel>
+                <Input
+                  id="cn-name"
+                  placeholder="e.g. Acme Corp (unique name)"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+              <ScopeTextEditor id="cn-scope" value={scopeText} onValueChange={setScopeText} parsed={parsedScope} />
+            </FieldGroup>
+          </fieldset>
         </div>
         <SheetFooter className="flex-row justify-end gap-2 border-t p-4">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
@@ -1053,40 +1145,40 @@ function CompanyDialog({ onSaved }: { onSaved: () => void }) {
 
 // Edit/replace asset scope dialog
 function EditScopeDialog({ company, onSaved }: { company: Company; onSaved: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  const [scopeText, setScopeText] = React.useState("");
-  const [reason, setReason] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const preservedScopeRules = React.useMemo(() => savedScopeRules(company), [company]);
+  const editor = useAssetEditor(company.id, () => ({
+    companyId: company.id, scopeText: savedScopeText(company), reason: "", preservedRules: savedScopeRules(company),
+  }));
+  const { open, busy, setOpen, draft: { scopeText, reason, preservedRules } } = editor;
+  const setScopeText = (value: string) => editor.edit({ scopeText: value });
+  const setReason = (value: string) => editor.edit({ reason: value });
   const parsedScope = React.useMemo(
-    () => parseCompanyScopeText(scopeText, { preservedRules: preservedScopeRules }),
-    [preservedScopeRules, scopeText],
+    () => parseCompanyScopeText(scopeText, { preservedRules }),
+    [preservedRules, scopeText],
   );
 
-  React.useEffect(() => {
-    if (!open) return;
-    setScopeText(savedScopeText(company));
-    setReason("");
-  }, [open, company]);
-
   const submit = async () => {
-    if (parsedScope.errors.length > 0) {
-      toast.error("Correct invalid asset scope entries");
-      return;
-    }
-    setBusy(true);
+    const operation = editor.beginSave();
+    if (!operation) return;
     try {
-      const res = await api.updateCompanyScope(company.id, parsedScope.rules, reason);
+      const submitted = operation.draft;
+      const parsed = parseCompanyScopeText(submitted.scopeText, { preservedRules: submitted.preservedRules });
+      if (parsed.errors.length > 0) {
+        toast.error("Correct invalid asset scope entries");
+        return;
+      }
+      const res = await api.updateCompanyScope(submitted.companyId, parsed.rules, submitted.reason);
+      if (!editor.owns(operation)) return;
       const errCount = res.invalid ?? 0;
-      if (errCount > 0) toast.warning(`Saved; ${errCount} invalid rows`);
-      else toast.success(`Scope updated: ${res.added} entries`);
+      const suffix = editor.changed(operation) ? "; newer edits remain unsaved" : "";
+      if (errCount > 0) toast.warning(`Saved; ${errCount} invalid rows${suffix}`);
+      else toast.success(`Scope updated: ${res.added} entries${suffix}`);
       showScopeWarnings(res.warnings);
-      setOpen(false);
       onSaved();
+      editor.closeSaved(operation);
     } catch (e) {
-      toast.error(`Save failed: ${String((e as Error)?.message ?? e)}`);
+      if (editor.owns(operation)) toast.error(`Save failed: ${String((e as Error)?.message ?? e)}`);
     } finally {
-      setBusy(false);
+      editor.finishSave(operation);
     }
   };
 
@@ -1136,40 +1228,39 @@ function EditScopeDialog({ company, onSaved }: { company: Company; onSaved: () =
 
 // Append asset scope dialog
 function AppendScopeDialog({ company, onSaved }: { company: Company; onSaved: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  const [scopeText, setScopeText] = React.useState("");
-  const [reason, setReason] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
+  const editor = useAssetEditor(company.id, () => ({ companyId: company.id, scopeText: "", reason: "" }));
+  const { open, busy, setOpen, draft: { scopeText, reason } } = editor;
+  const setScopeText = (value: string) => editor.edit({ scopeText: value });
+  const setReason = (value: string) => editor.edit({ reason: value });
   const parsedScope = React.useMemo(() => parseCompanyScopeText(scopeText), [scopeText]);
 
-  React.useEffect(() => {
-    if (!open) return;
-    setScopeText("");
-    setReason("");
-  }, [open]);
-
   const submit = async () => {
-    if (parsedScope.rules.length === 0) {
-      toast.error("Enter scope entries to append");
-      return;
-    }
-    if (parsedScope.errors.length > 0) {
-      toast.error("Correct invalid asset scope entries");
-      return;
-    }
-    setBusy(true);
+    const operation = editor.beginSave();
+    if (!operation) return;
     try {
-      const res = await api.addCompanyScope(company.id, parsedScope.rules, reason);
+      const submitted = operation.draft;
+      const parsed = parseCompanyScopeText(submitted.scopeText);
+      if (parsed.rules.length === 0) {
+        toast.error("Enter scope entries to append");
+        return;
+      }
+      if (parsed.errors.length > 0) {
+        toast.error("Correct invalid asset scope entries");
+        return;
+      }
+      const res = await api.addCompanyScope(submitted.companyId, parsed.rules, submitted.reason);
+      if (!editor.owns(operation)) return;
       const errCount = res.invalid ?? 0;
-      if (errCount > 0) toast.warning(`Saved; ${errCount} invalid rows`);
-      else toast.success(`Appended ${res.added} scope entries`);
+      const suffix = editor.changed(operation) ? "; newer edits remain unsaved" : "";
+      if (errCount > 0) toast.warning(`Saved; ${errCount} invalid rows${suffix}`);
+      else toast.success(`Appended ${res.added} scope entries${suffix}`);
       showScopeWarnings(res.warnings);
-      setOpen(false);
       onSaved();
+      editor.closeSaved(operation);
     } catch (e) {
-      toast.error(`Save failed: ${String((e as Error)?.message ?? e)}`);
+      if (editor.owns(operation)) toast.error(`Save failed: ${String((e as Error)?.message ?? e)}`);
     } finally {
-      setBusy(false);
+      editor.finishSave(operation);
     }
   };
 

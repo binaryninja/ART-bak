@@ -3,9 +3,9 @@ import copy
 import unittest
 
 from artex.sidequestion import (
-    AnswerError, Capture, ContextBudgetError, Exchange, Memory, Model, Parent,
+    AnswerError, CancelledError, Capture, ContextBudgetError, Exchange, Memory, Model, Parent,
     Replay, SideQuestionService, Snapshot, build_request, estimate_input_tokens,
-    input_budget, message_groups, output_budget, user_text,
+    input_budget, message_groups, output_budget, user_text, _ContextBuilder,
 )
 
 
@@ -76,6 +76,23 @@ class SideQuestionTests(unittest.TestCase):
         with self.assertRaises(ContextBudgetError):
             build_request(self.snapshot('x' * 100000, window=10000), [], 'question')
 
+    def test_nonpositive_windows_use_default_for_request_and_summary_budgets(self):
+        for window in (0, -1, -200000):
+            with self.subTest(window=window):
+                snapshot = self.snapshot(window=window)
+                self.assertEqual(input_budget(snapshot, 8192), 183616)
+                self.assertEqual(build_request(snapshot, [], 'q'),
+                                 build_request(self.snapshot(window=200000), [], 'q'))
+                fake = Fake()
+                _, info = SideQuestionService(fake).respond(
+                    self.snapshot('x' * 500000, window=window), 'q')
+                self.assertEqual(info.input_budget, 183616)
+                self.assertTrue(info.snapshot_summarized)
+                self.assertGreater(len(fake.calls), 1)
+                for request in fake.calls[:-1]:
+                    self.assertLessEqual(estimate_input_tokens(request) +
+                                         request['max_tokens'] + 512, 200000)
+
     def test_tool_pair_groups(self):
         messages = [user_text('first'), {'role': 'assistant', 'content': [{'type': 'tool_use', 'id': 'a'}]},
                     user_text('interleaved'), {'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': 'a', 'content': 'result'}]}]
@@ -114,6 +131,92 @@ class SideQuestionTests(unittest.TestCase):
         self.assertEqual(saves[-1].through, 30)
         self.assertEqual(out.usage['input_tokens'], 3)
         self.assertEqual(replay.memory.through, 0)
+
+    def test_long_replay_fits_small_window_and_reuses_saved_summary(self):
+        # Go context_test.go exercises 20 long replies under the shared call cap.
+        # A slightly larger fixture exposes the Python fitter's half-chunk loss.
+        history = [Exchange(f'question-{i}', 'evidence ' * 3300, ordinal=i)
+                   for i in range(1, 21)]
+        snapshot = self.snapshot(window=32000)
+        before = copy.deepcopy(snapshot)
+        saves, loads = [], []
+
+        def load(after):
+            loads.append(after)
+            return [exchange for exchange in history if exchange.ordinal > after][:20]
+
+        fake = Fake()
+        out, info = SideQuestionService(fake).respond(
+            snapshot, 'current status?', Replay(load=load, save=saves.append))
+        summaries = [request for request in fake.calls if request.get('thinking') == 'disabled']
+        self.assertGreater(len(summaries), 1)
+        self.assertLessEqual(len(summaries), 12)
+        for request in summaries:
+            self.assertNotIn('tools', request)
+            self.assertEqual(request['max_tokens'], 2048)
+            self.assertLessEqual(estimate_input_tokens(request) + 2048 + 512, 32000)
+        self.assertEqual(out.usage, {'input_tokens': len(summaries) + 1,
+                                    'output_tokens': 2 * (len(summaries) + 1)})
+        self.assertEqual(info.recent_exchanges, 0)
+        self.assertTrue(info.history_summarized)
+        self.assertLessEqual(info.estimated_input_tokens, info.input_budget)
+        self.assertEqual(saves[-1].through, 20)
+        self.assertEqual(snapshot, before)
+
+        restarted = Fake()
+        loads.clear()
+        SideQuestionService(restarted).respond(
+            snapshot, 'continue', Replay(memory=saves[-1], load=load, save=saves.append))
+        self.assertEqual(loads, [20])
+        self.assertEqual(len(restarted.calls), 1)
+
+    def test_summary_chunks_preserve_multibyte_material_and_reserved_budget(self):
+        for unit in ('x', '\u4e2d\U0001f600', '\\"\n'):
+            for prior_length in range(12):
+                with self.subTest(unit=unit, prior_length=prior_length):
+                    fake = Fake()
+                    builder = _ContextBuilder(SideQuestionService(fake), Replay(),
+                                              self.snapshot(window=32000), None, None)
+                    material = unit * 30000
+                    summary = builder.summarize('p' * prior_length, material)
+                    chunks = []
+                    prior = 'p' * prior_length
+                    for request in fake.calls:
+                        self.assertLessEqual(estimate_input_tokens(request) +
+                                             request['max_tokens'] + 512, 32000)
+                        text = request['messages'][0]['content'][0]['text']
+                        prefix = '[Previous summary]\n' + prior + '\n[New material]\n'
+                        self.assertTrue(text.startswith(prefix))
+                        chunks.append(text[len(prefix):])
+                        self.assertTrue(chunks[-1])
+                        chunks[-1].encode('utf-8', errors='strict')
+                        prior = 'Retained evidence and unresolved questions.'
+                    self.assertEqual(''.join(chunks), material)
+                    self.assertEqual(summary, prior)
+                    self.assertLessEqual(len(fake.calls), 12)
+
+    def test_cancel_during_summary_retains_usage_without_save_or_answer(self):
+        cancelled = [False]
+
+        class CancellingFake(Fake):
+            def complete(self, request):
+                response = super().complete(request)
+                cancelled[0] = True
+                return response
+
+        fake = CancellingFake()
+        saves = []
+        history = [Exchange('q', 'a', ordinal=i) for i in range(1, 22)]
+        replay = Replay(load=lambda after: history if after == 0 else [], save=saves.append)
+        with self.assertRaises(AnswerError) as error:
+            SideQuestionService(fake).respond(self.snapshot(), 'q', replay,
+                                              cancelled=lambda: cancelled[0])
+        self.assertIsInstance(error.exception.__cause__, CancelledError)
+        self.assertEqual(error.exception.answer.usage, {'input_tokens': 1, 'output_tokens': 2})
+        self.assertEqual(len(fake.calls), 1)
+        self.assertEqual(fake.calls[0]['thinking'], 'disabled')
+        self.assertFalse(saves)
+        self.assertEqual(replay.memory, Memory())
 
     def test_invalid_cursor_and_generation_rejection(self):
         with self.assertRaisesRegex(AnswerError, 'cursor'):

@@ -5,6 +5,8 @@ scope expansion is implemented. Wrap the returned WHERE expression in parenthese
 before adding an AND scope/type constraint, so an OR cannot escape that constraint.
 Unknown field-like tokens remain bare-text searches, as in the Go implementation.
 Unicode whitespace is recognized correctly rather than using Go's byte-wise test.
+Empty bare quoted tokens retain Go's one-character cursor advance; the closing
+quote can start the next token. Empty quoted field values are separate values.
 """
 from dataclasses import dataclass
 import re
@@ -70,10 +72,14 @@ def _tokenize(text: str) -> list[tuple[str, Expr | None]]:
                 pos = end
                 continue
         value, end = _read_token(text, pos)
-        pos = max(end, pos + 1)
-        if value:
-            tokens.append((value.upper(), None) if value.upper() in ('AND', 'OR')
-                          else ('LEAF', Expr('', '=', value)))
+        if not value:
+            # Go advances one byte for an empty bare word, not to readToken's
+            # end. In ""port=80 the second quote therefore starts bare text.
+            pos += 1
+            continue
+        pos = end
+        tokens.append((value.upper(), None) if value.upper() in ('AND', 'OR')
+                      else ('LEAF', Expr('', '=', value)))
     tokens.append(('EOF', None))
     return tokens
 
