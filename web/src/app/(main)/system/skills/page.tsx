@@ -318,7 +318,10 @@ export default function SkillsPage() {
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [selected, setSelectedState] = React.useState<Selected | null>(null);
   const selectionRef = React.useRef<Selected | null>(null);
+  const fileReloadCleanup = React.useRef<(() => void) | null>(null);
   function setSelected(next: Selected | null) {
+    fileReloadCleanup.current?.();
+    fileReloadCleanup.current = null;
     selectionRef.current = next;
     setSelectedState(next);
   }
@@ -330,6 +333,11 @@ export default function SkillsPage() {
     return () => { alive.current = false; catalogRequest.current = null; };
   }, []);
   const [visibility, setVisibility] = React.useState<Record<string, string[]>>({});
+  React.useEffect(() => () => {
+    fileReloadCleanup.current?.();
+    fileReloadCleanup.current = null;
+  }, []);
+
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
   // Mounted workspace caches drafts by exact skill/path. The model fences
@@ -679,6 +687,15 @@ export default function SkillsPage() {
         if (deleteAlive.current) setDeleting(false);
       }
     }
+  }
+
+  function reloadFile() {
+    if (!selected || selected.path === null || selectionRef.current !== selected || !alive.current) return;
+    const state = workspace.getSnapshot();
+    const entry = state.drafts.get(skillFileKey(selected.skill, selected.path));
+    if (!entry?.loaded || entry.dirty || entry.deleted || entry.loading || state.rootPending || state.importPending || state.deletionPending || state.pending.has(selected.skill)) return;
+    fileReloadCleanup.current?.();
+    fileReloadCleanup.current = workspace.read(selected.skill, selected.path, { reload: true });
   }
 
   async function saveFile() {
@@ -1191,17 +1208,20 @@ export default function SkillsPage() {
                 <span className="font-medium text-foreground">{selected.skill}</span>
                 <span>/</span>
                 <span className="font-mono">{selected.path}</span>
-                <Button size="sm" className="ml-auto" onClick={saveFile} disabled={!fileDraft?.loaded || !fileDraft.dirty || fileDraft.deleted || saving || blocked}>
+                {fileDraft?.loaded && <Button size="sm" variant="outline" className="ml-auto" onClick={reloadFile} disabled={fileDraft.dirty || fileDraft.deleted || fileDraft.loading || saving || !!workspaceState.rootPending || !!workspaceState.importPending || !!workspaceState.deletionPending} title="Read this file again without discarding unsaved text. This does not reconcile unconfirmed writes.">
+                  {fileDraft.loading ? "Reloading…" : "Reload file"}
+                </Button>}
+                <Button size="sm" className={fileDraft?.loaded ? undefined : "ml-auto"} onClick={saveFile} disabled={!fileDraft?.loaded || !fileDraft.dirty || fileDraft.deleted || saving || blocked}>
                   {saving ? "Saving…" : "Save"}
                 </Button>
               </div>
               {fileDraft?.deleted && <p role="status" className="text-destructive text-xs">This path was deleted on the host. Cached text is retained only in this page; copy anything needed before leaving. Save and recreation are disabled until you reconcile and reopen the workspace.</p>}
               {fileDraft?.dirty && <p className="text-muted-foreground text-xs">Unsaved draft retained for this file until you leave this page.</p>}
               {fileDraft?.error && (
-                <div role="alert" className="text-destructive text-sm">Read failed: {fileDraft.error} <Button variant="outline" onClick={() => setFileRetry((n) => n + 1)}>Retry read</Button></div>
+                <div role="alert" className="text-destructive text-sm">{fileDraft.loaded ? "Reload failed; showing cached text: " : "Read failed: "}{fileDraft.error} {!fileDraft.loaded && <Button variant="outline" onClick={() => setFileRetry((n) => n + 1)}>Retry read</Button>}</div>
               )}
               {!fileDraft?.error && fileLoading && <p className="text-muted-foreground text-xs">Loading…</p>}
-              {!fileDraft?.error && !fileLoading && (
+              {(fileDraft?.loaded || (!fileDraft?.error && !fileLoading)) && (
                 <Textarea
                   className="flex-1 resize-none font-mono text-xs"
                   value={fileDraft?.content ?? ""}

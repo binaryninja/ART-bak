@@ -14,9 +14,10 @@ test("Info-ZIP compatibility changes one literal only, not any Skills behavior",
   assert.equal(page.split(caption).length - 1, 1);
   assert.equal(page.includes(oldCaption), false);
   const restored = page.replace(caption, oldCaption);
+  // Rebaseline to the independently reviewed clean-file reload page; import behavior is unchanged.
   assert.equal(
     createHash("sha256").update(restored).digest("hex"),
-    "06ec2725b979d5048451ed6f68ff2aeb9f1bd60f304db8def5276a5675683b25",
+    "0130087febdbb1a6d11c919b05456fb35cf04074738c0399071bc968e1854529",
   );
 });
 

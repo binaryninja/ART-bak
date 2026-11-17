@@ -328,7 +328,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
     },
     // The effect owns this exact token. Cleanup retires hanging reads without
     // clearing a replacement effect's token (including StrictMode replay).
-    read(skill, path) {
+    read(skill, path, { reload = false } = {}) {
       const key = skillFileKey(skill, path),
         entry = draft(skill, path);
       if (entry.deleted) {
@@ -340,7 +340,22 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
           /* Deleted paths never acquire another read owner. */
         };
       }
-      if (entry.loaded)
+      // Explicit reload is read-only and never discards an unsaved draft or
+      // races an already-dispatched mutation. Unknown-outcome latches stay set.
+      if (
+        reload &&
+        (!entry.loaded ||
+          entry.dirty ||
+          entry.loading ||
+          rootPending ||
+          importPending ||
+          deletionPending() ||
+          pending.has(skill))
+      )
+        return () => {
+          /* No reload owner is acquired while this draft is unavailable. */
+        };
+      if (entry.loaded && !reload)
         return () => {
           /* No read owner exists for a cached draft. */
         };
@@ -349,7 +364,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       replace(key, { loading: true, error: null });
       publish();
       Promise.resolve()
-        .then(() => api.readSkillFile(skill, path))
+        .then(() => (reads.get(key) === token ? api.readSkillFile(skill, path) : undefined))
         .then((content) => {
           if (reads.get(key) !== token || drafts.get(key).revision !== token.revision) return;
           if (typeof content !== "string") throw new Error("Invalid file content response");
@@ -377,7 +392,10 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       const key = skillFileKey(skill, path),
         entry = drafts.get(key);
       if (!entry?.loaded || typeof content !== "string") return;
-      replace(key, { content, revision: entry.revision + 1, dirty: content !== entry.baseline });
+      // An edit supersedes any clean-file reload immediately, even if the user
+      // later types the old baseline again. Its late response cannot erase text.
+      reads.delete(key);
+      replace(key, { content, revision: entry.revision + 1, dirty: content !== entry.baseline, loading: false });
       publish();
     },
     async importArchive(file) {

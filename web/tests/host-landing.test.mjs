@@ -302,7 +302,8 @@ test("root and component use only landing/profile, explicit retry and commit-pha
     createHash("sha256")
       .update(readFileSync(new URL(`../src/${path}`, import.meta.url)))
       .digest("hex");
-  assert.equal(digest("lib/api.ts"), "96930e314cf06163dc9d32151d045cbcae4db41c6e44641caf6d268ea54646a2");
+  // Skills file GET now bypasses cache; the shared authentication transport is unchanged.
+  assert.equal(digest("lib/api.ts"), "1dceabd52e1c892e3007fd05b094cc167cc35409d19b071c969c98f1022ff07b");
   assert.equal(digest("lib/auth.ts"), "f7df65baa69bf7945a36394d196a534a4d9d35c396ecc1da204ba1f106283f3d");
 });
 

@@ -1217,7 +1217,7 @@ export const api = {
   },
   skillFiles: (name: string) => get<{ files: string[] }>(`/skills/${name}/files`).then((r) => r.files),
   readSkillFile: (name: string, file: string) =>
-    get<unknown>(skillResourcePath(name, file)).then((r) => confirmedSkillContent(r, file)),
+    http<unknown>(skillResourcePath(name, file), { cache: "no-store" }).then((r) => confirmedSkillContent(r, file)),
   writeSkillFile: async (name: string, file: string, content: string) =>
     confirmedSkillWrite(await http<unknown>(skillResourcePath(name, file), {
       method: "PUT", body: JSON.stringify({ content }),

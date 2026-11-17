@@ -76,7 +76,7 @@ export function createSkillWorkspace(
   subscribe(listener: () => void): () => void;
   getSnapshot(): SkillWorkspaceSnapshot;
   readProfile(): () => void;
-  read(skill: string, path: string): () => void;
+  read(skill: string, path: string, options?: { reload?: boolean }): () => void;
   edit(skill: string, path: string, content: string): void;
   importArchive(file: File): Promise<{ name: string; files: number } | null>;
   createSkill(input: SkillCreationInput): Promise<{ name: string } | null>;
