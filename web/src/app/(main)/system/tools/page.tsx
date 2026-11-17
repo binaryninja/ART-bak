@@ -97,14 +97,31 @@ function toRows(schema: Record<string, any>): ParamRow[] {
 
 // coerceDefault turns the edited default string back into a typed JSON value, or
 // undefined to drop the "default" key entirely.
-function coerceDefault(type: string, raw: string): unknown {
+function coerceDefault(type: string, raw: string, field = "Default"): unknown {
   const s = raw.trim();
   if (s === "") return undefined;
   if (type === "integer" || type === "number") {
     const n = Number(s);
-    return Number.isNaN(n) ? undefined : n;
+    if (!Number.isFinite(n)) throw new Error(`${field}: enter a finite ${type} default`);
+    // Detect nonzero decimal underflow and fractional values that Number rounds
+    // to integers. Exponent notation remains supported without expanding it.
+    const decimal = /^[+-]?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:e([+-]?\d+))?$/i.exec(s);
+    const fraction = decimal?.[2] ?? decimal?.[3] ?? "";
+    const digits = `${decimal?.[1] ?? ""}${fraction}`;
+    const scale = Number(decimal?.[4] ?? "0") - fraction.length;
+    const nonzero = /[1-9]/.test(digits);
+    if (n === 0 && nonzero) throw new Error(`${field}: numeric default is outside the supported range`);
+    const fractional = nonzero && scale < 0 && (-scale > digits.length || /[1-9]/.test(digits.slice(digits.length + scale)));
+    if (type === "integer" && (!Number.isSafeInteger(n) || fractional)) {
+      throw new Error(`${field}: enter an exact integer default between ${Number.MIN_SAFE_INTEGER} and ${Number.MAX_SAFE_INTEGER}`);
+    }
+    return n;
   }
-  if (type === "boolean") return s === "true";
+  if (type === "boolean") {
+    if (s.toLowerCase() === "true") return true;
+    if (s.toLowerCase() === "false") return false;
+    throw new Error(`${field}: boolean default must be true or false`);
+  }
   return raw;
 }
 
@@ -122,7 +139,7 @@ function applyRows(schema: Record<string, any>, rows: ParamRow[]): Record<string
       if (!subP) continue;
       subP.description = r.description;
       if (r.scalar) {
-        const dv = coerceDefault(r.type, r.defaultStr);
+        const dv = coerceDefault(r.type, r.defaultStr, `${r.parentKey}.${r.name}`);
         if (dv === undefined) delete subP.default;
         else subP.default = dv;
       }
@@ -131,7 +148,7 @@ function applyRows(schema: Record<string, any>, rows: ParamRow[]): Record<string
       if (!p) continue;
       p.description = r.description;
       if (r.scalar) {
-        const dv = coerceDefault(r.type, r.defaultStr);
+        const dv = coerceDefault(r.type, r.defaultStr, r.name);
         if (dv === undefined) delete p.default;
         else p.default = dv;
       }
@@ -284,7 +301,7 @@ function ToolEditor({
                   <Label className="text-muted-foreground text-[11px]">Default value</Label>
                   <Input
                     className="text-xs"
-                    placeholder={r.scalar ? "(Empty = no default)" : "Scalars only"}
+                    placeholder={r.scalar ? "(Empty = no default; booleans: true/false)" : "Scalars only"}
                     disabled={!r.scalar}
                     value={r.defaultStr}
                     onChange={(e) => setRow(i, { defaultStr: e.target.value })}
