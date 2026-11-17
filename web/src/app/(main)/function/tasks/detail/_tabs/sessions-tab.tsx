@@ -538,8 +538,27 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const [stopping, setStopping] = React.useState(false);
   const [mainChatRunning, setMainChatRunning] = React.useState<boolean | null>(null);
   const [unconfirmedControls, setUnconfirmedControls] = React.useState<Set<string>>(() => new Set());
-  const [controllingIntent, setControllingIntent] = React.useState<string | null>(null);
-  const [cancelIntent, setCancelIntent] = React.useState<Session | null>(null);
+  // Immediate per-task ownership survives navigation within this mounted tab;
+  // state mirrors it for display but is not the duplicate-request guard.
+  const uncertainControls = React.useRef(new Set<string>());
+  const controlRequests = React.useRef(new Map<string, { intentId: string }>());
+  const [controllingTasks, setControllingTasks] = React.useState(new Map<string, string>());
+  const controllingIntent = controllingTasks.get(taskId) ?? null;
+  const workerEpochs = React.useRef(new Map<string, number>());
+  const workerViewTask = React.useRef(taskId);
+  workerViewTask.current = taskId;
+  const workerViewAlive = React.useRef(true);
+  const [intentsTaskId, setIntentsTaskId] = React.useState<string | null>(null);
+  const workersReady = intentsTaskId === taskId;
+  const firstWorkerRead = React.useRef<{ taskId: string; epoch: number } | null>(null);
+  const olderWorkerRead = React.useRef<{ taskId: string; epoch: number } | null>(null);
+  const reloadWorkers = React.useRef<{ taskId: string; load: () => void } | null>(null);
+  const [cancelIntent, setCancelIntent] = React.useState<(Session & { controlTaskId: string }) | null>(null);
+  const cancelTarget = React.useRef<(Session & { controlTaskId: string }) | null>(null);
+  React.useEffect(() => {
+    workerViewAlive.current = true;
+    return () => { workerViewAlive.current = false; };
+  }, []);
   const [cancelReason, setCancelReason] = React.useState("");
   // Deletion: soft defaults to deleted state with reason and retained data; hard cascades to exclusive descendants.
   const [deleteMode, setDeleteMode] = React.useState<"soft" | "hard">("soft");
@@ -593,23 +612,37 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       state
         ? rows.map((row) => (row.id === intentId ? { ...row, state } : row))
         : rows.filter((row) => row.id !== intentId);
+    firstIntentsRef.current.items = patch(firstIntentsRef.current.items);
     setIntents(patch);
     setOlderIntents(patch);
   }, []);
 
   const controlWorker = React.useCallback(
     async (session: Session, action: "pause" | "resume" | "cancel", reason?: string, mode?: "soft" | "hard") => {
-      if (!session.intent_id || session.inherited || controllingIntent) return;
-      if (unconfirmedControls.has(`${taskId}:${session.intent_id}`)) { toast.error("Worker operation is pending or unconfirmed. Do not repeat it; reconciliation is required."); return; }
+      if (!workerViewAlive.current || workerViewTask.current !== taskId || firstIntentsRef.current.taskId !== taskId
+        || !session.intent_id || session.inherited || controlRequests.current.has(taskId)) return;
+      const controlKey = `${taskId}:${session.intent_id}`;
+      if (uncertainControls.current.has(controlKey)) { toast.error("Worker operation is pending or unconfirmed. Do not repeat it; reconciliation is required."); return; }
       if (PYTHON_PROFILE && action === "cancel") { toast.error("Intent deletion is unsupported by the experimental Python profile."); return; }
       if (action === "cancel" && !reason?.trim()) {
         toast.error("Enter a deletion reason");
         return;
       }
-      setControllingIntent(session.intent_id);
+      const request = { intentId: session.intent_id };
+      const cancellation = cancelTarget.current;
+      if (action === "cancel" && (!cancellation || cancellation !== session || cancellation.controlTaskId !== taskId)) return;
+      controlRequests.current.set(taskId, request);
+      setControllingTasks(new Map([...controlRequests.current].map(([id, value]) => [id, value.intentId])));
+      // Reads started before a control cannot later undo its rendered result.
+      workerEpochs.current.set(taskId, (workerEpochs.current.get(taskId) ?? 0) + 1);
+      if (olderWorkerRead.current?.taskId === taskId) {
+        olderWorkerRead.current = null;
+        setLoadingOlderIntents(false);
+      }
       try {
         const res = await api.controlIntent(taskId, session.intent_id, action, reason, mode);
         confirmedIntentState(res, action);
+        if (!workerViewAlive.current || workerViewTask.current !== taskId || firstIntentsRef.current.taskId !== taskId) return;
         if (action === "pause") {
           patchIntentState(session.intent_id, "paused");
           toast.success(`Worker #${session.intent_id} paused`);
@@ -622,22 +655,34 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           const d = res.deleted;
           const extra = d ? ` (including ${d.intents} intents / ${d.facts} facts / ${d.findings} findings)` : "";
           toast.success(`Worker #${session.intent_id} and exclusive descendants permanently deleted${extra}`);
-          setCancelReason("");
         } else {
           // Soft deletion sets deleted and records the reason while retaining the node and outputs.
           patchIntentState(session.intent_id, "deleted");
           toast.success(`Worker #${session.intent_id} deleted (reason recorded; the planner will replan accordingly)`);
-          setCancelReason("");
         }
       } catch (error) {
-        if (mutationMustWait(error)) setUnconfirmedControls(previous => new Set([...previous, `${taskId}:${session.intent_id}`]));
-        toast.error(`Worker operation failed: ${(error as Error).message}`);
+        if (mutationMustWait(error)) {
+          uncertainControls.current.add(controlKey);
+          if (workerViewAlive.current) setUnconfirmedControls(new Set(uncertainControls.current));
+        }
+        if (workerViewAlive.current && workerViewTask.current === taskId) toast.error(`Worker operation failed: ${(error as Error).message}`);
       } finally {
-        setControllingIntent(null);
-        setCancelIntent(null);
+        if (controlRequests.current.get(taskId) === request) controlRequests.current.delete(taskId);
+        workerEpochs.current.set(taskId, (workerEpochs.current.get(taskId) ?? 0) + 1);
+        if (workerViewAlive.current) {
+          setControllingTasks(new Map([...controlRequests.current].map(([id, value]) => [id, value.intentId])));
+          if (workerViewTask.current === taskId) {
+            if (action === "cancel" && cancellation && cancelTarget.current === cancellation) {
+              cancelTarget.current = null;
+              setCancelIntent(null);
+              setCancelReason("");
+            }
+            if (reloadWorkers.current?.taskId === taskId) reloadWorkers.current.load();
+          }
+        }
       }
     },
-    [controllingIntent, unconfirmedControls, patchIntentState, taskId],
+    [patchIntentState, taskId],
   );
 
   // SSE connection state — surfaced so a dropped realtime link is visible, never
@@ -657,7 +702,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const atBottomRef = React.useRef(true); // transcript pinned to bottom?
   const llmToastSeqRef = React.useRef<Set<number>>(new Set());
   const chatStatusRequestRef = React.useRef(0);
-  const firstIntentsRef = React.useRef<TaskNode[]>([]);
+  const firstIntentsRef = React.useRef<{ taskId: string | null; items: TaskNode[] }>({ taskId: null, items: [] });
   // Per-key request token: a stale response for a key is ignored (guards fast
   // latest/older interleaving). Writes are ALWAYS keyed, so a late response can only
   // touch its own session cache — never the currently-viewed one (see §7.5).
@@ -1078,20 +1123,34 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   // ── worker (intent) session list — paged, poll first page lightly ───────────────
   React.useEffect(() => {
     let active = true;
-    firstIntentsRef.current = [];
+    let ownedRead: { taskId: string; epoch: number } | null = null;
+    firstIntentsRef.current = { taskId: null, items: [] };
+    setIntentsTaskId(null);
     setIntents([]);
     setOlderIntents([]);
     setFirstIntentsHasMore(false);
     setOlderIntentsHasMore(false);
-    const load = () =>
-      api
-        .intentsPage(taskId, 0, 300)
+    olderWorkerRead.current = null;
+    setLoadingOlderIntents(false);
+    cancelTarget.current = null;
+    setCancelIntent(null);
+    setCancelReason("");
+    setDeleteMode("soft");
+    const load = () => {
+      if (!active || !workerViewAlive.current || workerViewTask.current !== taskId || controlRequests.current.has(taskId)) return;
+      const epoch = workerEpochs.current.get(taskId) ?? 0;
+      if (firstWorkerRead.current?.taskId === taskId && firstWorkerRead.current.epoch === epoch) return;
+      const request = { taskId, epoch };
+      ownedRead = request;
+      firstWorkerRead.current = request;
+      api.intentsPage(taskId, 0, 300)
         .then((r) => {
-          if (!active) return;
+          if (!active || !workerViewAlive.current || workerViewTask.current !== taskId
+            || firstWorkerRead.current !== request || (workerEpochs.current.get(taskId) ?? 0) !== epoch) return;
           const freshIds = new Set(r.items.map((item) => item.id));
           const oldestFreshId = r.items.reduce((minimum, item) => Math.min(minimum, Number(item.id)), Infinity);
           const displaced = r.hasMore
-            ? firstIntentsRef.current.filter((item) => !freshIds.has(item.id) && Number(item.id) < oldestFreshId)
+            ? firstIntentsRef.current.items.filter((item) => !freshIds.has(item.id) && Number(item.id) < oldestFreshId)
             : [];
           if (displaced.length > 0) {
             setOlderIntents((previous) => {
@@ -1100,30 +1159,47 @@ export function SessionsTab({ taskId }: { taskId: string }) {
               return [...byId.values()];
             });
           }
-          firstIntentsRef.current = r.items;
+          firstIntentsRef.current = { taskId, items: r.items };
           setIntents(r.items);
+          setIntentsTaskId(taskId);
           setFirstIntentsHasMore(r.hasMore);
         })
         .catch(() => {
           // Polling is best-effort; the next interval retries automatically.
+        })
+        .finally(() => {
+          if (firstWorkerRead.current === request) firstWorkerRead.current = null;
         });
-    void load();
+    };
+    reloadWorkers.current = { taskId, load };
+    load();
     const t = setInterval(load, 5000);
     return () => {
       active = false;
       clearInterval(t);
+      // Retire this effect's token even if its fetch never settles. A replacement
+      // effect must not coalesce against a read whose owner can no longer publish.
+      if (firstWorkerRead.current === ownedRead) firstWorkerRead.current = null;
+      if (reloadWorkers.current?.load === load) reloadWorkers.current = null;
     };
   }, [taskId]);
 
   const loadOlderIntents = React.useCallback(() => {
-    if (loadingOlderIntents) return;
+    if (!workerViewAlive.current || workerViewTask.current !== taskId || firstIntentsRef.current.taskId !== taskId
+      || controlRequests.current.has(taskId)) return;
+    const epoch = workerEpochs.current.get(taskId) ?? 0;
+    if (olderWorkerRead.current?.taskId === taskId && olderWorkerRead.current.epoch === epoch) return;
     const all = [...intents, ...olderIntents];
     const minId = all.reduce((m, n) => Math.min(m, Number(n.id)), Infinity);
     if (!Number.isFinite(minId)) return;
+    const request = { taskId, epoch };
+    olderWorkerRead.current = request;
     setLoadingOlderIntents(true);
     api
       .intentsPage(taskId, minId, 300)
       .then((r) => {
+        if (!workerViewAlive.current || workerViewTask.current !== taskId || olderWorkerRead.current !== request
+          || (workerEpochs.current.get(taskId) ?? 0) !== epoch) return;
         setOlderIntents((prev) => {
           const seen = new Set([...intents, ...prev].map((n) => n.id));
           return [...prev, ...r.items.filter((n) => !seen.has(n.id))];
@@ -1134,8 +1210,13 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       .catch(() => {
         // A later manual retry can fetch this page again.
       })
-      .finally(() => setLoadingOlderIntents(false));
-  }, [taskId, intents, olderIntents, loadingOlderIntents]);
+      .finally(() => {
+        if (olderWorkerRead.current === request) {
+          olderWorkerRead.current = null;
+          if (workerViewAlive.current && workerViewTask.current === taskId) setLoadingOlderIntents(false);
+        }
+      });
+  }, [taskId, intents, olderIntents]);
 
   // Combined, de-duplicated worker list (newest first page + older loaded pages).
   const allIntents = React.useMemo(() => {
@@ -1573,7 +1654,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   return (
     <TooltipProvider delayDuration={300}>
       {PYTHON_PROFILE && <p role="note" className="text-xs text-amber-600">Experimental Python profile: local pause/resume only; intent deletion is unavailable.</p>}
-      {unconfirmedControls.size > 0 && <p role="alert" className="text-xs text-amber-600">A worker control is pending or unconfirmed. Its controls are blocked here; operator inspection is required. Refreshing is not confirmation.</p>}
+      {[...unconfirmedControls].some((key) => key.startsWith(`${taskId}:`)) && <p role="alert" className="text-xs text-amber-600">A worker control is pending or unconfirmed. Its controls are blocked here; operator inspection is required. Refreshing is not confirmation.</p>}
       {/* Reserved height includes the page header (title, goal, tabs about 7.5rem) and content padding. Mobile uses p-4;
         desktop uses lg:p-6 plus scroll room. Reserve 10rem / 13rem respectively; using 13rem on mobile
         would waste 3rem of transcript height. */}
@@ -1708,10 +1789,13 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                             setWorkerMessage("");
                             setWorkerMessageRequestId("");
                           }}
-                          controlling={controllingIntent === s.intent_id || unconfirmedControls.has(`${taskId}:${s.intent_id}`)}
+                          controlling={!workersReady || controllingIntent !== null || unconfirmedControls.has(`${taskId}:${s.intent_id}`)}
                           deleted={meta?.deleted}
                           onCancel={() => {
-                            setCancelIntent(s);
+                            if (!workerViewAlive.current || workerViewTask.current !== taskId || firstIntentsRef.current.taskId !== taskId || controlRequests.current.has(taskId)) return;
+                            const target = { ...s, controlTaskId: taskId };
+                            cancelTarget.current = target;
+                            setCancelIntent(target);
                           }}
                         />
                       );
@@ -1720,7 +1804,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                       <button
                         type="button"
                         onClick={loadOlderIntents}
-                        disabled={loadingOlderIntents}
+                        disabled={loadingOlderIntents || !workersReady || controllingIntent !== null}
                         className="mt-0.5 flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50"
                       >
                         {loadingOlderIntents ? (
@@ -2057,7 +2141,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                         size="icon-xs"
                         variant="destructive"
                         onClick={() => void controlWorker(active, "pause")}
-                        disabled={controllingIntent === active.intent_id || unconfirmedControls.has(`${taskId}:${active.intent_id}`)}
+                        disabled={!workersReady || controllingIntent !== null || unconfirmedControls.has(`${taskId}:${active.intent_id}`)}
                         title="Pause current worker"
                         aria-label="Pause current worker"
                       >
@@ -2074,7 +2158,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                           size="xs"
                           variant="ghost"
                           onClick={() => void controlWorker(active, "resume")}
-                          disabled={controllingIntent === active.intent_id || unconfirmedControls.has(`${taskId}:${active.intent_id}`) || workerMessageSending}
+                          disabled={!workersReady || controllingIntent !== null || unconfirmedControls.has(`${taskId}:${active.intent_id}`) || workerMessageSending}
                           title="Resume execution without sending a message"
                           aria-label="Resume execution directly"
                         >
@@ -2114,9 +2198,11 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           </div>
         </SideQuestionWorkspace>
         <AlertDialog
-          open={cancelIntent !== null}
+          key={taskId}
+          open={cancelIntent !== null && cancelIntent.controlTaskId === taskId}
           onOpenChange={(open) => {
-            if (!open) {
+            if (!open && cancelTarget.current?.controlTaskId === taskId) {
+              cancelTarget.current = null;
               setCancelIntent(null);
               setCancelReason("");
               setDeleteMode("soft");
@@ -2184,7 +2270,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
               <AlertDialogCancel>Back</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
-                disabled={PYTHON_PROFILE || !cancelIntent || controllingIntent !== null || !cancelReason.trim()}
+                disabled={PYTHON_PROFILE || !workersReady || !cancelIntent || cancelIntent.controlTaskId !== taskId || controllingIntent !== null || !cancelReason.trim()}
                 onClick={() => cancelIntent && void controlWorker(cancelIntent, "cancel", cancelReason, deleteMode)}
               >
                 {controllingIntent ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}

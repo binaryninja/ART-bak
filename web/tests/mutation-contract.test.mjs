@@ -35,7 +35,8 @@ test('wire call sites retain CAS and block repeat control without an inspect end
   assert.match(api,/toggleInterceptRule:[\s\S]*?headers: interceptVersion\(updatedAt\)/);
   assert.match(api,/headers: toolsVersionHeaders\(versionDigest, isPythonProfile/);
   const view=await readFile(new URL('../src/app/(main)/function/tasks/detail/_tabs/sessions-tab.tsx',import.meta.url),'utf8');
-  assert.ok(view.indexOf('unconfirmedControls.has')<view.indexOf('const res = await api.controlIntent'));
+  const guard = view.indexOf('uncertainControls.current.has(controlKey)');
+  assert.ok(guard >= 0 && guard < view.indexOf('const res = await api.controlIntent'));
   assert.ok(view.indexOf('confirmedIntentState(res, action)')<view.indexOf('patchIntentState(session.intent_id, "paused")'));
   assert.doesNotMatch(view,/api\.inspectIntent/);
 });
