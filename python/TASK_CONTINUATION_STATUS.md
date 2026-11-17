@@ -54,3 +54,54 @@ completion without goals replay. Separate stale paused-row CAS and injected SQL
 failure retain ownership without replay. See ISOLATED_QA.md for immutable evidence
 and untested cases. Optional setup helper and JWT control integration remain a
 separate checkpoint; no default, queued, timed or restart continuation claim.
+
+## Pending notification preservation
+
+The private same-process continuation now preserves the bounded pending entries
+accepted by `TaskEngineHandle.notify`, their ordering and payloads, and the
+existing deduplication IDs. Previously a replacement engine silently discarded
+them and accepted the same IDs again. The actual next planner call now receives
+queued hints even when open intents would otherwise suppress a fresh-engine wake.
+Notifications consumed by an earlier planner are not queued again, but their IDs
+remain deduplicated. Notifications arriving during planner preparation remain
+pending if they were not selected for that wake.
+
+The original engine's queue is frozen into immutable local values only after
+cancellation and drain. A notification racing closure is either accepted before
+closure and retained, or refused afterward. The replacement receives independent
+copies only through its original issued continuation, with current owner grants,
+exact old/new engine bindings and an inert empty replacement queue. Changed paused
+payloads, insufficient capacity, pre-populated replacement queues or revoked
+authority fail closed while retaining ownership. Continuation no longer resets
+the engine's bounded deduplication budget. Internal derived worker-completion
+wakes retain their existing fresh-engine semantics; this is not a new event
+scheduler or a replay of previously executed planner work.
+
+Fourteen new tests use the actual host, manager, private continuation, engine and
+temporary JSONL with inert provider/SQL adapters. They cover an actual planner
+request receiving the pending hint once, repeated pause/resume, duplicate races,
+notification-versus-close and planner-preparation races, changed payloads,
+capacity/queue conflicts, replayed transfer and late grant revocation. Existing
+worker-pause cleanup still returns the intent to open and next runs the worker as
+before. Independent review and final aggregate results are reported separately.
+
+Independent review found that an early consumed marker allowed another task's
+pause reservation to prune the original record while the resumed factory was
+still blocked. It also found factory/binding failures could bypass transfer's
+quarantine. Activation now remains retained until all child construction,
+notification transfer and bindings succeed. Final grants run with the child
+still prepared and nonexecutable; a callback-free final acknowledgement enables
+its next tick and only then permits history pruning. Any earlier failure,
+including control-flow interruption, retains both generation references and the
+original snapshot. Added regressions exercise concurrent other-task reservation,
+each constructor/binding failure, late sealing/revocation and callback inertness.
+The other-task test hydrates a second actual handle into a synthetic registry
+and runs the original host/pause-reservation path, not real PostgreSQL lifecycle
+transactions. Notification kind is also required to be an exact string when
+capturing immutable values.
+
+This fixes live continuation semantics and identifies state a future durable
+handoff must preserve. It adds no serialization, SQL mutation, generic restore
+entry point or restart/adoption authority. Process loss still loses this local
+notification state; the unpublished epoch work and real PostgreSQL recovery
+acceptance remain separate prerequisites.

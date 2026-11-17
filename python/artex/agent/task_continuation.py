@@ -30,6 +30,46 @@ class ContinuationProposal:
 
 def _json(value):return json.dumps(value,sort_keys=True,allow_nan=False,separators=(',',':'))
 
+
+def _notification_state(engine, *, stopped):
+    """Bounded immutable local state, not a serialized recovery capability.
+
+    Called only for the exact original stopped engine or inert replacement.
+    Pending notification entries must still be the same objects in its queue.
+    Already-consumed IDs survive for deduplication, but consumed payloads do not.
+    """
+    from .engine import TaskEngineHandle
+    if type(engine) is not TaskEngineHandle:
+        raise ContinuationUnavailable('Original continuation engine required')
+    with engine._condition:
+        if (engine._active or engine._unresolved or engine._wake is not None
+                or engine._child is not None or engine._intent_control is not None
+                or engine._closed is not stopped or engine.token.cancelled is not stopped
+                or (not stopped and engine._started)):
+            raise ContinuationUnavailable('Quiescent continuation notification state required')
+        ids, pending, events = engine._event_ids, engine._pending_notifications, engine._events
+        if (type(ids) is not set or type(pending) is not dict or type(events) is not list
+                or type(engine.max_events) is not int or not 1 <= engine.max_events <= 1000
+                or len(ids) > engine.max_events or len(events) > engine.max_events or len(pending) > len(ids)
+                or any(type(key) is not str or not key or len(key) > 128 for key in ids)):
+            raise ContinuationUnavailable('Bounded continuation notifications required')
+        rows=[];seen=set();counts={}
+        for event in events:counts[id(event)]=counts.get(id(event),0)+1
+        for key,event in pending.items():
+            if (key not in ids or type(event) is not dict or set(event) != {'kind','intent_id','detail'}
+                    or type(event['kind']) is not str or event['kind'] not in ('done','finding','hint','manual')
+                    or type(event['intent_id']) is not int or not 0 <= event['intent_id'] < 2**63
+                    or type(event['detail']) is not str or len(event['detail'].encode('utf-8')) > 8192
+                    or id(event) in seen or counts.get(id(event)) != 1):
+                raise ContinuationUnavailable('Continuation notification identity changed')
+            seen.add(id(event));rows.append((key,event['kind'],event['intent_id'],event['detail']))
+        if [id(event) for event in events if id(event) in seen] != [id(event) for event in pending.values()]:
+            raise ContinuationUnavailable('Continuation notification order changed')
+        if not stopped and len(events) != len(pending):
+            raise ContinuationUnavailable('Replacement contains unrelated wakes')
+        return tuple(sorted(ids)),tuple(rows)
+
+
 class TaskContinuationOwner:
     def __init__(self,application,*,authorize):
         from ..server.task_runtime_setup import TaskRuntimeApplication
@@ -80,6 +120,9 @@ class TaskContinuationOwner:
         with self._lock:rec=self._records.get(cap)
         if type(cap) is not Suspension or cap.owner is not self or rec is None or cap.task_id!=rec['old'].task_id or rec['failed']:raise ContinuationUnavailable('Original suspension unavailable')
         old=rec['old']
+        if old._child is not rec['engine']:raise ContinuationUnavailable('Original suspended engine changed')
+        if rec['notification_state'] is not None and _notification_state(rec['engine'],stopped=True)!=rec['notification_state']:
+            raise ContinuationUnavailable('Paused continuation notifications changed')
         from .bootstrap_handle import BootstrapHandle
         if any(getattr(getattr(old,name),'__func__',None) is not getattr(BootstrapHandle,name) for name in ('_binding','wait','validate_prepared_receipt')):raise ContinuationUnavailable('Original suspended handle methods required')
         old._binding()
@@ -115,7 +158,7 @@ class TaskContinuationOwner:
             if len(self._records)>=10000:raise ContinuationUnavailable('Suspension capacity exhausted')
             if any(r['old'].task_id==handle.task_id and r['state']!='consumed' for r in self._records.values()):raise ContinuationUnavailable('Suspension already retained')
             cap=Suspension(_KEY,self,handle.task_id);receipt=handle._receipt
-            self._records[cap]={'old':handle,'receipt':receipt,'receipt_values':_json(asdict(receipt)),'configuration':handle._configuration,'configuration_values':_json([asdict(handle.model),*handle._configuration[1:]]),'state':'pausing','failed':False,'new':None,'stamp':None}
+            self._records[cap]={'old':handle,'engine':handle._child,'receipt':receipt,'receipt_values':_json(asdict(receipt)),'configuration':handle._configuration,'configuration_values':_json([asdict(handle.model),*handle._configuration[1:]]),'state':'pausing','failed':False,'new':None,'stamp':None,'notification_state':None,'notifications_transferred':False}
         try:self._allow(cap,'pause')
         except BaseException:
             with self._lock:self._records.pop(cap,None)
@@ -139,6 +182,7 @@ class TaskContinuationOwner:
         with self._pins[8](r.task_id,r.exploration_id):
             with self._pins[5].transaction() as tx:self._db.check(tx,r,paused=True,stamp=stamp)
         self._record(cap);self._registry(cap,'pausing')
+        rec['notification_state']=_notification_state(child,stopped=True)
         rec['stamp']=stamp;rec['state']='paused'
     def prepare_resume(self,cap,paused_snapshot,new_token):
         from .bootstrap_handle import BootstrapHandle
@@ -208,8 +252,78 @@ class TaskContinuationOwner:
             if self._resume_sealed:raise ContinuationUnavailable('Resume admission sealed')
             if self._records.get(cap) is not rec or rec['failed'] or rec['state']!='installed' or rec['new'] is not new_handle:
                 raise ContinuationUnavailable('Activation record changed')
-            rec['state']='consumed'
+            # Construction and bindings have not happened yet. This record must
+            # not be pruned by another task's pause during a blocked factory.
+            rec['state']='activating'
         return rec['receipt']
+    def _transfer_notifications(self,cap,new_handle,new_engine):
+        """Move queued notify() meaning only through the original continuation.
+
+        This neither issues nor reconstructs a capability. The old engine stays
+        cancelled; the replacement is inert and already belongs to the new
+        installed manager generation. Any failure retains both references.
+        """
+        try:
+            rec=self._allow(cap,'resume');old=rec['engine']
+            if (rec['state']!='activating' or rec['new'] is not new_handle
+                    or rec['notifications_transferred'] or new_handle._child is not new_engine
+                    or new_engine is old or new_engine.token is not new_handle.token
+                    or new_engine.scope!=old.scope
+                    or not self.manager.owns_generation(new_handle.task_id,new_handle.token,new_handle)):
+                raise ContinuationUnavailable('Exact new continuation engine required')
+            state=rec['notification_state']
+            if state is None or _notification_state(old,stopped=True)!=state:
+                raise ContinuationUnavailable('Original paused notifications required')
+            if _notification_state(new_engine,stopped=False)!=((),()):
+                raise ContinuationUnavailable('Unused continuation notification queue required')
+            ids,rows=state
+            with new_engine._condition:
+                # Recheck under the replacement lock before installing copies.
+                if _notification_state(new_engine,stopped=False)!=((),()) or len(ids)>new_engine.max_events:
+                    raise ContinuationUnavailable('Replacement notification capacity changed')
+                new_engine._event_ids=set(ids)
+                new_engine._pending_notifications={key:dict(kind=kind,intent_id=intent,detail=detail) for key,kind,intent,detail in rows}
+                new_engine._events=list(new_engine._pending_notifications.values())
+            self._allow(cap,'resume')
+            if (_notification_state(old,stopped=True)!=state
+                    or _notification_state(new_engine,stopped=False)!=state
+                    or self._record(cap) is not rec
+                    or not self.manager.owns_generation(new_handle.task_id,new_handle.token,new_handle)):
+                raise ContinuationUnavailable('Continuation notifications changed during transfer')
+            rec['notifications_transferred']=True
+        except BaseException:
+            self.quarantine(cap)
+            raise
+    def _finish_activation(self,cap,new_handle,new_engine):
+        """Acknowledge a fully bound inert child, then enable its next tick.
+
+        All policy callbacks run while the replacement remains prepared, so
+        they cannot reenter executable engine work. The final transition has no
+        host callbacks and follows manager -> owner lock order. A transferred
+        queue alone never releases the original notification snapshot.
+        """
+        from ..manager import TaskManager
+        rec=self._allow(cap,'resume')
+        new_handle._owned()
+        self._allow(cap,'resume')
+        with self.manager._lock:
+            if not TaskManager.owns_generation(self.manager,new_handle.task_id,new_handle.token,new_handle):
+                raise ContinuationUnavailable('Activation ownership changed')
+            with self._lock:
+                if (self._resume_sealed or self._records.get(cap) is not rec or rec['failed']
+                        or rec['state']!='activating' or rec['new'] is not new_handle
+                        or not rec['notifications_transferred']):
+                    raise ContinuationUnavailable('Activation acknowledgement unavailable')
+                with new_handle._condition, new_engine._condition:
+                    if (new_handle._phase!='prepared' or new_handle._child is not new_engine
+                            or not new_handle._active or new_handle._thread!=get_ident()
+                            or new_handle._unresolved or new_handle._completed
+                            or _notification_state(new_engine,stopped=False)!=rec['notification_state']):
+                        raise ContinuationUnavailable('Inert bound continuation changed')
+                    # No callbacks or fallible binding operations after here.
+                    new_handle._phase='engine'
+                    rec['state']='consumed'
+
     def quarantine(self,cap):
         with self._lock:
             rec=self._records.get(cap)

@@ -84,7 +84,7 @@ class TaskEngineHandle:
         self.manual_mode,self.heartbeat,self.max_nodes,self.max_events=manual_mode,heartbeat_seconds,max_nodes,max_events
         self._condition=Condition(RLock());self._active=False;self._thread=None;self._child=None
         self._intent_control=None;self._control_outcome=None;self._worker_scope=None
-        self._events=[];self._event_ids=set();self._last_plan=None;self._started=False
+        self._events=[];self._event_ids=set();self._pending_notifications={};self._last_plan=None;self._started=False
         self._unresolved=False;self._closed=False;self._completed=False;self._wake=None
     def bind_cleanup(self,manager,outer):
         if self._cleanup_authorize is None:return
@@ -223,7 +223,12 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
             if event_id in self._event_ids:return False
             # Never evict identity receipts and permit duplicate wakes later.
             if len(self._event_ids)>=self.max_events:raise EngineUnavailable('Event identity capacity exhausted')
-            self._event_ids.add(event_id);self._events.append(dict(kind=kind,intent_id=intent_id,detail=detail));return True
+            event=dict(kind=kind,intent_id=intent_id,detail=detail)
+            self._event_ids.add(event_id);self._events.append(event)
+            # Keep only externally accepted notifications pending here. Internal
+            # worker-completion wakes retain their existing fresh-engine behavior.
+            self._pending_notifications[event_id]=event
+            return True
     def cancel(self,reason='paused_by_user'):
         with self._condition:
             self._closed=True;self.token.cancel(reason);child=self._child
@@ -269,6 +274,8 @@ AND NOT EXISTS(SELECT 1 FROM task_archives WHERE task_id=t.id)''',
                     wake=self.planner.prepare(self.planner_scope,uuid.uuid4().hex,triggers)
                     self._wake=wake
                     with self._condition:
+                        consumed={id(event) for event in triggers}
+                        self._pending_notifications={key:event for key,event in self._pending_notifications.items() if id(event) not in consumed}
                         del self._events[:len(triggers)]
                         self._child=('planner',0)
                     self._check()

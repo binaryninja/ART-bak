@@ -178,9 +178,18 @@ class BootstrapHandle:
                 if isinstance(child,TaskEngineHandle):
                     with self._condition:self._child=child
                 if not isinstance(child,TaskEngineHandle) or child.scope!=scope or child.token is not self._token or child.store.executor is not self._executor or child.current is not current or child.guard is not guard or child.unresolved or child.wait(0) is not True:raise BootstrapUnresolved('Exact inert engine child required')
+                if self._continuation is not None:
+                    owner,cap,expected=self._continuation
+                    TaskContinuationOwner._transfer_notifications(owner,cap,self,child)
                 child.bind_cleanup(self.manager,self)
                 child.bind_timing(self.manager,self)
                 child.bind_process(self.manager,self)
+                if self._continuation is not None:
+                    # Prepare the return value before the callback-free final
+                    # acknowledgement. Until then both generations are retained.
+                    result=EngineProgress('bootstrap_prepared',cancelled=False)
+                    TaskContinuationOwner._finish_activation(owner,cap,self,child)
+                    return result
                 with self._condition:self._phase='engine'
                 if self.token.cancelled:child.cancel(self.token.reason)
                 else:self._owned()
@@ -189,6 +198,12 @@ class BootstrapHandle:
             if child is None:raise BootstrapUnresolved('Engine child missing')
             return child.advance(now)
         except BaseException:
+            if initial and self._continuation_pin is not None:
+                # Factory/validation/binding failures can happen before the
+                # transfer helper runs. Keep its original queue and both owners.
+                from .task_continuation import TaskContinuationOwner
+                owner,cap,expected=self._continuation_pin
+                TaskContinuationOwner.quarantine(owner,cap)
             with self._condition:self._unresolved=True;self._phase='unresolved';child=self._child
             if child is not None:
                 try:child.cancel('bootstrap_unresolved')
