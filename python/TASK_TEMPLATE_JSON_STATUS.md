@@ -27,3 +27,21 @@ valid Unicode parameter binding, missing authorization, encoding headers,
 embedded BOM handling and byte-limit boundaries. These are not real PostgreSQL,
 socket or rendered-browser acceptance tests. The broader suite and independent
 review remain separate verification gates.
+
+## Excessive JSON nesting
+
+If Python's JSON decoder raises `RecursionError` for an excessively nested
+request, these same POST/PATCH routes now return the existing redacted 400
+instead of incorrectly labeling invalid client input as a 500. The catch wraps
+only JSON decoding: a `RecursionError` from the template store still produces
+the existing redacted 500, without automatic retries. Byte limits and
+authentication retain their existing order, and no interpreter recursion limit
+is changed. This is not a new fixed nesting-depth guarantee; the decoder's
+supported depth depends on the Python runtime.
+
+`tests/test_task_template_json_depth.py` checks real decoder failures using
+bounded synthetic nested arrays/objects through WSGI and original HS256 JWT,
+with zero template-store calls, plus malformed input, 413 precedence, 401
+precedence, unchanged valid receipts and distinct internal store failures.
+The original Go route also reports JSON decoding failures as 400; identical
+Go/Python depth thresholds are not claimed.

@@ -43,7 +43,10 @@ class TaskTemplateService:
             if len(request.body)>MAX_BODY:return error_response(413,'Request body too large')
             # Match the JSON wire contract rather than json.loads(bytes), which
             # auto-detects UTF-16/32 and silently consumes a leading UTF-8 BOM.
-            data=json.loads(request.body.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(TemplateInvalid()))
+            try:
+                data=json.loads(request.body.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(TemplateInvalid()))
+            except RecursionError:
+                raise TemplateInvalid('JSON nesting exceeds decoder limit') from None
             result=self.store.create(data) if action=='create' else self.store.patch(key,data)
             return json_response(201 if action=='create' else 200,result.to_dict())
         except (TemplateInvalid,ValueError,UnicodeError):return error_response(400,'Invalid task template request')
