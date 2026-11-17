@@ -53,14 +53,18 @@ const dailyTrendConfig = {
 
 function fmtRel(ts?: string | number): string {
   if (!ts) return "—";
-  const ms = Date.now() - (typeof ts === "number" ? ts * 1000 : Date.parse(ts as string));
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  const timestamp = typeof ts === "number" ? ts * 1000 : Date.parse(ts);
+  if (!Number.isFinite(new Date(timestamp).getTime())) return "—";
+  const ms = Date.now() - timestamp;
+  const future = ms < 0;
+  // Preserve past rounding; a future sub-second timestamp is at least "in 1s".
+  const s = Math.max(future ? 1 : 0, Math.floor(Math.abs(ms) / 1000));
+  let value: string;
+  if (s < 60) value = `${s}s`;
+  else if (s < 3600) value = `${Math.floor(s / 60)}m`;
+  else if (s < 86400) value = `${Math.floor(s / 3600)}h`;
+  else value = `${Math.floor(s / 86400)}d`;
+  return future ? `in ${value}` : `${value} ago`;
 }
 
 function fmtTokens(n: number): string {
