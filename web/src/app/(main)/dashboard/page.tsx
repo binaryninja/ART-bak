@@ -67,6 +67,19 @@ function fmtRel(ts?: string | number): string {
   return future ? `in ${value}` : `${value} ago`;
 }
 
+// The ledger's daily buckets are UTC calendar dates. Include today and N-1 prior
+// days, independent of the browser timezone and daylight-saving transitions.
+function tokenChartRange(days: number, now = new Date()) {
+  const start = new Date(now.getTime());
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  return { start: start.toISOString().slice(0, 10), end: now.toISOString().slice(0, 10) };
+}
+
+function tokenChartDay(timestamp: string): string | undefined {
+  const date = new Date(timestamp);
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : undefined;
+}
+
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "k";
@@ -428,19 +441,17 @@ export default function DashboardPage() {
 
   // Legacy daily: bucket task/conversation totals by creation date; approximate, not true daily usage.
   const dailyTokenDataOld = React.useMemo(() => {
-    const now = new Date();
-    now.setDate(now.getDate() - tokenDays);
-    const cutoff = now.toISOString().slice(0, 10);
+    const range = tokenChartRange(tokenDays);
     const m = new Map<string, { input: number; output: number; cacheRead: number }>();
-    const fold = (date: string, inp: number, out: number, cr: number) => {
-      if (date < cutoff) return;
+    const fold = (date: string | undefined, inp: number, out: number, cr: number) => {
+      if (!date || date < range.start || date > range.end) return;
       const prev = m.get(date) ?? { input: 0, output: 0, cacheRead: 0 };
       m.set(date, { input: prev.input + inp, output: prev.output + out, cacheRead: prev.cacheRead + cr });
     };
     for (const t of tasks) {
       if (tokenTab !== "all" && (t.llm_profile_id ?? defaultProfileId) !== tokenTab) continue;
       fold(
-        t.created_at.slice(0, 10),
+        tokenChartDay(t.created_at),
         t.tokens?.input_tokens ?? 0,
         t.tokens?.output_tokens ?? 0,
         t.tokens?.cache_read_tokens ?? 0,
@@ -448,19 +459,17 @@ export default function DashboardPage() {
     }
     for (const c of convTokens) {
       if (tokenTab !== "all" && (c.llm_profile_id ?? defaultProfileId) !== tokenTab) continue;
-      fold(c.created_at.slice(0, 10), c.input_tokens, c.output_tokens, c.cache_read_tokens);
+      fold(tokenChartDay(c.created_at), c.input_tokens, c.output_tokens, c.cache_read_tokens);
     }
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date: date.slice(5), ...v }));
   }, [tasks, convTokens, tokenDays, tokenTab, defaultProfileId]);
 
   // New daily: true llm_usage daily consumption; ts is the actual call time.
   const dailyTokenDataNew = React.useMemo(() => {
-    const now = new Date();
-    now.setDate(now.getDate() - tokenDays);
-    const cutoff = now.toISOString().slice(0, 10);
+    const range = tokenChartRange(tokenDays);
     const m = new Map<string, { input: number; output: number; cacheRead: number }>();
     for (const d of usageStats?.daily ?? []) {
-      if (d.date < cutoff) continue;
+      if (d.date < range.start || d.date > range.end) continue;
       if (tokenTab !== "all" && (profileIdByName.get(d.profile_name) ?? defaultProfileId) !== tokenTab) continue;
       const prev = m.get(d.date) ?? { input: 0, output: 0, cacheRead: 0 };
       m.set(d.date, {
@@ -773,9 +782,9 @@ export default function DashboardPage() {
                   [
                     { days: 7, label: "7 days" },
                     { days: 30, label: "30 days" },
-                    { days: 90, label: "3 months" },
-                    { days: 180, label: "6 months" },
-                    { days: 365, label: "1 year" },
+                    { days: 90, label: "90 days" },
+                    { days: 180, label: "180 days" },
+                    { days: 365, label: "365 days" },
                   ] as const
                 ).map(({ days, label }) => (
                   <button
@@ -795,6 +804,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <p className="mb-2 text-muted-foreground text-xs">UTC calendar days, including today.</p>
             {dailyTokenData.length === 0 ? (
               <div
                 className="flex flex-1 items-center justify-center rounded-lg border bg-muted/10 text-xs text-muted-foreground"
