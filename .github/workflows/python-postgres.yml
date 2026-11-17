@@ -1,0 +1,50 @@
+name: Python disposable PostgreSQL acceptance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-postgres-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-postgres:
+    name: PostgreSQL 17 baseline acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the PR merge revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+      - name: Select CPython
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Install official hash-locked wheels in a fresh environment
+        run: |
+          python -m venv "$RUNNER_TEMP/artex-pg-venv"
+          "$RUNNER_TEMP/artex-pg-venv/bin/python" -m pip --isolated install \
+            --disable-pip-version-check --no-cache-dir --only-binary=:all: \
+            --require-hashes --index-url https://pypi.org/simple \
+            -r python/ci/requirements-linux.txt
+          "$RUNNER_TEMP/artex-pg-venv/bin/python" -m pip check
+      - name: Run the fixed baseline in a private disposable database
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/artex-pg-home" "$RUNNER_TEMP/artex-pg-tmp"
+          env -i PATH="$RUNNER_TEMP/artex-pg-venv/bin:$PATH" \
+            HOME="$RUNNER_TEMP/artex-pg-home" TMPDIR="$RUNNER_TEMP/artex-pg-tmp" \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            PYTHONPATH=python PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 \
+            python python/ci/postgres_acceptance.py --github-hosted-disposable
