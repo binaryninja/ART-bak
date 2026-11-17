@@ -1,0 +1,92 @@
+name: Frontend port checks
+
+# Untrusted PR code runs only on an ephemeral hosted runner with read-only rights.
+# No pull_request_target, workflow_run, secrets, deployments or path-filter gaps.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-port-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Node 24 frontend tests, types and builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: web
+    steps:
+      - name: Check out the PR merge revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+          lfs: false
+      - name: Select the verified Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # official v6 ref
+        with:
+          node-version: "24.22.1"
+          architecture: x64
+          check-latest: false
+          package-manager-cache: false
+          # No registry auth, mirror or cache shared with another trust context.
+      - name: Verify and install the official lockfile without lifecycle scripts
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/artex-web-home" "$RUNNER_TEMP/artex-web-tmp" "$RUNNER_TEMP/artex-web-cache"
+          : > "$RUNNER_TEMP/artex-web-home/npmrc"
+          : > "$RUNNER_TEMP/artex-web-home/global-npmrc"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            node ci/verify-lockfile.mjs
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true HUSKY=0 npm ci --ignore-scripts --no-audit --fund=false \
+            --registry=https://registry.npmjs.org --cache="$RUNNER_TEMP/artex-web-cache" \
+            --userconfig="$RUNNER_TEMP/artex-web-home/npmrc" --globalconfig="$RUNNER_TEMP/artex-web-home/global-npmrc"
+      - name: Run Node model, transport and contract tests
+        run: |
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 \
+            node --test tests/*.test.mjs src/lib/*.test.mjs
+      - name: Generate actual Next route types and run full TypeScript
+        run: |
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 \
+            node node_modules/next/dist/bin/next typegen
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 \
+            node node_modules/typescript/bin/tsc --noEmit --incremental false
+      - name: Build the default production frontend
+        run: |
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 \
+            node node_modules/next/dist/bin/next build
+      - name: Build and verify the explicit Python preview profile
+        run: |
+          rm -rf -- .next out
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 ARTEX_PYTHON_PREVIEW=1 AUTOPENTEST_API=http://127.0.0.1:8787 \
+            node node_modules/next/dist/bin/next build
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              import { validatePreviewBuild } from "./dev/python-preview-profile.mjs";
+              const json = name => JSON.parse(readFileSync(".next/" + name, "utf8"));
+              validatePreviewBuild({ buildId: readFileSync(".next/BUILD_ID", "utf8"), required: json("required-server-files.json"), routes: json("routes-manifest.json") }, 8787);
+              console.log("Verified exact Python preview build profile and loopback rewrite.");'
+      - name: Build the Python-profile static export
+        run: |
+          rm -rf -- .next out
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-web-home" TMPDIR="$RUNNER_TEMP/artex-web-tmp" \
+            CI=true NEXT_TELEMETRY_DISABLED=1 HUSKY=0 NEXT_EXPORT=1 \
+            NEXT_PUBLIC_ARTEX_BACKEND_PROFILE=python NEXT_PUBLIC_SSE_BASE= \
+            node node_modules/next/dist/bin/next build
+          test -s out/system/skills/index.html
+          test -s out/function/tasks/index.html
