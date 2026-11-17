@@ -25,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
 import { api } from "@/lib/api";
+import { ApiError } from "@/lib/mutation-contract.mjs";
 import { cn } from "@/lib/utils";
 import type { Agent, AgentDetail, AgentTrigger, MCPServer, PromptVar, PromptVersion, Settings, SkillItem, Tool } from "@/lib/types";
 
@@ -35,7 +36,17 @@ const TRAFFIC_TOOL_KEYS = new Set(["traffic_search", "traffic_get"]);
 // AgentEditor is the tabbed editor for one agent, used inside the agents-page
 // drawer (and reused full-page for deep links). Tabs: Configuration and prompt / MCP / Skill /
 // Tools. Config + prompt save as before; visibility + tool bindings toggle live.
+type ResetDraft =
+  | { kind: "prompt"; prompt: string }
+  | { kind: "wrapup"; prompt: string; turns: string }
+  | { kind: "task-timeout"; prompt: string; turns: string };
+
 export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?: () => void }) {
+  // A new identity owns a new draft, including dialogs and resource selections.
+  return <AgentEditorSession key={agentKey} agentKey={agentKey} onSaved={onSaved} />;
+}
+
+function AgentEditorSession({ agentKey, onSaved }: { agentKey: string; onSaved?: () => void }) {
   const [detail, setDetail] = React.useState<AgentDetail | null>(null);
   const [versions, setVersions] = React.useState<PromptVersion[]>([]);
   const [variables, setVariables] = React.useState<PromptVar[]>([]);
@@ -43,10 +54,33 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
   const [skills, setSkills] = React.useState<SkillItem[]>([]);
   const [tools, setTools] = React.useState<Tool[]>([]);
   const [loaded, setLoaded] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const editorActive = React.useRef(true);
+  const detailRequest = React.useRef<object | null>(null);
+  const hydratedAgentID = React.useRef<string | null>(null);
+  const pendingResets = React.useRef(new Map<ResetDraft["kind"], ResetDraft>());
   const [viewVer, setViewVer] = React.useState<PromptVersion | null>(null);
   const [diffVer, setDiffVer] = React.useState<PromptVersion | null>(null);
 
-  const [prompt, setPrompt] = React.useState("");
+  const [resetDraftState, setResetDraftState] = React.useState({
+    prompt: "", wrapup: "", wrapupTurns: "0", ttWrapup: "", ttTurns: "0",
+  });
+  const resetDrafts = React.useRef(resetDraftState);
+  const updateResetDraft = React.useCallback((field: keyof typeof resetDraftState, value: React.SetStateAction<string>) => {
+    const current = resetDrafts.current;
+    const next = { ...current, [field]: typeof value === "function" ? value(current[field]) : value };
+    // Update immediately, before React renders, so a read resolving in the same
+    // turn cannot replace a newly typed draft with an acknowledged reset.
+    resetDrafts.current = next;
+    setResetDraftState(next);
+  }, []);
+  const { prompt, wrapup, wrapupTurns, ttWrapup, ttTurns } = resetDraftState;
+  const setPrompt = React.useCallback((value: React.SetStateAction<string>) => updateResetDraft("prompt", value), [updateResetDraft]);
+  const setWrapup = React.useCallback((value: React.SetStateAction<string>) => updateResetDraft("wrapup", value), [updateResetDraft]);
+  const setWrapupTurns = React.useCallback((value: React.SetStateAction<string>) => updateResetDraft("wrapupTurns", value), [updateResetDraft]);
+  const setTtWrapup = React.useCallback((value: React.SetStateAction<string>) => updateResetDraft("ttWrapup", value), [updateResetDraft]);
+  const setTtTurns = React.useCallback((value: React.SetStateAction<string>) => updateResetDraft("ttTurns", value), [updateResetDraft]);
   const [mcpVisible, setMcpVisible] = React.useState<number[]>([]);
   const [skillVisible, setSkillVisible] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState("");
@@ -57,17 +91,21 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
   const [llmProfiles, setLlmProfiles] = React.useState<NonNullable<AgentDetail["llm_profiles"]>>([]);
   const [webSearch, setWebSearch] = React.useState(false);
   const [interactiveShell, setInteractiveShell] = React.useState(false);
-  const [wrapup, setWrapup] = React.useState("");
   const [wrapupDefault, setWrapupDefault] = React.useState("");
-  const [wrapupTurns, setWrapupTurns] = React.useState("0");
   const [wrapupTurnsDefault, setWrapupTurnsDefault] = React.useState(5);
   // Task-timeout wrap-up prompt (worker/planner only)
   const [ttSupported, setTtSupported] = React.useState(false);
-  const [ttWrapup, setTtWrapup] = React.useState("");
   const [ttWrapupDefault, setTtWrapupDefault] = React.useState("");
-  const [ttTurns, setTtTurns] = React.useState("0");
   const [ttTurnsDefault, setTtTurnsDefault] = React.useState(5);
   const [settings, setSettings] = React.useState<Settings | null>(null);
+
+  React.useEffect(() => {
+    editorActive.current = true;
+    return () => {
+      editorActive.current = false;
+      detailRequest.current = null;
+    };
+  }, []);
 
   React.useEffect(() => {
     api.mcpServers().then(setMcp).catch(() => {});
@@ -79,35 +117,84 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
   const captureOn = !!settings?.traffic_capture;
   const webSearchGlobalOn = !!settings?.web_search_enabled;
 
-  const reload = React.useCallback(() => {
+  const reload = React.useCallback((reset?: ResetDraft) => {
+    if (!editorActive.current) return;
+    if (reset) pendingResets.current.set(reset.kind, reset);
+    const request = {};
+    detailRequest.current = request;
+    setLoadError(null);
+    setRefreshing(true);
+    if (hydratedAgentID.current === null) setLoaded(false);
     api
       .getAgent(agentKey)
       .then((d) => {
+        if (!editorActive.current || detailRequest.current !== request) return;
+        if (d.agent?.key !== agentKey || typeof d.agent.id !== "string" || !d.agent.id) {
+          throw new Error("Agent response identity mismatch");
+        }
+        if (hydratedAgentID.current !== null && hydratedAgentID.current !== d.agent.id) {
+          setDetail(null);
+          setLoadError("This agent was replaced. Close and reopen the editor to load the new agent.");
+          return;
+        }
+        // Refresh history/defaults without overwriting unsaved fields. Only the
+        // first verified read hydrates the entire editor for this agent identity.
+        if (hydratedAgentID.current === null) {
+          hydratedAgentID.current = d.agent.id;
+          setPrompt(d.prompt ?? "");
+          setMcpVisible(d.visibility?.mcp ?? []);
+          setSkillVisible(d.visibility?.skill ?? []);
+          setMaxTurns(String(d.agent.max_turns ?? 0));
+          setRunSecs(String(d.agent.run_seconds ?? 600));
+          setLlmProfileId(d.agent.llm_profile_id != null ? String(d.agent.llm_profile_id) : "");
+          setWebSearch(!!d.agent.web_search);
+          setInteractiveShell(!!d.agent.interactive_shell);
+          setWrapup(d.wrapup_prompt ?? "");
+          setWrapupTurns(String(d.wrapup_max_turns ?? 0));
+          setTtWrapup(d.task_timeout_wrapup_prompt ?? "");
+          setTtTurns(String(d.task_timeout_wrapup_max_turns ?? 0));
+        }
+        // Explicit reset may replace its own unchanged draft, never other edits.
+        // Keep all acknowledged resets until a current read succeeds, so a
+        // concurrent refresh cannot silently discard another reset's result.
+        const draft = resetDrafts.current;
+        for (const reset of pendingResets.current.values()) {
+          if (reset.kind === "prompt" && draft.prompt === reset.prompt) setPrompt(d.prompt ?? "");
+          if (reset.kind === "wrapup" && draft.wrapup === reset.prompt && draft.wrapupTurns === reset.turns) {
+            setWrapup(d.wrapup_prompt ?? "");
+            setWrapupTurns(String(d.wrapup_max_turns ?? 0));
+          }
+          if (reset.kind === "task-timeout" && draft.ttWrapup === reset.prompt && draft.ttTurns === reset.turns) {
+            setTtWrapup(d.task_timeout_wrapup_prompt ?? "");
+            setTtTurns(String(d.task_timeout_wrapup_max_turns ?? 0));
+          }
+        }
+        pendingResets.current.clear();
         setDetail(d);
-        setPrompt(d.prompt ?? "");
         setVariables(d.variables ?? []);
         setVersions(d.versions ?? []);
-        setMcpVisible(d.visibility?.mcp ?? []);
-        setSkillVisible(d.visibility?.skill ?? []);
-        setMaxTurns(String(d.agent?.max_turns ?? 0));
-        setRunSecs(String(d.agent?.run_seconds ?? 600));
-        setLlmProfileId(d.agent?.llm_profile_id != null ? String(d.agent.llm_profile_id) : "");
         setLlmProfiles(d.llm_profiles ?? []);
-        setWebSearch(!!d.agent?.web_search);
-        setInteractiveShell(!!d.agent?.interactive_shell);
-        setWrapup(d.wrapup_prompt ?? "");
         setWrapupDefault(d.wrapup_default ?? "");
-        setWrapupTurns(String(d.wrapup_max_turns ?? 0));
         setWrapupTurnsDefault(d.wrapup_max_turns_default ?? 5);
         setTtSupported(!!d.task_timeout_wrapup_supported);
-        setTtWrapup(d.task_timeout_wrapup_prompt ?? "");
         setTtWrapupDefault(d.task_timeout_wrapup_default ?? "");
-        setTtTurns(String(d.task_timeout_wrapup_max_turns ?? 0));
         setTtTurnsDefault(d.task_timeout_wrapup_max_turns_default ?? 5);
       })
-      .catch(() => setDetail(null))
-      .finally(() => setLoaded(true));
-  }, [agentKey]);
+      .catch((error) => {
+        if (!editorActive.current || detailRequest.current !== request) return;
+        setDetail(null);
+        setLoadError(error instanceof ApiError && error.status === 404
+          ? `Agent not found: ${agentKey}`
+          : "Unable to load agent details. The server may be unavailable or the agent may have changed.");
+      })
+      .finally(() => {
+        if (editorActive.current && detailRequest.current === request) {
+          detailRequest.current = null;
+          setLoaded(true);
+          setRefreshing(false);
+        }
+      });
+  }, [agentKey, setPrompt, setWrapup, setWrapupTurns, setTtWrapup, setTtTurns]);
   React.useEffect(() => {
     reload();
   }, [reload]);
@@ -131,10 +218,11 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
     }
   }
   async function resetPrompt() {
+    const draft: ResetDraft = { kind: "prompt", prompt };
     try {
       const r = await api.resetAgentPrompt(agentKey);
       toast.success(`Restored built-in default (v${r.version})`);
-      reload();
+      reload(draft);
     } catch (e) {
       toast.error("Restore failed: " + (e as Error).message);
     }
@@ -150,10 +238,11 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
     }
   }
   async function resetWrapup() {
+    const draft: ResetDraft = { kind: "wrapup", prompt: wrapup, turns: wrapupTurns };
     try {
       await api.resetAgentWrapup(agentKey);
       toast.success("Restored built-in default");
-      reload();
+      reload(draft);
     } catch (e) {
       toast.error("Restore failed: " + (e as Error).message);
     }
@@ -169,10 +258,11 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
     }
   }
   async function resetTaskTimeoutWrapup() {
+    const draft: ResetDraft = { kind: "task-timeout", prompt: ttWrapup, turns: ttTurns };
     try {
       await api.resetAgentTaskTimeoutWrapup(agentKey);
       toast.success("Restored built-in default");
-      reload();
+      reload(draft);
     } catch (e) {
       toast.error("Restore failed: " + (e as Error).message);
     }
@@ -251,8 +341,16 @@ export function AgentEditor({ agentKey, onSaved }: { agentKey: string; onSaved?:
     }
   }
 
-  if (loaded && !detail) {
-    return <div className="text-muted-foreground p-6 text-center text-sm">Agent not found: {agentKey}</div>;
+  if (!loaded || (!detail && refreshing)) {
+    return <div role="status" className="text-muted-foreground p-6 text-center text-sm">Loading agent details…</div>;
+  }
+  if (!detail) {
+    return (
+      <div className="flex flex-col items-center gap-3 p-6 text-center text-sm">
+        <p role="alert" className="text-muted-foreground">{loadError ?? "Unable to load agent details."}</p>
+        <Button variant="outline" size="sm" onClick={() => reload()}>Retry</Button>
+      </div>
+    );
   }
   // config is meaningless for the conversational main agent and the fixed-budget
   // goals decomposer; every other agent (workers, custom assistants) honors it.
