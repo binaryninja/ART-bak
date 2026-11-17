@@ -8,9 +8,10 @@ Nothing is mounted in the default application and no existing CLI is changed.
 ## Explicit operator setup
 
 Use a POSIX system and the official optional `bcrypt>=5,<6` dependency. Choose an
-existing absolute, canonical, current-user-owned **mode0700** skills root. Each
-skill directory, including its `SKILL.md`, must already exist; this host does not
-create top-level skills. Keep only intended skill data there. Do not use a shared
+existing absolute, canonical, current-user-owned **mode0700** skills root. Existing
+skills require their own directory and `SKILL.md`; an empty root is also valid.
+The explicit write-enabled profile can create a new top-level skill, as described
+below. Keep only intended skill data there. Do not use a shared
 or actively edited tree: the operator must exclude other writers, root renames,
 mount changes and lock-file replacement for the entire host lifetime.
 
@@ -31,13 +32,23 @@ PYTHONPATH=python python -m artex.skills_workspace \
 ```
 
 Reads are enabled after login as username `ARTEX`. Add `--enable-writes` only if
-the authenticated local operator may create/overwrite text files and create
-subdirectories anywhere within that explicit skills root. This is single-admin
-workspace authority, not per-skill or per-user authorization. A successful file
-PUT is an upsert, not browser-version compare-and-swap. Existing directories are
-idempotent; parent directories must exist. Existing file and directory service
-limits and filesystem restrictions remain unchanged. The host caps content reads
+the authenticated local operator may create top-level skills, create/overwrite
+text files and create subdirectories within that explicit skills root. This is
+single-admin workspace authority, not per-skill or per-user authorization. A successful file
+PUT is an upsert, not browser-version compare-and-swap. Existing subdirectories
+through `/dirs` are idempotent; parent directories must exist. Existing file and
+directory service limits and filesystem restrictions remain unchanged. The host caps content reads
 at 256 KiB and uses the existing bounded request/body/connection transport.
+
+`POST /api/skills` is enabled only through this host's explicit write grant. It
+requires `name` and a nonblank `description`; optional `license`, `compatibility`
+and `instructions` are inert text. It does not accept MCP or visibility settings
+and never executes generated skill content. A confirmed create returns exactly
+`201 {"name":"the-requested-name"}`. Existing top-level entries conflict with 409;
+they are not overwritten, merged or treated as an idempotent success. New skill
+directory/file creation is create-only, but the two filesystem changes are not a
+single atomic transaction. A possible partial effect is retained and returned as
+unknown, never rolled back or retried automatically.
 
 Authentication is initialized with real bcrypt before any socket accepts requests;
 unauthenticated initialization therefore cannot take over the host. The hash and
@@ -59,7 +70,7 @@ No frontend dependency installation or real browser acceptance is implied.
 One `RuntimeLease` uses `.artex-skills.lock` in the owned root. Never unlink this
 file. Its descriptor and guarded owner permit are retained until verified clean
 shutdown. This root-level regular file is not a skill and its contents are not
-reachable through a valid skill route. The shared RLock covers all five service
+reachable through a valid skill route. The shared RLock covers all six service
 guards; original request tokens are required for their permissions. The lock and
 lease coordinate this host and cooperating launchers only, not arbitrary writers
 or a distributed/restart authority.
@@ -74,6 +85,9 @@ mutation iterable closed after dispatch is conservatively uncertain.
 
 A mutation 500, exceptional response/disclosure/close, or uncertain thread launch
 cannot be called clean. Unknown mutation seals all new work and retains the lease.
+The exact top-level `POST /api/skills` is included in this accounting, not just
+file/directory routes beneath `/api/skills/`. Safe pre-effect refusals such as
+401, 403 or an existing-entry 409 do not themselves quarantine the workspace.
 After an unresolved shutdown the CLI stays alive, holding the exact host and
 signal scope; it does not automatically retry, reconcile, release or restart.
 SIGINT/SIGTERM handlers only latch. Failed signal installation rollback or

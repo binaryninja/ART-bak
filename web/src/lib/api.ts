@@ -1,5 +1,5 @@
 import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
-import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillDirectory, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
+import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDirectory, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -1155,7 +1155,11 @@ export const api = {
     compatibility?: string;
     mcps?: string[];
     instructions?: string;
-  }) => post<{ name: string }>("/skills", s),
+  }) => {
+    const name = s.name;
+    return http<unknown>("/skills", { method: "POST", body: JSON.stringify(s) }, 201)
+      .then((value) => confirmedSkillCreation(value, name));
+  },
   // uploadSkill installs a skill from a .zip (multipart). Surfaces the backend
   // Error text (e.g. already exists / missing SKILL.md) gives the UI a precise message.
   uploadSkill: async (file: File, overwrite = false): Promise<{ name: string; files: number }> => {

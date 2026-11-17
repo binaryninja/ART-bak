@@ -13,9 +13,10 @@ from .skill_files_setup import bind_skill_files_reads
 from .skill_content_setup import bind_skill_content_reads
 from .skill_content_write import bind_skill_content_writes
 from .skill_directory_create import bind_skill_directory_creation
+from .skill_create import bind_skill_creation
 
 _BINDERS=(bind_skill_catalog_reads,bind_skill_files_reads,bind_skill_content_reads,
-          bind_skill_content_writes,bind_skill_directory_creation)
+          bind_skill_content_writes,bind_skill_directory_creation,bind_skill_creation)
 _PATTERNS=(re.compile(r'/api/skills\Z'),re.compile(r'/api/skills/[^/]+/files\Z'),
            re.compile(r'/api/skills/[^/]+/files/.+\Z'),re.compile(r'/api/skills/[^/]+/dirs\Z'))
 _ALLOWED=(('GET',),('GET','HEAD'),('GET','HEAD','PUT'),('POST',))
@@ -27,7 +28,7 @@ def _same(method,key):return all(a is b for a,b in zip(_key(method),key))
 
 def _factories():
     if any(a is not b for a,b in zip((bind_skill_catalog_reads,bind_skill_files_reads,
-            bind_skill_content_reads,bind_skill_content_writes,bind_skill_directory_creation),_BINDERS)):
+            bind_skill_content_reads,bind_skill_content_writes,bind_skill_directory_creation,bind_skill_creation),_BINDERS)):
         raise ValueError('Original Skills workspace binders required')
 
 
@@ -39,6 +40,7 @@ class SkillsWorkspaceBundle:
     content: object=field(repr=False)
     write: object=field(repr=False)
     directory: object=field(repr=False)
+    create: object=field(default=None,repr=False)
 
 
 class SkillsWorkspaceApplication:
@@ -61,15 +63,16 @@ class SkillsWorkspaceApplication:
             raise PermissionError('Workspace composition changed')
         for key,name in self._base_methods:
             if not _same(getattr(self.original,name),key):raise PermissionError()
-        catalog,files,content,write,directory=self.services
+        catalog,files,content,write,directory=self.services[:5]
+        mutations=self.services[3:]
         for service in (catalog,files,content):service._check()
-        for service in (write,directory):service.validate()
+        for service in mutations:service.validate()
         if (catalog.reader.scope is not self.scope or files.reader.scope is not self.scope
                 or content.reader.scope is not self.scope or write.scope is not self.scope
-                or directory.scope is not self.scope or catalog.reader.content_reader is not content.reader
+                or any(service.scope is not self.scope for service in mutations) or catalog.reader.content_reader is not content.reader
                 or catalog.reader.usage_reader is not None):raise PermissionError('One exact filesystem scope required')
         if any(value is not self.guard for value in (catalog.reader.guard,files.reader.guard,
-                content.reader.guard,write.guard,directory.guard)):
+                content.reader.guard,*(service.guard for service in mutations))):
             raise PermissionError('One exclusive writer guard required')
         for view,methods in zip(self.views,self._view_methods):
             for key,name in methods:
@@ -88,7 +91,8 @@ class SkillsWorkspaceApplication:
         family=next((i for i,pattern in enumerate(_PATTERNS) if type(path) is str and pattern.fullmatch(path)),None)
         if family is None:
             return self.original(environ,start_response)
-        if type(method) is not str or method.upper() not in _ALLOWED[family]:
+        allowed=_ALLOWED[family]+(('POST',) if family==0 and len(self.services)==6 else ())
+        if type(method) is not str or method.upper() not in allowed:
             # Use the original transport and JWT, not an unauthenticated shortcut.
             outer=self
             class Dispatch:
@@ -97,9 +101,9 @@ class SkillsWorkspaceApplication:
                     if outer.original.router.authorize(request) is not True:return error_response(401,'Unauthorized')
                     outer.validate()
                     response=error_response(405,'Method not allowed')
-                    return type(response)(response.status,response.body,{**response.headers,'Allow':', '.join(_ALLOWED[family])})
+                    return type(response)(response.status,response.body,{**response.headers,'Allow':', '.join(allowed)})
             return WSGIApplication(Dispatch(),max_body_bytes=self.original.max_body_bytes)(environ,start_response)
-        index=0 if family==0 else 1 if family==1 else (3 if method.upper()=='PUT' else 2) if family==2 else 4
+        index=(5 if method.upper()=='POST' else 0) if family==0 else 1 if family==1 else (3 if method.upper()=='PUT' else 2) if family==2 else 4
         view=self.views[index]
         def checked_start(status,headers,exc_info=None):
             self.validate()
@@ -136,7 +140,7 @@ _APPLICATION_METHODS=(SkillsWorkspaceApplication.__init__,SkillsWorkspaceApplica
 
 def bind_skills_workspace(application,*,catalog_service,files_service,content_service,
         write_service,directory_service,authorize_catalog,authorize_files,authorize_content,
-        authorize_write,authorize_directory):
+        authorize_write,authorize_directory,create_service=None,authorize_create=None):
     """Bind original siblings to one untouched base; all grants are explicit.
 
     Filesystem catalog omits SQL usage statistics. Existing DTO placeholders must
@@ -144,6 +148,8 @@ def bind_skills_workspace(application,*,catalog_service,files_service,content_se
     The caller owns guard/exclusivity and any mutation-uncertainty quarantine.
     """
     _factories()
+    if (create_service is None) != (authorize_create is None):
+        raise ValueError('Creation service and independent grant must be supplied together')
     if (type(application) is not WSGIApplication or type(application.router) is not Router
             or any(a is not b for a,b in zip((SkillsWorkspaceApplication.__init__,
                 SkillsWorkspaceApplication.validate,SkillsWorkspaceApplication.__call__),_APPLICATION_METHODS))):
@@ -155,6 +161,9 @@ def bind_skills_workspace(application,*,catalog_service,files_service,content_se
         bind_skill_content_writes(application,service=write_service,authorize_global=authorize_write),
         bind_skill_directory_creation(application,service=directory_service,authorize_global=authorize_directory))
     services=(catalog_service,files_service,content_service,write_service,directory_service)
+    if create_service is not None:
+        views+=(bind_skill_creation(application,service=create_service,authorize_global=authorize_create),)
+        services+=(create_service,)
     scope=content_service.reader.scope;guard=content_service.reader.guard
     view=SkillsWorkspaceApplication(application,services,views,scope,guard)
     return SkillsWorkspaceBundle(view,*services)

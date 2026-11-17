@@ -34,6 +34,7 @@ from .server.skill_files_read import SkillFilesReadService
 from .server.skill_catalog_read import SkillCatalogReadService
 from .server.skill_content_write import SkillContentWriteService, MAX_JSON_BYTES
 from .server.skill_directory_create import SkillDirectoryCreateService
+from .server.skill_create import SkillCreateService
 from .server.skills_workspace_setup import bind_skills_workspace
 
 
@@ -147,7 +148,7 @@ class SkillsWorkspaceHost:
         try:
             self._permit = self._lease.claim(self, guarded=True)
             self._scope = SkillDirectoryScope(config.root, *self._identity, secrets.token_hex(16))
-            guard = self._guard  # Exact same callable object across all five services.
+            guard = self._guard  # Exact same callable object across all six services.
             current = self._allowed
             source = SkillFileReader(self._scope, authorize=current, current=current, lifecycle_guard=guard, max_bytes=262144)
             listing = SkillFileListingReader(self._scope, authorize=current, current=current, lifecycle_guard=guard)
@@ -162,8 +163,11 @@ class SkillsWorkspaceHost:
                     mutation_authorize=self._write_allowed, current=current, writer_guard=guard),
                 directory_service=SkillDirectoryCreateService(self._scope, authorize=self._write_allowed,
                     mutation_authorize=self._write_allowed, current=current, writer_guard=guard),
+                create_service=SkillCreateService(self._scope, authorize=self._write_allowed,
+                    mutation_authorize=self._write_allowed, current=current, writer_guard=guard),
                 authorize_catalog=current, authorize_files=current, authorize_content=current,
-                authorize_write=self._write_allowed, authorize_directory=self._write_allowed)
+                authorize_write=self._write_allowed, authorize_directory=self._write_allowed,
+                authorize_create=self._write_allowed)
             self._application = self._bundle.application
             self._check()
             return self
@@ -217,7 +221,9 @@ class SkillsWorkspaceHost:
                 if method != 'HEAD': yield body
                 return
             path = environ.get('PATH_INFO', '')
-            mutation = method in ('PUT', 'POST') and type(path) is str and path.startswith('/api/skills/')
+            mutation = type(path) is str and (
+                method == 'POST' and path == '/api/skills'
+                or method in ('PUT', 'POST') and path.startswith('/api/skills/'))
             result = None
             status = None
             started = False

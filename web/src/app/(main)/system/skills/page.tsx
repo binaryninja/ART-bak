@@ -44,11 +44,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { isPythonProfile } from "@/lib/mutation-contract.mjs";
-import { createSkillWorkspace, skillFileKey } from "@/lib/skill-workspace.mjs";
+import { createSkillWorkspace, skillFileKey, validSkillCreationName } from "@/lib/skill-workspace.mjs";
 
 import type { Agent, SkillItem, MCPServer, SkillCall, MissingSkill } from "@/lib/types";
 
 const RESTRICTED_SKILLS = isPythonProfile(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE);
+
+type NewSkillDraft = {
+  name: string;
+  description: string;
+  license: string;
+  compatibility: string;
+  instructions: string;
+  mcps: string[];
+  visibility: string[];
+};
+const emptyNewSkillDraft = (): NewSkillDraft => ({
+  name: "", description: "", license: "", compatibility: "", instructions: "", mcps: [], visibility: [],
+});
 
 function fmtTime(ts?: string) {
   if (!ts) return "Never used";
@@ -311,6 +324,7 @@ export default function SkillsPage() {
   const alive = React.useRef(false);
   React.useEffect(() => {
     alive.current = true;
+    setCreatingSkill(newRequest.current !== null);
     return () => { alive.current = false; catalogRequest.current = null; };
   }, []);
   const [visibility, setVisibility] = React.useState<Record<string, string[]>>({});
@@ -324,7 +338,12 @@ export default function SkillsPage() {
     ? workspaceState.drafts.get(skillFileKey(selected.skill, selected.path)) : undefined;
   const fileLoading = !fileDraft?.loaded && !fileDraft?.error;
   const saving = !!selected && workspaceState.pending.has(selected.skill);
-  const blocked = !!selected && workspaceState.uncertain.has(selected.skill);
+  const rootWriteBlocked = !!workspaceState.rootPending || !!workspaceState.rootUncertain;
+  const blocked = rootWriteBlocked || (!!selected && workspaceState.uncertain.has(selected.skill));
+  function rootWritesSuspended() {
+    const state = workspace.getSnapshot();
+    return !!state.rootPending || !!state.rootUncertain;
+  }
   const [fileRetry, setFileRetry] = React.useState(0);
 
   // inline create — using a ref to avoid stale closure in onBlur
@@ -334,15 +353,26 @@ export default function SkillsPage() {
   // cancelRef prevents onBlur from committing when Escape was pressed
   const cancelRef = React.useRef(false);
 
-  // new skill dialog
-  const [newOpen, setNewOpen] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
-  const [newDesc, setNewDesc] = React.useState("");
-  const [newLicense, setNewLicense] = React.useState("");
-  const [newCompat, setNewCompat] = React.useState("");
-  const [newInst, setNewInst] = React.useState("");
-  const [newMcps, setNewMcps] = React.useState<string[]>([]);
-  const [newVisibility, setNewVisibility] = React.useState<string[]>([]);
+  // Dialog state is separate from the latest draft/session identities. Every edit
+  // changes the draft object immediately, before React schedules another render.
+  const [newOpen, setNewOpenState] = React.useState(false);
+  const newDialog = React.useRef({ open: false });
+  const [newDraft, setNewDraft] = React.useState(emptyNewSkillDraft);
+  const newDraftRef = React.useRef(newDraft);
+  const newRequest = React.useRef<object | null>(null);
+  const { name: newName, description: newDesc, license: newLicense, compatibility: newCompat,
+    instructions: newInst, mcps: newMcps, visibility: newVisibility } = newDraft;
+  function editNewSkill(patch: Partial<NewSkillDraft>) {
+    if (!alive.current) return;
+    const next = { ...newDraftRef.current, ...patch };
+    newDraftRef.current = next;
+    setNewDraft(next);
+  }
+  function setNewOpen(value: boolean) {
+    if (!alive.current) return;
+    if (newDialog.current.open !== value) newDialog.current = { open: value };
+    setNewOpenState(value);
+  }
   const [mcpOptions, setMcpOptions] = React.useState<MCPServer[]>([]);
   const [creatingSkill, setCreatingSkill] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -391,6 +421,7 @@ export default function SkillsPage() {
 
   // ── Upload a .zip skill ───────────────────────────────────────────────────
   async function uploadZip(file: File, overwrite = false) {
+    if (rootWritesSuspended()) return;
     setUploading(true);
     try {
       const r = await api.uploadSkill(file, overwrite);
@@ -479,7 +510,7 @@ export default function SkillsPage() {
   const newEntryRef = React.useRef("");
   function startCreate(skill: string, inDir: string, kind: "file" | "dir") {
     const state = workspace.getSnapshot();
-    if (state.pending.has(skill) || state.uncertain.has(skill)) return;
+    if (state.rootPending || state.rootUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
     cancelRef.current = false;
     ensureExpanded(skill, inDir);
     const next = { skill, inDir, kind };
@@ -521,6 +552,7 @@ export default function SkillsPage() {
   }
 
   async function deletePath(skill: string, path: string) {
+    if (rootWritesSuspended()) return;
     try {
       await api.deleteSkillPath(skill, path);
       toast.success(`Deleted: ${path}`);
@@ -532,6 +564,7 @@ export default function SkillsPage() {
   }
 
   async function deleteSkill(name: string) {
+    if (rootWritesSuspended()) return;
     try {
       await api.deleteSkill(name);
       toast.success(`Deleted skill: ${name}`);
@@ -563,6 +596,7 @@ export default function SkillsPage() {
   }
 
   async function toggleSkillMcp(skillName: string, mcpName: string, mcpOn: boolean) {
+    if (rootWritesSuspended()) return;
     const next = mcpOn
       ? [...detailMcps, mcpName]
       : detailMcps.filter((n) => n !== mcpName);
@@ -579,6 +613,7 @@ export default function SkillsPage() {
   }
 
   async function toggleVisibility(skillName: string, agentId: string, agentName: string) {
+    if (rootWritesSuspended()) return;
     const on = (visibility[skillName] ?? []).includes(agentId);
     try {
       await api.toggleSkillVisibility(agentId, skillName, !on);
@@ -591,28 +626,52 @@ export default function SkillsPage() {
   }
 
   async function createNewSkill() {
-    if (!newName.trim()) { toast.error("Enter a name"); return; }
-    if (!newDesc.trim()) { toast.error("Description is required"); return; }
+    const state = workspace.getSnapshot();
+    if (!alive.current || !newDialog.current.open || newRequest.current || state.rootPending
+      || state.rootUncertain || state.pending.size || state.uncertain.size) return;
+    const draft = newDraftRef.current;
+    const name = draft.name.trim();
+    if (!validSkillCreationName(name)) {
+      toast.error("Use 1–64 letters/digits/hyphens, starting with a letter; ASCII letters must be lowercase, without trailing or consecutive hyphens; maximum 255 UTF-8 bytes.");
+      return;
+    }
+    if (!draft.description.trim()) { toast.error("Description is required"); return; }
+    const dialog = newDialog.current;
+    const request = {};
+    newRequest.current = request;
     setCreatingSkill(true);
     try {
-      const name = newName.trim();
-      await api.createSkill({
-        name, description: newDesc.trim(),
-        license: newLicense.trim() || undefined,
-        compatibility: newCompat.trim() || undefined,
-        mcps: newMcps.length ? newMcps : undefined,
-        instructions: newInst.trim() || undefined,
+      const receipt = await workspace.createSkill({
+        name, description: draft.description.trim(),
+        license: draft.license.trim() || undefined,
+        compatibility: draft.compatibility.trim() || undefined,
+        instructions: draft.instructions.trim() || undefined,
+        ...(!RESTRICTED_SKILLS && draft.mcps.length ? { mcps: [...draft.mcps] } : {}),
       });
-      // apply initial visibility (fire-and-forget per agent; best-effort)
-      await Promise.all(newVisibility.map((id) => api.toggleSkillVisibility(id, name, true)));
-      toast.success("Skill created");
-      setNewOpen(false);
-      setNewName(""); setNewDesc(""); setNewLicense(""); setNewCompat(""); setNewInst("");
-      setNewMcps([]); setNewVisibility([]);
+      if (!receipt || !alive.current) return;
+      toast.success(`Skill created: ${receipt.name}`);
+      if (newDraftRef.current === draft) {
+        const empty = emptyNewSkillDraft();
+        newDraftRef.current = empty;
+        setNewDraft(empty);
+        if (newDialog.current === dialog) setNewOpen(false);
+      }
+      // Do not change selected files or their retained drafts after creation.
       load();
-    } catch (e) {
-      toast.error("Create failed: " + (e as Error).message);
-    } finally { setCreatingSkill(false); }
+      // Primary creation is already announced and visible in the catalog. A
+      // Go-only visibility failure (or slow response) is a separate outcome.
+      const visibilityResults = RESTRICTED_SKILLS ? [] : await Promise.allSettled(
+        draft.visibility.map(async (id) => api.toggleSkillVisibility(id, receipt.name, true)),
+      );
+      if (alive.current && visibilityResults.some((result) => result.status === "rejected")) {
+        toast.error(`Skill ${receipt.name} created, but some visibility updates failed. Review visibility separately; do not repeat creation.`);
+      }
+    } finally {
+      if (newRequest.current === request) {
+        newRequest.current = null;
+        if (alive.current) setCreatingSkill(false);
+      }
+    }
   }
 
   // ── Inline input JSX helper (NOT a React component — avoids remount on re-render) ──
@@ -668,15 +727,15 @@ export default function SkillsPage() {
               <span className="min-w-0 flex-1 truncate" title={node.path}>{node.name}</span>
               {/* Absolute so a long name can never push the actions out of view */}
               <span className="absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded bg-muted pl-1 group-hover:flex">
-                <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
+                <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={rootWriteBlocked || workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
                   onClick={(e) => { e.stopPropagation(); startCreate(skill, node.path, "file"); }}>
                   <FilePlusIcon className="size-3 text-muted-foreground" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
+                <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={rootWriteBlocked || workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
                   onClick={(e) => { e.stopPropagation(); startCreate(skill, node.path, "dir"); }}>
                   <FolderPlusIcon className="size-3 text-muted-foreground" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-5" title="Delete folder" disabled={RESTRICTED_SKILLS}
+                <Button size="icon" variant="ghost" className="size-5" title="Delete folder" disabled={RESTRICTED_SKILLS || rootWriteBlocked}
                   onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "dir", skill, path: node.path }); }}>
                   <Trash2Icon className="size-3 text-destructive" />
                 </Button>
@@ -712,7 +771,7 @@ export default function SkillsPage() {
             isSelected ? "bg-accent" : "bg-muted",
           )}>
             <Button size="icon" variant="ghost" className="size-5"
-              title="Delete file" disabled={RESTRICTED_SKILLS}
+              title="Delete file" disabled={RESTRICTED_SKILLS || rootWriteBlocked}
               onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "file", skill, path: node.path }); }}>
               <Trash2Icon className="size-3 text-destructive" />
             </Button>
@@ -731,7 +790,7 @@ export default function SkillsPage() {
       <div className="flex items-center gap-3 border-b px-4 py-2.5 lg:px-6">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-sm font-semibold leading-tight">Skill</h1>
-          <p className="text-muted-foreground text-xs">{RESTRICTED_SKILLS ? "Scoped skills workspace · Existing skills only · No usage ledger" : "Skill library · agentskills.io specification · Per-agent visibility"}</p>
+          <p className="text-muted-foreground text-xs">{RESTRICTED_SKILLS ? "Scoped skills workspace · No usage ledger" : "Skill library · agentskills.io specification · Per-agent visibility"}</p>
         </div>
         {/* Missing skills: explicitly requested by agents but absent from the library; identifies useful additions. */}
         {missing.length > 0 && (
@@ -759,12 +818,19 @@ export default function SkillsPage() {
           </Popover>
         )}
       </div>
-      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">Browse, edit, write empty files and create folders within the host-granted skills root. ZIP import, skill creation, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
+      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">Browse, create skills, edit, write empty files and create folders within the host-granted skills root. ZIP import, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
       <div className="flex items-center gap-2 border-b px-4 py-2 text-xs">
         <Button size="sm" variant="outline" onClick={load} disabled={catalogLoading}>Refresh catalog</Button>
         {catalogLoading && <span role="status">Loading catalog…</span>}
         {catalogError && <span role="alert">Catalog unavailable: {catalogError}. Previously loaded entries may be stale.</span>}
       </div>
+      {workspaceState.rootPending && <p role="status" className="px-4 py-2 text-muted-foreground text-xs">Creating {workspaceState.rootPending.name}; other workspace writes are waiting.</p>}
+      {workspaceState.rootUncertain && (
+        <p role="alert" className="px-4 py-2 text-destructive text-xs">Creation of {workspaceState.rootUncertain.name} is unconfirmed. All writes in this Skills workspace are suspended. Do not repeat creation or switch names to retry. Inspect and reconcile the filesystem before reopening the workspace; catalog refresh does not unlock writes. Keep or copy unsaved drafts.</p>
+      )}
+      {workspaceState.rootError && !workspaceState.rootUncertain && (
+        <p role="alert" className="px-4 py-2 text-destructive text-xs">Could not create {workspaceState.rootError.name}: {workspaceState.rootError.message}</p>
+      )}
       {[...workspaceState.errors].map(([skill, error]) => (
         <p key={skill} role="alert" className="px-4 py-2 text-destructive text-xs">{skill}/{error.path}: {error.message}</p>
       ))}
@@ -775,7 +841,7 @@ export default function SkillsPage() {
         {/* ── Left file tree ── */}
         <div className="flex w-64 shrink-0 flex-col border-r">
           <div className="flex flex-col gap-2 border-b p-2">
-            <Button size="sm" variant="outline" className="w-full" disabled={RESTRICTED_SKILLS} onClick={() => setNewOpen(true)}>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => setNewOpen(true)}>
               <PlusIcon className="size-3.5" />New skill
             </Button>
             <input
@@ -789,7 +855,7 @@ export default function SkillsPage() {
               size="sm"
               variant="outline"
               className="w-full"
-              disabled={RESTRICTED_SKILLS || uploading}
+              disabled={RESTRICTED_SKILLS || rootWriteBlocked || uploading}
               onClick={() => uploadRef.current?.click()}
               title="Upload a .zip archive containing SKILL.md"
             >
@@ -837,15 +903,15 @@ export default function SkillsPage() {
                         "absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded pl-1 group-hover:flex",
                         isSkillSelected ? "bg-accent" : "bg-muted",
                       )}>
-                        <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
+                        <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={rootWriteBlocked || workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
                           onClick={(e) => { e.stopPropagation(); startCreate(s.name, "", "file"); }}>
                           <FilePlusIcon className="size-3 text-muted-foreground" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
+                        <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={rootWriteBlocked || workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
                           onClick={(e) => { e.stopPropagation(); startCreate(s.name, "", "dir"); }}>
                           <FolderPlusIcon className="size-3 text-muted-foreground" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-5" title="Delete skill" disabled={RESTRICTED_SKILLS}
+                        <Button size="icon" variant="ghost" className="size-5" title="Delete skill" disabled={RESTRICTED_SKILLS || rootWriteBlocked}
                           onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "skill", skill: s.name }); }}>
                           <Trash2Icon className="size-3 text-destructive" />
                         </Button>
@@ -967,6 +1033,7 @@ export default function SkillsPage() {
                           <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
                             <Checkbox
                               checked={detailMcps.includes(m.name)}
+                              disabled={rootWriteBlocked}
                               onCheckedChange={(on) => toggleSkillMcp(selectedSkill.name, m.name, !!on)}
                             />
                             {m.name}
@@ -983,6 +1050,7 @@ export default function SkillsPage() {
                         <label key={a.key} className="flex cursor-pointer items-center gap-2 text-sm">
                           <Checkbox
                             checked={(visibility[selectedSkill.name] ?? []).includes(a.id)}
+                            disabled={rootWriteBlocked}
                             onCheckedChange={() => toggleVisibility(selectedSkill.name, a.id, a.name)}
                           />
                           {a.name}
@@ -1045,7 +1113,7 @@ export default function SkillsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={deleting}
+              disabled={deleting || rootWriteBlocked}
               onClick={(e) => { e.preventDefault(); void runPendingDelete(); }}
             >
               {deleting ? "Deleting…" : "Delete"}
@@ -1060,48 +1128,53 @@ export default function SkillsPage() {
           <SheetHeader className="px-4 pt-4">
             <SheetTitle>New skill</SheetTitle>
           </SheetHeader>
+          {RESTRICTED_SKILLS && <p className="px-4 pt-2 text-muted-foreground text-xs">Creates a new folder and SKILL.md under the granted root, without replacing an existing skill. Metadata must be single-line. MCP links and visibility are unavailable.</p>}
+          {workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">Creation is unconfirmed. All workspace writes are suspended; do not repeat it. Your draft is kept.</p>}
+          {workspaceState.rootError && !workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">{workspaceState.rootError.message}</p>}
+          {workspaceState.uncertain.size > 0 && !workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">Reconcile existing unconfirmed file operations before creating a new skill. Catalog refresh does not unlock creation.</p>}
+          {workspaceState.pending.size > 0 && <p role="status" className="px-4 pt-2 text-muted-foreground text-xs">Wait for the current file or folder write to finish before creating a skill.</p>}
           <Tabs defaultValue="basic" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="mx-4 mt-3 shrink-0 justify-start">
               <TabsTrigger value="basic">Basic information</TabsTrigger>
-              <TabsTrigger value="mcp">
+              {!RESTRICTED_SKILLS && <TabsTrigger value="mcp">
                 Linked MCP
                 {newMcps.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
                     {newMcps.length}
                   </span>
                 )}
-              </TabsTrigger>
-              <TabsTrigger value="visibility">
+              </TabsTrigger>}
+              {!RESTRICTED_SKILLS && <TabsTrigger value="visibility">
                 Visibility
                 {newVisibility.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
                     {newVisibility.length}
                   </span>
                 )}
-              </TabsTrigger>
+              </TabsTrigger>}
             </TabsList>
 
             {/* Basic information */}
             <TabsContent value="basic" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
               <div className="grid gap-1.5">
                 <Label htmlFor="sk-name">Name <span className="text-destructive">*</span></Label>
-                <Input id="sk-name" placeholder="sqli-deepdive" value={newName} onChange={(e) => setNewName(e.target.value)} />
-                <p className="text-muted-foreground text-xs">Lowercase letters, digits and hyphens; 1–64 characters</p>
+                <Input id="sk-name" placeholder="sqli-deepdive" value={newName} onChange={(e) => editNewSkill({ name: e.target.value })} />
+                <p className="text-muted-foreground text-xs">1–64 letters, digits and hyphens; start with a letter. ASCII letters must be lowercase; no trailing or consecutive hyphens.</p>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="sk-desc">Description <span className="text-destructive">*</span></Label>
                 <Textarea id="sk-desc" rows={2} className="resize-none"
                   placeholder="What this skill does and when to use it."
-                  value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+                  value={newDesc} onChange={(e) => editNewSkill({ description: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1.5">
                   <Label className="text-muted-foreground text-xs">license</Label>
-                  <Input placeholder="MIT / Proprietary" value={newLicense} onChange={(e) => setNewLicense(e.target.value)} />
+                  <Input placeholder="MIT / Proprietary" value={newLicense} onChange={(e) => editNewSkill({ license: e.target.value })} />
                 </div>
                 <div className="grid gap-1.5">
                   <Label className="text-muted-foreground text-xs">compatibility</Label>
-                  <Input placeholder="Requires sqlmap and python3" value={newCompat} onChange={(e) => setNewCompat(e.target.value)} />
+                  <Input placeholder="Requires sqlmap and python3" value={newCompat} onChange={(e) => editNewSkill({ compatibility: e.target.value })} />
                 </div>
               </div>
               <div className="flex min-h-0 flex-1 flex-col gap-1.5">
@@ -1109,12 +1182,12 @@ export default function SkillsPage() {
                 <Textarea id="sk-inst"
                   className="min-h-40 flex-1 resize-none font-mono text-sm leading-relaxed"
                   placeholder={"## Procedure\n\n1. Check for errors first\n2. Identify the blind-injection type\n\nPlace scripts in scripts/."}
-                  value={newInst} onChange={(e) => setNewInst(e.target.value)} />
+                  value={newInst} onChange={(e) => editNewSkill({ instructions: e.target.value })} />
               </div>
             </TabsContent>
 
             {/* Linked MCP */}
-            <TabsContent value="mcp" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
+            {!RESTRICTED_SKILLS && <TabsContent value="mcp" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
               <p className="mb-3 text-xs text-muted-foreground">Selected MCP tools are exposed and unlocked only when the skill loads.</p>
               {mcpOptions.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No MCP servers yet. Add one on the MCP page.</p>
@@ -1125,7 +1198,7 @@ export default function SkillsPage() {
                       <Checkbox
                         checked={newMcps.includes(m.name)}
                         onCheckedChange={(on) =>
-                          setNewMcps((cur) => on ? [...cur, m.name] : cur.filter((n) => n !== m.name))
+                          editNewSkill({ mcps: on ? [...newDraftRef.current.mcps, m.name] : newDraftRef.current.mcps.filter((n) => n !== m.name) })
                         }
                       />
                       {m.name}
@@ -1133,10 +1206,10 @@ export default function SkillsPage() {
                   ))}
                 </div>
               )}
-            </TabsContent>
+            </TabsContent>}
 
             {/* Visibility */}
-            <TabsContent value="visibility" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
+            {!RESTRICTED_SKILLS && <TabsContent value="visibility" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
               <p className="mb-3 text-xs text-muted-foreground">Selected agents can see this skill after creation.</p>
               {agents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">(No agents yet)</p>
@@ -1147,7 +1220,7 @@ export default function SkillsPage() {
                       <Checkbox
                         checked={newVisibility.includes(a.id)}
                         onCheckedChange={(on) =>
-                          setNewVisibility((cur) => on ? [...cur, a.id] : cur.filter((id) => id !== a.id))
+                          editNewSkill({ visibility: on ? [...newDraftRef.current.visibility, a.id] : newDraftRef.current.visibility.filter((id) => id !== a.id) })
                         }
                       />
                       {a.name}
@@ -1155,12 +1228,12 @@ export default function SkillsPage() {
                   ))}
                 </div>
               )}
-            </TabsContent>
+            </TabsContent>}
           </Tabs>
 
           <SheetFooter className="flex-row justify-end gap-2 border-t px-4 py-3">
             <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
-            <Button onClick={createNewSkill} disabled={creatingSkill}>{creatingSkill ? "Creating…" : "Create"}</Button>
+            <Button onClick={createNewSkill} disabled={creatingSkill || rootWriteBlocked || workspaceState.pending.size > 0 || workspaceState.uncertain.size > 0}>{creatingSkill ? "Creating…" : "Create"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

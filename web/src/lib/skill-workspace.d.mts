@@ -1,6 +1,16 @@
 import type { SkillItem } from "./types";
 export function skillFileKey(skill: string, path: string): string;
 export function skillResourcePath(skill: string, path?: string): string;
+export interface SkillCreationInput {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  instructions?: string;
+  mcps?: string[];
+}
+export function validSkillCreationName(name: unknown): boolean;
+export function confirmedSkillCreation(value: unknown, name: string): { name: string };
 export function confirmedSkillWrite(value: unknown): { ok: true };
 export function confirmedSkillDirectory(value: unknown, path: string): { dir: string };
 export function confirmedSkillContent(value: unknown, path: string): string;
@@ -18,8 +28,12 @@ export interface SkillWorkspaceSnapshot {
   pending: ReadonlyMap<string, { path: string; kind: string }>;
   uncertain: ReadonlyMap<string, { path: string; kind: string }>;
   errors: ReadonlyMap<string, { path: string; message: string }>;
+  rootPending: { name: string } | null;
+  rootUncertain: { name: string; message: string } | null;
+  rootError: { name: string; message: string } | null;
 }
 export interface SkillWorkspaceApi {
+  createSkill(input: SkillCreationInput): Promise<unknown>;
   readSkillFile(skill: string, path: string): Promise<string>;
   writeSkillFile(skill: string, path: string, content: string): Promise<unknown>;
   createSkillDir(skill: string, path: string): Promise<unknown>;
@@ -29,6 +43,7 @@ export function createSkillWorkspace(api: SkillWorkspaceApi): {
   getSnapshot(): SkillWorkspaceSnapshot;
   read(skill: string, path: string): () => void;
   edit(skill: string, path: string, content: string): void;
+  createSkill(input: SkillCreationInput): Promise<{ name: string } | null>;
   save(skill: string, path: string): Promise<boolean>;
   create(skill: string, path: string, kind: "file" | "dir"): Promise<boolean>;
 };

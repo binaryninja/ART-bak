@@ -39,6 +39,29 @@ function object(value) {
 function confirmed(value) {
   return object(value) && value.pending !== true && value.unknown !== true && value.retry !== false;
 }
+export function validSkillCreationName(name) {
+  if (typeof name !== "string") return false;
+  const chars = [...name];
+  const letter = (c) => /[a-z]/u.test(c) || (c.codePointAt(0) > 127 && /\p{L}/u.test(c));
+  return (
+    chars.length >= 1 &&
+    chars.length <= 64 &&
+    letter(chars[0]) &&
+    !name.endsWith("-") &&
+    !name.includes("--") &&
+    chars.every((c) => letter(c) || c === "-" || /\p{Nd}/u.test(c)) &&
+    new TextEncoder().encode(name).length <= 255
+  );
+}
+export function confirmedSkillCreation(value, name) {
+  if (!validSkillCreationName(name) || !confirmed(value) || value.outcome === "unknown" || value.name !== name)
+    throw new ApiError(
+      201,
+      { unknown: true, retry: false },
+      "Skill creation is unconfirmed. Inspect the workspace before any further writes.",
+    );
+  return { name };
+}
 export function confirmedSkillWrite(value) {
   if (!confirmed(value) || value.ok !== true)
     throw new ApiError(
@@ -95,12 +118,18 @@ export function createSkillWorkspace(api) {
     errors = new Map();
   const listeners = new Set();
   let snapshot;
+  let rootPending = null,
+    rootUncertain = null,
+    rootError = null;
   function publish() {
     snapshot = {
       drafts: new Map(drafts),
       pending: new Map(pending),
       uncertain: new Map(uncertain),
       errors: new Map(errors),
+      rootPending,
+      rootUncertain,
+      rootError,
     };
     for (const listener of listeners) listener();
   }
@@ -175,6 +204,37 @@ export function createSkillWorkspace(api) {
       replace(key, { content, revision: entry.revision + 1, dirty: content !== entry.baseline });
       publish();
     },
+    async createSkill(input) {
+      // Top-level creation shares a synchronous fence with file/folder writes.
+      // An unknown root mutation suspends writes across every skill, not only
+      // the requested name. Reads, draft edits and catalog refresh stay usable.
+      if (rootPending || rootUncertain || pending.size || uncertain.size) return null;
+      if (!validSkillCreationName(input?.name) || typeof input?.description !== "string" || !input.description.trim()) {
+        rootError = {
+          name: typeof input?.name === "string" ? input.name : "",
+          message: "Enter a valid skill name and nonblank description.",
+        };
+        publish();
+        return null;
+      }
+      const request = { ...input, ...(input.mcps ? { mcps: [...input.mcps] } : {}) };
+      const token = { name: request.name };
+      rootPending = token;
+      rootError = null;
+      publish();
+      try {
+        return confirmedSkillCreation(await api.createSkill(request), token.name);
+      } catch (error) {
+        rootError = { name: token.name, message: errorText(error) };
+        if (mutationMustWait(error) || (error instanceof ApiError && error.status >= 500)) {
+          rootUncertain = { ...token, message: errorText(error) };
+        }
+        return null;
+      } finally {
+        if (rootPending === token) rootPending = null;
+        publish();
+      }
+    },
     async save(skill, path) {
       const entry = drafts.get(skillFileKey(skill, path));
       if (!entry?.loaded || !entry.dirty) return false;
@@ -192,7 +252,7 @@ export function createSkillWorkspace(api) {
     },
   };
   async function mutate(skill, path, kind, content) {
-    if (pending.has(skill) || uncertain.has(skill)) return false;
+    if (rootPending || rootUncertain || pending.has(skill) || uncertain.has(skill)) return false;
     try {
       skillResourcePath(skill, path);
     } catch (error) {
