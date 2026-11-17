@@ -52,4 +52,4 @@ class TaskHTTPManagerFacade:
     def update_metadata(self,task_id,**patch):
         self._identity()
         if not patch or set(patch)-{'name','pinned'}:raise ValueError('Only name/pinned metadata is supported')
-        return self._manager.update_metadata(task_id,**patch)
+        return self.host._invoke(lambda:self._manager.update_metadata(task_id,**patch),admission=False)

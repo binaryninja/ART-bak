@@ -98,6 +98,9 @@ class AgentHost:
         self._working = False
         self._working_thread = None
         self._intent_control = None
+        self._lifetime_closed = False
+        self._effect_serial = 0
+        self._poll_proof = self._drain_proof = None
         claim=getattr(runner,'claim_host',None)
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
@@ -137,6 +140,7 @@ class AgentHost:
             if (self._intent_control is not None or self._settling or self._draining or other_mutations
                 or (self._working and (action=='resume' or self._working_thread==get_ident()))):
                 raise TaskConflict('Intent control conflicts with owned lifecycle work')
+            self._accept_effect_locked()
             slot=(key,intent_id,action,get_ident());self._intent_control=slot;self._mutations+=1
             if action=='resume':self._admissions+=1
         try:
@@ -160,6 +164,8 @@ class AgentHost:
                     and self._settling and self._settlement_thread == get_ident())
 
     def _identity(self):
+        with self._condition:
+            if self._lifetime_closed:raise RuntimeUnavailable('Host execution lifetime is closed')
         if self.manager.runner is not self.runner:
             raise RuntimeUnavailable('Hosted lifecycle runner identity changed')
         if any(not callable(getattr(self.runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
@@ -201,6 +207,44 @@ class AgentHost:
         if type(result) is not bool:raise RuntimeUnavailable('Runner handle wait must confirm a boolean drain result')
         return result
 
+    def _accept_effect_locked(self):
+        """Caller holds _condition; no callbacks or ownership release."""
+        if self._lifetime_closed:raise RuntimeUnavailable('Host execution lifetime is closed')
+        self._effect_serial += 1
+        self._poll_proof = self._drain_proof = None
+
+    def close_lifetime(self, drain):
+        """Atomically close every hosted effect after this exact clean drain.
+
+        A copied/stale receipt is not authority. New accepted invocations
+        invalidate the proof even if they return before this call. This gate
+        releases no task/resource/process ownership and performs no callbacks.
+        """
+        if (self.manager is not self._original_manager or self.runner is not self._original_runner
+                or self._original_manager.runner is not self._original_runner):
+            raise RuntimeUnavailable('Host lifetime ownership changed')
+        with self._condition:
+            proof = self._drain_proof
+            if (type(drain) is not DrainResult or proof is None or proof[0] is not drain
+                    or proof[1] != self._effect_serial or not drain.all_settled
+                    or not self._admission_sealed or self._mutations or self._working
+                    or self._settling or self._draining or self._intent_control is not None):
+                return False
+            self._lifetime_closed = True
+            self._condition.notify_all()
+            return True
+
+    def lifetime_closed(self, drain):
+        """Callback-free identity proof for the original listener/session only."""
+        with self._condition:
+            proof = self._drain_proof
+            return (self.manager is self._original_manager and self.runner is self._original_runner
+                    and self._original_manager.runner is self._original_runner
+                    and self._lifetime_closed and self._admission_sealed
+                    and self._intent_control is None and proof is not None and proof[0] is drain
+                    and proof[1] == self._effect_serial and not self._mutations
+                    and not self._working and not self._settling and not self._draining)
+
     def _invoke(self, callback, *, admission):
         self._identity()
         with self._condition:
@@ -214,6 +258,7 @@ class AgentHost:
                 raise TaskConflict('Admission is suspended during an owned engine step')
             if admission and self._draining:
                 raise TaskConflict('Admission is suspended during cooperative drain')
+            self._accept_effect_locked()
             self._mutations += 1
             if admission:self._admissions += 1
         try:
@@ -311,6 +356,7 @@ class AgentHost:
         with self._condition:
             if self._mutations or self._settling or self._draining or self._working:
                 return OwnedWorkResult(True)
+            self._accept_effect_locked()
             self._working=True;self._working_thread=get_ident();self._mutations+=1
         try:
             self._identity()
@@ -337,6 +383,8 @@ class AgentHost:
                 return PollResult(busy=True)
             if self._mutations:
                 return PollResult(busy=True)
+            self._accept_effect_locked()
+            serial = self._effect_serial
             self._settling = True
             self._settlement_thread = get_ident()
         try:
@@ -351,8 +399,11 @@ class AgentHost:
             continuations=self.manager.suspension_owners()
             self._identity()
             if type(continuations) is not tuple or len(continuations)>100000 or any(type(v) is not tuple or len(v)!=2 or type(v[0]) is not str or not v[0].isascii() or not v[0].isdecimal() or v[1] not in ('reserving','pausing','paused','resuming','installed','quarantined') for v in continuations):raise RuntimeUnavailable('Invalid continuation inventory')
-            return PollResult(False, settled, running, len(handles) - running,
-                              len(owners),sum(o.state != 'suspended' for o in owners),len(continuations))
+            result = PollResult(False, settled, running, len(handles) - running,
+                                len(owners),sum(o.state != 'suspended' for o in owners),len(continuations))
+            with self._condition:
+                if self._effect_serial == serial:self._poll_proof = (result, serial)
+            return result
         finally:
             with self._condition:
                 self._settling = False
@@ -371,6 +422,8 @@ class AgentHost:
             raise ValueError('timeout must be finite and nonnegative')
         deadline = monotonic() + timeout
         with self._condition:
+            if self._lifetime_closed:raise RuntimeUnavailable('Host execution lifetime is closed')
+            self._drain_proof = None
             if self._settling and self._settlement_thread == get_ident():
                 raise TaskConflict('Completion settlement cannot drain itself')
             if self._draining:
@@ -388,7 +441,13 @@ class AgentHost:
                     state = self.poll()
                     return DrainResult(False, state)
             state = self.poll()
-            return DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0 and state.continuation_owners == 0, state)
+            result = DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0 and state.continuation_owners == 0, state)
+            with self._condition:
+                proof = self._poll_proof
+                if (result.all_settled and proof is not None and proof[0] is state
+                        and proof[1] == self._effect_serial and not self._mutations and not self._settling):
+                    self._drain_proof = (result, self._effect_serial)
+            return result
         finally:
             with self._condition:
                 self._draining = False

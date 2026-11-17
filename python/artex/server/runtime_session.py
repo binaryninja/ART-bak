@@ -50,9 +50,9 @@ class RuntimeSession:
         self._driving = False
         self.result = SessionResult(False, False, 'not_started')
         if lease_owner is None:
-            lease.claim(self)
+            self._release_permit = lease.claim(self, guarded=True)
         else:
-            lease.transfer(lease_owner, self)
+            self._release_permit = lease.transfer(lease_owner, self, guarded=True)
 
     @staticmethod
     def _timeout(timeout):
@@ -90,10 +90,15 @@ class RuntimeSession:
 
     def _drain(self, timeout, reason):
         try:
-            result = self._pins[0].stop(timeout)
-            if type(result) is not ListenerStop or result.stopped is not True:
+            listener = self._pins[0]
+            method = getattr(listener,'stop',None)
+            if getattr(method,'__self__',None) is not listener or getattr(method,'__func__',None) is not _LISTENER_STOP:
                 return SessionResult(False, False, reason + '_unresolved')
-            self._pins[1].release(owner=self)
+            result = method(timeout)
+            if (type(result) is not ListenerStop or result.stopped is not True
+                    or _LISTENER_CLOSED(listener) is not True):
+                return SessionResult(False, False, reason + '_unresolved')
+            self._pins[1].release(owner=self, permit=self._release_permit)
             self._state = 'closed'
             return SessionResult(False, True, reason)
         except BaseException:
@@ -217,3 +222,7 @@ class RuntimeSession:
         finally:
             with self._lock: self._driving = False
         return ForegroundResult(reason, shutdown)
+
+
+_LISTENER_STOP = RuntimeListener.stop
+_LISTENER_CLOSED = RuntimeListener.closed_lifetime

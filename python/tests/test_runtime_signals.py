@@ -159,9 +159,11 @@ class SessionSignalTests(unittest.TestCase):
 
     def test_signal_shutdown_unresolved_retains_lease_no_automatic_retry(self):
         self.event.set()
-        with patch.object(self.session.listener, 'stop', return_value=None) as stop:
+        # Exercise the original listener stop path; replaced stop methods are
+        # now refused before invocation and cannot serve as drain evidence.
+        with patch.object(self.session.listener._bundle.host, 'drain', side_effect=RuntimeError('inert unresolved drain')) as drain:
             result = self.session.run_until_signalled(self.scope, self.event)
-        stop.assert_called_once()
+        drain.assert_called_once()
         self.assertFalse(result.foreground.shutdown.stopped)
         self.assertTrue(result.handlers_restored)
         self.assertTrue(self.lease.validate())

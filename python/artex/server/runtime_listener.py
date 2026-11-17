@@ -302,7 +302,7 @@ class RuntimeListener:
             self._archive_view=RuntimeArchiveView(archive_catalog,base,owner.pool,self._view,self._check,bundle.app)
             self._view=self._archive_view
         self._archive_binding=self._archive_view
-        self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False
+        self._lock=threading.RLock();self._server=None;self._thread=None;self._stopping=False;self._closed=False;self._resources_closed=False;self._shutdown_active=False;self._host_drain=None
     def _check_continuation(self):
         owner=self._continuation
         if self._bundle.runner._continuation_owner is not owner or self._bundle.manager._continuation_owner is not owner:
@@ -363,6 +363,15 @@ class RuntimeListener:
             self._check()
             if self._stopping or self._closed:raise RuntimeError('Listener shutdown already requested')
             return self._bundle.start_pump()
+    def closed_lifetime(self):
+        """Verify the original closed stages; a ListenerStop value is not proof."""
+        from ..agent.host import AgentHost
+        with self._lock:
+            return (self._closed and self._resources_closed and not self._shutdown_active
+                    and self._bundle.host is self._pins[3] and self._bundle.manager is self._pins[4]
+                    and self._owner.pool is self._pins[5] and self._host_drain is not None
+                    and AgentHost.lifetime_closed(self._pins[3],self._host_drain))
+
     def stop(self,timeout):
         if type(timeout) not in (int,float) or not math.isfinite(timeout) or timeout<0:raise ValueError('Finite shutdown timeout required')
         deadline=time.monotonic()+timeout
@@ -378,35 +387,47 @@ class RuntimeListener:
         # never run under the listener lock. Concurrent/reentrant stops observe
         # shutdown_busy, and retained manual invocations can finish independently.
         try:
-            if self._continuation is not None:
-                if self._continuation.seal_resume() is not True:return ListenerStop(False,'resume_admission_unresolved')
+            if self._host_drain is None:
+                # Do not rely solely on an external callback to seal this host.
+                from ..agent.host import AgentHost
+                if AgentHost.stop_admissions(self._bundle.host) is not True:return ListenerStop(False,'host_admissions_unresolved')
+                if self._continuation is not None:
+                    if self._continuation.seal_resume() is not True:return ListenerStop(False,'resume_admission_unresolved')
+                    self._check()
+                if self._manual is not None:
+                    if self._manual.stop_new_actions() is not True:return ListenerStop(False,'manual_admission_unresolved')
+                    self._check()
+                if self._pins[6]() is not True:return ListenerStop(False,'admission_unresolved')
                 self._check()
-            if self._manual is not None:
-                if self._manual.stop_new_actions() is not True:return ListenerStop(False,'manual_admission_unresolved')
+                if self._server is not None:
+                    self._server.shutdown();self._server.server_close()
+                    if not self._server.quiesce(remaining()):return ListenerStop(False,'http_unresolved')
+                    self._thread.join(remaining())
+                    if self._thread.is_alive():return ListenerStop(False,'listener_unresolved')
+                if self._bundle.stop_pump(remaining()) is not True:return ListenerStop(False,'pump_unresolved')
+                if self._manual is not None:
+                    self._manual.cancel_active();self._check()
+                if self._pins[7]() is not True:return ListenerStop(False,'cancellation_unresolved')
                 self._check()
-            if self._pins[6]() is not True:return ListenerStop(False,'admission_unresolved')
-            self._check()
-            if self._server is not None:
-                self._server.shutdown();self._server.server_close()
-                if not self._server.quiesce(remaining()):return ListenerStop(False,'http_unresolved')
-                self._thread.join(remaining())
-                if self._thread.is_alive():return ListenerStop(False,'listener_unresolved')
-            if self._bundle.stop_pump(remaining()) is not True:return ListenerStop(False,'pump_unresolved')
-            if self._manual is not None:
-                self._manual.cancel_active();self._check()
-            if self._pins[7]() is not True:return ListenerStop(False,'cancellation_unresolved')
-            self._check()
-            drain=self._bundle.host.drain(remaining())
-            if drain.all_settled is not True:return ListenerStop(False,'runtime_unresolved')
-            self._check()
-            # A retired manager owner is not enough: the outer manual invocation
-            # may still be unwinding after its terminal SQL commit.
-            if self._manual is not None:
-                if self._manual.wait(remaining()).drained is not True:return ListenerStop(False,'manual_actions_unresolved')
+                drain=self._bundle.host.drain(remaining())
+                if drain.all_settled is not True:return ListenerStop(False,'runtime_unresolved')
                 self._check()
-            if self._continuation is not None:
-                if self._continuation.wait_resumes(remaining()) is not True:return ListenerStop(False,'resume_actions_unresolved')
-                self._check()
+                # A retired manager owner is not enough: the outer manual invocation
+                # may still be unwinding after its terminal SQL commit.
+                if self._manual is not None:
+                    if self._manual.wait(remaining()).drained is not True:return ListenerStop(False,'manual_actions_unresolved')
+                    self._check()
+                if self._continuation is not None:
+                    if self._continuation.wait_resumes(remaining()) is not True:return ListenerStop(False,'resume_actions_unresolved')
+                    self._check()
+                from ..agent.host import AgentHost
+                if AgentHost.close_lifetime(self._bundle.host,drain) is not True:
+                    return ListenerStop(False,'host_lifetime_unresolved')
+                self._host_drain=drain
+            else:
+                from ..agent.host import AgentHost
+                if AgentHost.lifetime_closed(self._bundle.host,self._host_drain) is not True:
+                    return ListenerStop(False,'host_lifetime_changed')
             if not self._resources_closed:
                 if self._pins[8]() is not True:return ListenerStop(False,'resources_unresolved')
                 self._resources_closed=True

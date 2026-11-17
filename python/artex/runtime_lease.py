@@ -33,6 +33,7 @@ class RuntimeLease:
         self._pid = None
         self._identity = None
         self._holder = None
+        self._release_permit = None
 
     @staticmethod
     def _safe(info, directory=False):
@@ -85,31 +86,40 @@ class RuntimeLease:
         return True
 
     @_locked
-    def claim(self, owner):
+    def claim(self, owner, *, guarded=False):
         self.validate()
         if owner is None or self._holder is not None:
             raise LeaseUnavailable('Lease already belongs to a runtime session')
+        if type(guarded) is not bool:raise ValueError('Explicit guarded ownership required')
         self._holder = owner
+        self._release_permit = object() if guarded else None
+        return self._release_permit
 
     @_locked
-    def transfer(self, owner, replacement):
+    def transfer(self, owner, replacement, *, guarded=False):
         """Transfer an existing claim without an unlocked/unclaimed interval."""
         self.validate()
-        if owner is None or replacement is None or self._holder is not owner:
+        if (owner is None or replacement is None or self._holder is not owner
+                or self._release_permit is not None):
             raise LeaseUnavailable('Exact current lease owner required')
+        if type(guarded) is not bool:raise ValueError('Explicit guarded ownership required')
         self._holder = replacement
+        self._release_permit = object() if guarded else None
+        return self._release_permit
 
     @_locked
-    def release(self, *, owner=None):
+    def release(self, *, owner=None, permit=None):
         # A renamed/unlinked path is a validation failure, but the original
         # descriptor must still be releasable after the runtime has drained.
         if self._fd is None: return False
         if self._holder is not None and owner is not self._holder:
             raise LeaseUnavailable('Only the owning drained session may release the lease')
         if self._pid != os.getpid(): raise LeaseUnavailable('Lease belongs to another process')
+        if self._release_permit is not None and permit is not self._release_permit:
+            raise LeaseUnavailable('Original session drain permit required')
         os.close(self._fd)
         self._fd = None
         os.close(self._directory)
         self._directory = self._pid = self._identity = None
-        self._holder = None
+        self._holder = self._release_permit = None
         return True
