@@ -1,4 +1,4 @@
-import { ApiError, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
+import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -321,7 +321,8 @@ export const api = {
     }),
   deleteTask: (id: string, options: DeleteTaskOptions) => del<DeleteTaskResult>(`/tasks/${id}`, options),
   controlTask: (id: string, action: "pause" | "resume") =>
-    post<{ id: string; paused: boolean; queued: boolean; status: string }>(`/tasks/${id}/control`, { action }),
+    http<unknown>(`/tasks/${id}/control`, { method: "POST", body: JSON.stringify({ action }) }, 200)
+      .then((result) => confirmedTaskControl(result, id, action)),
   controlTasksBatch: (taskIds: string[], action: "pause" | "resume") =>
     post<{ items: BatchControlItem[] }>("/tasks/control/batch", { task_ids: taskIds, action }),
   taskArchives: (input?: { page?: number; size?: number; q?: string; state?: string }) => {

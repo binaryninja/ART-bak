@@ -31,3 +31,17 @@ export function confirmedIntentState(result, action) {
   }
   return expected;
 }
+
+// Single-task control is synchronous HTTP 200 in both Go and Python. A queued
+// resume is confirmed admission, not a claim that exploration is already running.
+export function confirmedTaskControl(result, id, action) {
+  const valid = result && typeof result === 'object' && !Array.isArray(result)
+    && result.id === id && typeof result.paused === 'boolean' && typeof result.queued === 'boolean'
+    && result.pending !== true && result.unknown !== true && result.retry !== false
+    && (action === 'pause'
+      ? result.paused && !result.queued && result.status === 'paused'
+      : action === 'resume' && !result.paused
+        && (result.queued ? result.status === 'queued' : result.status === 'running'));
+  if (!valid) throw new ApiError(200, { unknown: true, retry: false }, 'Task control is unconfirmed. Do not repeat it; reconciliation is required.');
+  return { id: result.id, paused: result.paused, queued: result.queued, status: result.status };
+}

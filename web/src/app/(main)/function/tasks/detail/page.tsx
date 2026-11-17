@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
+import { mutationMustWait } from "@/lib/mutation-contract.mjs";
 import type { LLMProfile, Task } from "@/lib/types";
 
 import { AssetsTab } from "./_tabs/assets-tab";
@@ -213,6 +214,21 @@ function TaskDetailInner() {
   const [interceptPendingCount, setInterceptPendingCount] = React.useState(0);
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
   const [archiving, setArchiving] = React.useState(false);
+  const archiveRequested = React.useRef(false);
+  const currentTaskID = React.useRef(id);
+  currentTaskID.current = id;
+  const viewActive = React.useRef(true);
+  // Refs guard duplicate clicks before React renders; per-task entries survive
+  // navigation within this mounted detail view, not a reload or another client.
+  const controlRequests = React.useRef(new Map<string, object>());
+  const uncertainControls = React.useRef(new Set<string>());
+  const [controllingIDs, setControllingIDs] = React.useState(new Set<string>());
+  const [uncertainControlIDs, setUncertainControlIDs] = React.useState(new Set<string>());
+
+  React.useEffect(() => {
+    viewActive.current = true;
+    return () => { viewActive.current = false; };
+  }, []);
 
   React.useEffect(() => {
     api
@@ -240,13 +256,16 @@ function TaskDetailInner() {
     };
   }, [id]);
 
-  const taskLoadInFlight = React.useRef<string | null>(null);
+  const taskLoadInFlight = React.useRef<{ id: string } | null>(null);
   const load = React.useCallback(() => {
-    if (taskLoadInFlight.current === id) return;
-    taskLoadInFlight.current = id;
+    if (!viewActive.current || currentTaskID.current !== id) return;
+    if (taskLoadInFlight.current?.id === id) return;
+    // Identity, rather than only the task ID, also fences an older A -> B -> A read.
+    const request = { id };
+    taskLoadInFlight.current = request;
     Promise.all([api.task(id), api.stats(id).catch(() => null)])
       .then(([task, s]) => {
-        if (taskLoadInFlight.current !== id) return;
+        if (!viewActive.current || currentTaskID.current !== id || taskLoadInFlight.current !== request) return;
         const base = { ...task };
         const at = s?.active_task;
         if (at) {
@@ -263,9 +282,9 @@ function TaskDetailInner() {
         // Keep the last rendered task state during a transient poll failure.
       })
       .finally(() => {
-        if (taskLoadInFlight.current === id) {
+        if (taskLoadInFlight.current === request) {
           taskLoadInFlight.current = null;
-          setLoaded(true);
+          if (viewActive.current && currentTaskID.current === id) setLoaded(true);
         }
       });
   }, [id]);
@@ -276,25 +295,58 @@ function TaskDetailInner() {
   }, [load]);
 
   async function togglePause() {
-    if (task && ["done", "failed", "timeout"].includes(task.status)) return;
-    const next = !paused;
+    if (
+      !viewActive.current || currentTaskID.current !== id || !task || task.id !== id || archiving || archiveRequested.current
+      || ["done", "failed", "timeout"].includes(task.status)
+      || controlRequests.current.has(id) || uncertainControls.current.has(id)
+    ) return;
+    const requestedID = id;
+    const action = paused ? "resume" : "pause";
+    const request = {};
+    controlRequests.current.set(requestedID, request);
+    setControllingIDs(new Set(controlRequests.current.keys()));
+    if (taskLoadInFlight.current?.id === requestedID) taskLoadInFlight.current = null;
     try {
-      await api.controlTask(id, next ? "pause" : "resume");
-      setPaused(next);
-      toast.success(next ? "Exploration paused" : "Exploration resumed");
+      const result = await api.controlTask(requestedID, action);
+      if (!viewActive.current || currentTaskID.current !== requestedID) return;
+      setTask((current) => current?.id === requestedID ? { ...current, ...result } : current);
+      setPaused(result.paused);
+      toast.success(result.paused ? "Exploration paused" : result.queued ? "Task queued for resumption" : "Exploration resumed");
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      const uncertain = mutationMustWait(e);
+      if (uncertain) {
+        uncertainControls.current.add(requestedID);
+        if (viewActive.current) setUncertainControlIDs(new Set(uncertainControls.current));
+      }
+      if (viewActive.current && currentTaskID.current === requestedID) {
+        toast.error(uncertain
+          ? "Task control outcome is unconfirmed. Do not repeat it; inspect the task before continuing."
+          : "Operation failed: " + (e as Error).message);
+      }
+    } finally {
+      if (controlRequests.current.get(requestedID) === request) controlRequests.current.delete(requestedID);
+      if (taskLoadInFlight.current?.id === requestedID) taskLoadInFlight.current = null;
+      if (viewActive.current) {
+        setControllingIDs(new Set(controlRequests.current.keys()));
+        if (currentTaskID.current === requestedID) load();
+      }
     }
   }
 
   async function archiveTask() {
-    if (!task || archiving) return;
+    if (
+      !viewActive.current || currentTaskID.current !== id || !task || task.id !== id || archiving || archiveRequested.current
+      || controlRequests.current.has(id) || uncertainControls.current.has(id)
+    ) return;
+    // Keep the successful enqueue gated until navigation, just like archiving.
+    archiveRequested.current = true;
     setArchiving(true);
     try {
       await api.archiveTask(task.id);
       toast.success("Task queued for archiving");
       router.push("/function/tasks");
     } catch (error) {
+      archiveRequested.current = false;
       toast.error(`Archive failed: ${(error as Error).message}`);
       setArchiving(false);
     }
@@ -317,12 +369,18 @@ function TaskDetailInner() {
 
   const completed = task.status === "done";
   const terminal = ["done", "failed", "timeout"].includes(task.status);
+  const controlling = controllingIDs.has(id);
+  const controlUncertain = uncertainControlIDs.has(id);
+  const controlUnavailable = task.id !== id || controlling || controlUncertain || archiving;
   const archiveLifecycleEligible = terminal || paused || task.status === "paused";
-  const canArchive = archiveLifecycleEligible && !task.archive_blocked_by_task_id;
+  const canArchive = archiveLifecycleEligible && !task.archive_blocked_by_task_id && !controlUnavailable;
   let archiveDisabledReason = task.queued ? "Pause queued tasks first" : "Pause running tasks first";
   if (archiveLifecycleEligible && task.archive_blocked_by_task_id) {
     archiveDisabledReason = `Unarchived task #${task.archive_blocked_by_task_id} directly inherits this task. Archive the dependent task first.`;
   }
+  if (controlUnavailable) archiveDisabledReason = controlUncertain
+    ? "Task control outcome is unconfirmed; inspect the task before continuing"
+    : "Wait for task control confirmation";
   const engineMode = paused ? "paused" : (task.engine_mode ?? "idle");
   let controlVariant: "default" | "secondary" | "outline" = "outline";
   let controlIcon = <PauseIcon data-icon="inline-start" />;
@@ -336,6 +394,8 @@ function TaskDetailInner() {
     controlIcon = <PlayIcon data-icon="inline-start" />;
     controlLabel = "Resume";
   }
+  if (controlling) { controlIcon = <Spinner />; controlLabel = "Updating…"; }
+  if (controlUncertain) { controlIcon = <CircleAlertIcon />; controlLabel = "Unconfirmed"; }
   const archiveTrigger = (
     <Button
       size="icon-sm"
@@ -392,7 +452,7 @@ function TaskDetailInner() {
               <TooltipContent>{archiveDisabledReason}</TooltipContent>
             </Tooltip>
           )}
-          <Button size="sm" variant={controlVariant} onClick={togglePause} disabled={terminal}>
+          <Button size="sm" variant={controlVariant} onClick={togglePause} disabled={terminal || controlUnavailable}>
             {controlIcon}
             {controlLabel}
           </Button>
