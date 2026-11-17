@@ -74,6 +74,11 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
+// Avatar initials must retain a whole displayed character, not a UTF-16 code unit.
+// Older engines without Segmenter still keep supplementary code points intact.
+const initialSegmenter =
+  typeof Intl.Segmenter === "function" ? new Intl.Segmenter("en", { granularity: "grapheme" }) : null;
+
 export const getInitials = (str: string): string => {
   if (typeof str !== "string" || !str.trim()) return "?";
 
@@ -82,7 +87,7 @@ export const getInitials = (str: string): string => {
       .trim()
       .split(/\s+/)
       .filter(Boolean)
-      .map((word) => word[0])
+      .map((word) => initialSegmenter?.segment(word)[Symbol.iterator]().next().value?.segment ?? Array.from(word)[0])
       .join("")
       .toUpperCase() || "?"
   );
