@@ -70,6 +70,48 @@ directory/file creation is create-only, but the two filesystem changes are not a
 single atomic transaction. A possible partial effect is retained and returned as
 unknown, never rolled back or retried automatically.
 
+### Create-only ZIP import
+
+Add the separate `--enable-imports` flag **as well as** `--enable-writes` to
+authorize `POST /api/skills/upload`. Neither ordinary write access nor deletion
+mode implies import authority. The request must contain one multipart `file`
+field with a plain `.zip` filename; the filename is metadata, not the destination
+name. No query parameters or overwrite option are accepted. An existing target
+conflicts with 409 and is never replaced or merged. A confirmed new installation
+returns exactly `201 {"name":"manifest-name","files":2}`; `files` counts regular
+files, not directories.
+
+This is a deliberately narrow archive subset, not general ZIP compatibility:
+
+- At most 1 MiB compressed archive and 1 MiB total actual inflated file data;
+  each file is at most 256 KiB, with at most 128 archive entries including folders.
+  The existing `MAX_JSON_BYTES` request/transport ceiling is not increased.
+- Stored or raw Deflate compression only; no encryption, ZIP64, multiple disks,
+  streaming data descriptors, ZIP extra/comment fields or self-extracting
+  preamble/trailer. Names must be ASCII or explicitly marked UTF-8.
+- Canonical relative NFC paths only, at most 32 segments and 255 UTF-8 bytes per
+  component, within the existing total path limit. Duplicate/case aliases,
+  file/directory collisions, traversal, links, special entries and incompatible
+  metadata fail closed rather than being normalized or silently skipped.
+- Exactly one `SKILL.md` at the archive root or beneath one common top-level
+  folder. No unrelated entries outside that folder. Its UTF-8 metadata must
+  provide a valid explicit skill name and nonblank description; no filename
+  fallback or MCP frontmatter is supported.
+
+All member paths, header relationships, actual expanded lengths and CRCs are
+checked in bounded memory before filesystem changes. Other files may contain
+inert binary data; the existing text editor can refuse binary reads. Imported
+files are created with mode0600 and folders with mode0700, never with executable
+permissions copied from the archive. No skill instructions or files are executed.
+
+Installation is a sequence of guarded, create-only directory/file operations,
+not an atomic publication. If an effect, durability check, authority observation
+or acknowledgement becomes uncertain, partial files remain and the whole host
+is quarantined with its lease retained. There is no recursive cleanup, automatic
+retry, overwrite, rollback or promised recovery. Inspect the retained tree before
+any later manual action. Malformed input rejected before effects is not partial
+installation, and a client losing a successful receipt is not proof of failure.
+
 Authentication is initialized with real bcrypt before any socket accepts requests;
 unauthenticated initialization therefore cannot take over the host. The hash and
 random JWT key are memory-only. Changing a password over the existing auth API is
@@ -84,8 +126,10 @@ The exact successful JSON is `{"profile":"skills-workspace","writes_enabled":fal
 by default, or the same shape with `true` when the operator supplied
 `--enable-writes`. The default response remains exactly those two fields. Only
 an explicit delete-enabled host adds `"deletes_enabled":true`; absence never
-implies deletion permission. Older strict two-field clients may fail closed on
-that opt-in extended response. `HEAD` supplies the representation length without a body.
+implies deletion permission. An explicit import-enabled host independently adds
+`"imports_enabled":true`; it also requires writes, and absence never implies
+import permission. Both optional fields may be present. Older strict clients may
+fail closed on an opt-in extended response. `HEAD` supplies the representation length without a body.
 Successful responses carry `Cache-Control: no-store`; queries and request bodies
 are rejected with 400, and other authenticated methods with 405. An ordinary
 application without this host does not acquire the route.
@@ -113,7 +157,7 @@ No frontend dependency installation or real browser acceptance is implied.
 One `RuntimeLease` uses `.artex-skills.lock` in the owned root. Never unlink this
 file. Its descriptor and guarded owner permit are retained until verified clean
 shutdown. This root-level regular file is not a skill and its contents are not
-reachable through a valid skill route. The shared RLock covers all seven service
+reachable through a valid skill route. The shared RLock covers all eight service
 guards; original request tokens are required for their permissions. The lock and
 lease coordinate this host and cooperating launchers only, not arbitrary writers
 or a distributed/restart authority.
@@ -128,8 +172,9 @@ mutation iterable closed after dispatch is conservatively uncertain.
 
 A mutation 500, exceptional response/disclosure/close, or uncertain thread launch
 cannot be called clean. Unknown mutation seals all new work and retains the lease.
-The exact top-level `POST /api/skills` and `DELETE` beneath `/api/skills/` are
-included in this accounting, not just file/directory writes. Safe pre-effect refusals such as
+The exact top-level `POST /api/skills`, archive `POST /api/skills/upload` and
+`DELETE` beneath `/api/skills/` are included in this accounting, not just
+file/directory writes. Safe pre-effect refusals such as
 401, 403 or an existing-entry 409 do not themselves quarantine the workspace.
 After an unresolved shutdown the CLI stays alive, holding the exact host and
 signal scope; it does not automatically retry, reconcile, release or restart.
@@ -158,7 +203,10 @@ removal and exact receipts, preserved manifests/nonempty directories/links,
 actual post-unlink fsync failure and client disconnect with retained ownership,
 plus explicit delete-enabled child CLI shutdown and lease reacquisition. These
 fixtures contain only temporary synthetic data. Fault probes distinguish
-in-process injections from actual HTTP behavior.
+in-process injections from actual HTTP behavior. Separate import tests cover
+independent import mode, bounded multipart/authentication, Unicode import and
+catalog/read/edit/conflict, partial-file/fsync/disconnect/disclosure uncertainty,
+plus an explicit import-enabled child CLI and natural lease-releasing shutdown.
 Lowercase HTTP PUT currently refuses 405 in the original write overlay; normalized
 host quarantine accounting is additionally tested with a synthetic lowercase 500.
 

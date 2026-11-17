@@ -1,5 +1,6 @@
+import { auth } from "./auth";
 import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
-import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDeletion, confirmedSkillDirectory, confirmedSkillWorkspaceProfile, confirmedSkillWrite, skillDeletionPath, skillResourcePath } from "./skill-workspace.mjs";
+import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDeletion, confirmedSkillDirectory, confirmedSkillImport, confirmedSkillWorkspaceProfile, confirmedSkillWrite, skillDeletionPath, skillResourcePath, validateSkillImportFile } from "./skill-workspace.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -1161,6 +1162,31 @@ export const api = {
     const name = s.name;
     return http<unknown>("/skills", { method: "POST", body: JSON.stringify(s) }, 201)
       .then((value) => confirmedSkillCreation(value, name));
+  },
+  // Python-only create-only import. Separate from Go's existing overwrite path.
+  importSkill: async (file: File): Promise<{ name: string; files: number }> => {
+    validateSkillImportFile(file);
+    if (MOCK) return { name: "demo-import", files: 1 }; // Fixture acknowledgement only.
+    const body = new FormData();
+    body.append("file", file, file.name);
+    const token = getToken();
+    const r = await fetch("/api/skills/upload", {
+      method: "POST", body, headers: token ? { Authorization: `Bearer ${token}` } : {},
+      // Do not set Content-Type: fetch supplies the multipart boundary.
+    }).catch(() => { throw new ApiError(0, { unknown: true, retry: false }, "Import connection lost; outcome unknown. Do not repeat it."); });
+    if (r.status === 401) {
+      if (typeof window !== "undefined") {
+        auth.clearToken();
+        window.location.href = "/login";
+      }
+      throw new ApiError(401, {}, "Unauthorized");
+    }
+    const value = await r.json().catch(() => {
+      throw new ApiError(r.status, { unknown: true, retry: false }, "Import response could not be verified. Do not repeat it.");
+    });
+    if (!r.ok) throw new ApiError(r.status, value, `Import refused (${r.status})`);
+    if (r.status !== 201) throw new ApiError(r.status, { unknown: true, retry: false }, "Unexpected import response. Reconciliation required.");
+    return confirmedSkillImport(value);
   },
   // uploadSkill installs a skill from a .zip (multipart). Surfaces the backend
   // Error text (e.g. already exists / missing SKILL.md) gives the UI a precise message.

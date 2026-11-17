@@ -50,12 +50,15 @@ function confirmed(value) {
 export function confirmedSkillWorkspaceProfile(value) {
   if (
     !object(value) ||
-    ![2, 3].includes(Object.keys(value).length) ||
-    Object.keys(value).some((key) => !["profile", "writes_enabled", "deletes_enabled"].includes(key)) ||
+    ![2, 3, 4].includes(Object.keys(value).length) ||
+    Object.keys(value).some(
+      (key) => !["profile", "writes_enabled", "deletes_enabled", "imports_enabled"].includes(key),
+    ) ||
     value.profile !== "skills-workspace" ||
     typeof value.writes_enabled !== "boolean" ||
     ("deletes_enabled" in value && typeof value.deletes_enabled !== "boolean") ||
-    (value.deletes_enabled === true && value.writes_enabled !== true)
+    ("imports_enabled" in value && typeof value.imports_enabled !== "boolean") ||
+    ((value.deletes_enabled === true || value.imports_enabled === true) && value.writes_enabled !== true)
   ) {
     throw new Error("Skills host mode response is unavailable or incompatible. Writes remain disabled.");
   }
@@ -63,6 +66,7 @@ export function confirmedSkillWorkspaceProfile(value) {
     profile: "skills-workspace",
     writes_enabled: value.writes_enabled,
     ...("deletes_enabled" in value ? { deletes_enabled: value.deletes_enabled } : {}),
+    ...("imports_enabled" in value ? { imports_enabled: value.imports_enabled } : {}),
   };
 }
 export function validSkillCreationName(name) {
@@ -87,6 +91,39 @@ export function confirmedSkillCreation(value, name) {
       "Skill creation is unconfirmed. Inspect the workspace before any further writes.",
     );
   return { name };
+}
+// Metadata/size preflight only. The host validates archive entries, expansion,
+// manifest and filesystem authority; the browser does not inspect ZIP contents.
+export function validateSkillImportFile(file) {
+  if (typeof File === "undefined" || !(file instanceof File) || !file.name)
+    throw new Error("Choose a ZIP archive file.");
+  if (/[\\/"]/u.test(file.name) || hasControl(file.name) || new TextEncoder().encode(file.name).length > 255)
+    throw new Error(
+      "Use an archive filename of at most 255 UTF-8 bytes, without path separators, quotes or control characters.",
+    );
+  if (!/\.zip$/iu.test(file.name)) throw new Error("Choose an archive with a .zip filename.");
+  if (file.size < 1 || file.size > 1048576) throw new Error("Choose a nonempty archive no larger than 1 MiB.");
+  return file;
+}
+export function confirmedSkillImport(value) {
+  if (
+    !object(value) ||
+    Object.keys(value).length !== 2 ||
+    !Object.hasOwn(value, "name") ||
+    !Object.hasOwn(value, "files") ||
+    !validSkillCreationName(value.name) ||
+    value.name.normalize("NFC") !== value.name ||
+    !Number.isSafeInteger(value.files) ||
+    value.files < 1 ||
+    value.files > 128
+  )
+    throw new ApiError(
+      201,
+      { unknown: true, retry: false },
+      "Archive import is unconfirmed. Do not repeat it; reconcile the workspace before further mutations.",
+    );
+  // The validated manifest determines this name, not the uploaded ZIP filename.
+  return { name: value.name, files: value.files };
 }
 export function confirmedSkillWrite(value) {
   if (!confirmed(value) || value.ok !== true)
@@ -168,12 +205,17 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
   const listeners = new Set();
   let snapshot;
   let profile = requireProfile
-    ? { status: "unchecked", writesEnabled: false, deletesEnabled: false, error: null }
+    ? { status: "unchecked", writesEnabled: false, deletesEnabled: false, importsEnabled: false, error: null }
     : null;
   let profileRequest = null;
   const writeModeEnabled = () => profile === null || (profile.status === "ready" && profile.writesEnabled);
   const deleteModeEnabled = () =>
     profile === null || (profile.status === "ready" && profile.writesEnabled && profile.deletesEnabled);
+  const importModeEnabled = () =>
+    profile === null || (profile.status === "ready" && profile.writesEnabled && profile.importsEnabled);
+  let importPending = null,
+    importUncertain = null,
+    importError = null;
   let deletionUncertain = null;
   const deletionPending = () => [...pending.values()].find((item) => item.kind === "delete") ?? null;
   const within = (path, parent) => path === parent || path.startsWith(`${parent}/`);
@@ -194,6 +236,10 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       profile,
       writeModeEnabled: writeModeEnabled(),
       deleteModeEnabled: deleteModeEnabled(),
+      importModeEnabled: importModeEnabled(),
+      importPending,
+      importUncertain,
+      importError,
       deletionUncertain,
       deletionPending: deletionPending(),
       deletedPaths: new Map(deletedPaths),
@@ -235,7 +281,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       profileRequest?.abort();
       const owner = new AbortController();
       profileRequest = owner;
-      profile = { status: "loading", writesEnabled: false, deletesEnabled: false, error: null };
+      profile = { status: "loading", writesEnabled: false, deletesEnabled: false, importsEnabled: false, error: null };
       publish();
       const current = () => profileRequest === owner;
       Promise.resolve()
@@ -247,12 +293,19 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
             status: "ready",
             writesEnabled: receipt.writes_enabled,
             deletesEnabled: receipt.deletes_enabled === true,
+            importsEnabled: receipt.imports_enabled === true,
             error: null,
           };
         })
         .catch((error) => {
           if (current())
-            profile = { status: "error", writesEnabled: false, deletesEnabled: false, error: errorText(error) };
+            profile = {
+              status: "error",
+              writesEnabled: false,
+              deletesEnabled: false,
+              importsEnabled: false,
+              error: errorText(error),
+            };
         })
         .finally(() => {
           if (!current()) return;
@@ -263,7 +316,13 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
         if (!current()) return;
         profileRequest = null;
         owner.abort();
-        profile = { status: "unchecked", writesEnabled: false, deletesEnabled: false, error: null };
+        profile = {
+          status: "unchecked",
+          writesEnabled: false,
+          deletesEnabled: false,
+          importsEnabled: false,
+          error: null,
+        };
         publish();
       };
     },
@@ -321,11 +380,56 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       replace(key, { content, revision: entry.revision + 1, dirty: content !== entry.baseline });
       publish();
     },
+    async importArchive(file) {
+      if (
+        !importModeEnabled() ||
+        importPending ||
+        importUncertain ||
+        rootPending ||
+        rootUncertain ||
+        deletionUncertain ||
+        pending.size ||
+        uncertain.size
+      )
+        return null;
+      try {
+        validateSkillImportFile(file);
+      } catch (error) {
+        importError = { file, archiveName: typeof file?.name === "string" ? file.name : "", message: errorText(error) };
+        publish();
+        return null;
+      }
+      const token = { file, archiveName: file.name };
+      importPending = token;
+      importError = null;
+      publish();
+      try {
+        return confirmedSkillImport(await api.importSkill(file));
+      } catch (error) {
+        importError = { ...token, message: errorText(error) };
+        const knownRefusal =
+          error instanceof ApiError && [400, 401, 403, 409, 413].includes(error.status) && !mutationMustWait(error);
+        if (!knownRefusal) importUncertain = { archiveName: token.archiveName, message: errorText(error) };
+        return null;
+      } finally {
+        if (importPending === token) importPending = null;
+        publish();
+      }
+    },
     async createSkill(input) {
       // Top-level creation shares a synchronous fence with file/folder writes.
       // An unknown root mutation suspends writes across every skill, not only
       // the requested name. Reads, draft edits and catalog refresh stay usable.
-      if (!writeModeEnabled() || rootPending || rootUncertain || deletionUncertain || pending.size || uncertain.size)
+      if (
+        !writeModeEnabled() ||
+        rootPending ||
+        rootUncertain ||
+        deletionUncertain ||
+        importPending ||
+        importUncertain ||
+        pending.size ||
+        uncertain.size
+      )
         return null;
       if (!validSkillCreationName(input?.name) || typeof input?.description !== "string" || !input.description.trim()) {
         rootError = {
@@ -356,7 +460,16 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
     async remove(skill, path) {
       // Mode is only a hint. The host independently checks its explicit deletion
       // authority. Legacy mode replies never enable this destructive operation.
-      if (!deleteModeEnabled() || rootPending || rootUncertain || deletionUncertain || pending.size || uncertain.size)
+      if (
+        !deleteModeEnabled() ||
+        rootPending ||
+        rootUncertain ||
+        deletionUncertain ||
+        importPending ||
+        importUncertain ||
+        pending.size ||
+        uncertain.size
+      )
         return false;
       try {
         skillDeletionPath(skill, path);
@@ -425,6 +538,8 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       rootPending ||
       rootUncertain ||
       deletionUncertain ||
+      importPending ||
+      importUncertain ||
       deletionPending() ||
       pending.has(skill) ||
       uncertain.has(skill)

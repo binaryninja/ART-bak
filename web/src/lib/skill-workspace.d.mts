@@ -6,6 +6,7 @@ export interface SkillWorkspaceProfile {
   profile: "skills-workspace";
   writes_enabled: boolean;
   deletes_enabled?: boolean;
+  imports_enabled?: boolean;
 }
 export function confirmedSkillWorkspaceProfile(value: unknown): SkillWorkspaceProfile;
 export interface SkillCreationInput {
@@ -18,6 +19,8 @@ export interface SkillCreationInput {
 }
 export function validSkillCreationName(name: unknown): boolean;
 export function confirmedSkillCreation(value: unknown, name: string): { name: string };
+export function validateSkillImportFile(file: unknown): File;
+export function confirmedSkillImport(value: unknown): { name: string; files: number };
 export function confirmedSkillWrite(value: unknown): { ok: true };
 export function confirmedSkillDirectory(value: unknown, path: string): { dir: string };
 export function confirmedSkillDeletion(value: unknown, path: string): { deleted: string };
@@ -44,15 +47,21 @@ export interface SkillWorkspaceSnapshot {
     status: "unchecked" | "loading" | "ready" | "error";
     writesEnabled: boolean;
     deletesEnabled: boolean;
+    importsEnabled: boolean;
     error: string | null;
   } | null;
   writeModeEnabled: boolean;
   deleteModeEnabled: boolean;
+  importModeEnabled: boolean;
+  importPending: { file: File; archiveName: string } | null;
+  importUncertain: { archiveName: string; message: string } | null;
+  importError: { file: unknown; archiveName: string; message: string } | null;
   deletionPending: { path: string; kind: string } | null;
   deletionUncertain: { skill: string; path: string; kind: string; message: string } | null;
   deletedPaths: ReadonlyMap<string, { skill: string; path: string }>;
 }
 export interface SkillWorkspaceApi {
+  importSkill?(file: File): Promise<unknown>;
   skillWorkspaceProfile?(signal?: AbortSignal): Promise<unknown>;
   createSkill(input: SkillCreationInput): Promise<unknown>;
   readSkillFile(skill: string, path: string): Promise<string>;
@@ -69,6 +78,7 @@ export function createSkillWorkspace(
   readProfile(): () => void;
   read(skill: string, path: string): () => void;
   edit(skill: string, path: string, content: string): void;
+  importArchive(file: File): Promise<{ name: string; files: number } | null>;
   createSkill(input: SkillCreationInput): Promise<{ name: string } | null>;
   remove(skill: string, path: string): Promise<boolean>;
   save(skill: string, path: string): Promise<boolean>;

@@ -15,12 +15,15 @@ from .skill_content_write import bind_skill_content_writes
 from .skill_directory_create import bind_skill_directory_creation
 from .skill_create import bind_skill_creation
 from .skill_path_delete import bind_skill_path_deletes
+from .skill_archive_import import bind_skill_archive_imports
 
 _BINDERS=(bind_skill_catalog_reads,bind_skill_files_reads,bind_skill_content_reads,
-          bind_skill_content_writes,bind_skill_directory_creation,bind_skill_creation,bind_skill_path_deletes)
+          bind_skill_content_writes,bind_skill_directory_creation,bind_skill_creation,bind_skill_path_deletes,
+          bind_skill_archive_imports)
 _PATTERNS=(re.compile(r'/api/skills\Z'),re.compile(r'/api/skills/[^/]+/files\Z'),
-           re.compile(r'/api/skills/[^/]+/files/.+\Z'),re.compile(r'/api/skills/[^/]+/dirs\Z'))
-_ALLOWED=(('GET',),('GET','HEAD'),('GET','HEAD','PUT'),('POST',))
+           re.compile(r'/api/skills/[^/]+/files/.+\Z'),re.compile(r'/api/skills/[^/]+/dirs\Z'),
+           re.compile(r'/api/skills/upload\Z'))
+_ALLOWED=(('GET',),('GET','HEAD'),('GET','HEAD','PUT'),('POST',),('POST',))
 
 
 def _key(method):return getattr(method,'__self__',None),getattr(method,'__func__',method)
@@ -30,7 +33,7 @@ def _same(method,key):return all(a is b for a,b in zip(_key(method),key))
 def _factories():
     if any(a is not b for a,b in zip((bind_skill_catalog_reads,bind_skill_files_reads,
             bind_skill_content_reads,bind_skill_content_writes,bind_skill_directory_creation,bind_skill_creation,
-            bind_skill_path_deletes),_BINDERS)):
+            bind_skill_path_deletes,bind_skill_archive_imports),_BINDERS)):
         raise ValueError('Original Skills workspace binders required')
 
 
@@ -44,14 +47,15 @@ class SkillsWorkspaceBundle:
     directory: object=field(repr=False)
     create: object=field(default=None,repr=False)
     delete: object=field(default=None,repr=False)
+    importer: object=field(default=None,repr=False)
 
 
 class SkillsWorkspaceApplication:
-    def __init__(self,base,services,views,scope,guard,*,create_view=None,delete_view=None):
+    def __init__(self,base,services,views,scope,guard,*,create_view=None,delete_view=None,import_view=None):
         self.original=base;self.services=services;self.views=views
         self.scope=scope;self.guard=guard
-        self.create_view=create_view;self.delete_view=delete_view
-        self._pins=(base,services,views,scope,guard,create_view,delete_view)
+        self.create_view=create_view;self.delete_view=delete_view;self.import_view=import_view
+        self._pins=(base,services,views,scope,guard,create_view,delete_view,import_view)
         self._base_methods=tuple((_key(getattr(base,name)),name) for name in ('__call__','_handle'))
         self._view_methods=tuple(tuple((_key(getattr(view,name)),name) for name in
             (('__call__','_check') if index<3 else ('__call__','_handle')))
@@ -64,9 +68,9 @@ class SkillsWorkspaceApplication:
     def validate(self):
         _factories()
         if any(a is not b for a,b in zip((self.original,self.services,self.views,self.scope,self.guard,
-                                        self.create_view,self.delete_view),self._pins)):
+                                        self.create_view,self.delete_view,self.import_view),self._pins)):
             raise PermissionError('Workspace composition changed')
-        for optional in (self.create_view,self.delete_view):
+        for optional in (self.create_view,self.delete_view,self.import_view):
             if optional is not None and not any(optional is view for view in self.views[5:]):
                 raise PermissionError('Workspace extension binding changed')
         for key,name in self._base_methods:
@@ -97,7 +101,7 @@ class SkillsWorkspaceApplication:
         except Exception:return self._error(environ,start_response,503,'Skills workspace unavailable')
         path=environ.get('PATH_INFO','');method=environ.get('REQUEST_METHOD','GET')
         family=next((i for i,pattern in enumerate(_PATTERNS) if type(path) is str and pattern.fullmatch(path)),None)
-        if family is None:
+        if family is None or family==4 and self.import_view is None:
             return self.original(environ,start_response)
         allowed=_ALLOWED[family]+(('POST',) if family==0 and self.create_view is not None else ())
         if family==2 and self.delete_view is not None:allowed+=('DELETE',)
@@ -112,7 +116,8 @@ class SkillsWorkspaceApplication:
                     response=error_response(405,'Method not allowed')
                     return type(response)(response.status,response.body,{**response.headers,'Allow':', '.join(allowed)})
             return WSGIApplication(Dispatch(),max_body_bytes=self.original.max_body_bytes)(environ,start_response)
-        if family==0 and method.upper()=='POST':view=self.create_view
+        if family==4:view=self.import_view
+        elif family==0 and method.upper()=='POST':view=self.create_view
         elif family==2 and method.upper()=='DELETE':view=self.delete_view
         else:
             index=0 if family==0 else 1 if family==1 else (3 if method.upper()=='PUT' else 2) if family==2 else 4
@@ -153,7 +158,7 @@ _APPLICATION_METHODS=(SkillsWorkspaceApplication.__init__,SkillsWorkspaceApplica
 def bind_skills_workspace(application,*,catalog_service,files_service,content_service,
         write_service,directory_service,authorize_catalog,authorize_files,authorize_content,
         authorize_write,authorize_directory,create_service=None,authorize_create=None,
-        delete_service=None,authorize_delete=None):
+        delete_service=None,authorize_delete=None,import_service=None,authorize_import=None):
     """Bind original siblings to one untouched base; all grants are explicit.
 
     Filesystem catalog omits SQL usage statistics. Existing DTO placeholders must
@@ -165,6 +170,8 @@ def bind_skills_workspace(application,*,catalog_service,files_service,content_se
         raise ValueError('Creation service and independent grant must be supplied together')
     if (delete_service is None) != (authorize_delete is None):
         raise ValueError('Deletion service and independent grant must be supplied together')
+    if (import_service is None) != (authorize_import is None):
+        raise ValueError('Import service and independent grant must be supplied together')
     if (type(application) is not WSGIApplication or type(application.router) is not Router
             or any(a is not b for a,b in zip((SkillsWorkspaceApplication.__init__,
                 SkillsWorkspaceApplication.validate,SkillsWorkspaceApplication.__call__),_APPLICATION_METHODS))):
@@ -176,7 +183,7 @@ def bind_skills_workspace(application,*,catalog_service,files_service,content_se
         bind_skill_content_writes(application,service=write_service,authorize_global=authorize_write),
         bind_skill_directory_creation(application,service=directory_service,authorize_global=authorize_directory))
     services=(catalog_service,files_service,content_service,write_service,directory_service)
-    create_view=delete_view=None
+    create_view=delete_view=import_view=None
     if create_service is not None:
         create_view=bind_skill_creation(application,service=create_service,authorize_global=authorize_create)
         views+=(create_view,)
@@ -185,7 +192,11 @@ def bind_skills_workspace(application,*,catalog_service,files_service,content_se
         delete_view=bind_skill_path_deletes(application,service=delete_service,authorize_global=authorize_delete)
         views+=(delete_view,)
         services+=(delete_service,)
+    if import_service is not None:
+        import_view=bind_skill_archive_imports(application,service=import_service,authorize_global=authorize_import)
+        views+=(import_view,)
+        services+=(import_service,)
     scope=content_service.reader.scope;guard=content_service.reader.guard
     view=SkillsWorkspaceApplication(application,services,views,scope,guard,
-        create_view=create_view,delete_view=delete_view)
-    return SkillsWorkspaceBundle(view,*services[:5],create_service,delete_service)
+        create_view=create_view,delete_view=delete_view,import_view=import_view)
+    return SkillsWorkspaceBundle(view,*services[:5],create_service,delete_service,import_service)

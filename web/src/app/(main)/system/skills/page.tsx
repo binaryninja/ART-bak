@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -339,11 +340,11 @@ export default function SkillsPage() {
     ? workspaceState.drafts.get(skillFileKey(selected.skill, selected.path)) : undefined;
   const fileLoading = !fileDraft?.loaded && !fileDraft?.error && !fileDraft?.deleted;
   const saving = !!selected && workspaceState.pending.has(selected.skill);
-  const rootWriteBlocked = !workspaceState.writeModeEnabled || !!workspaceState.rootPending || !!workspaceState.rootUncertain || !!workspaceState.deletionPending || !!workspaceState.deletionUncertain;
+  const rootWriteBlocked = !workspaceState.writeModeEnabled || !!workspaceState.rootPending || !!workspaceState.rootUncertain || !!workspaceState.deletionPending || !!workspaceState.deletionUncertain || !!workspaceState.importPending || !!workspaceState.importUncertain;
   const blocked = rootWriteBlocked || (!!selected && workspaceState.uncertain.has(selected.skill));
   function rootWritesSuspended() {
     const state = workspace.getSnapshot();
-    return !state.writeModeEnabled || !!state.rootPending || !!state.rootUncertain || !!state.deletionPending || !!state.deletionUncertain;
+    return !state.writeModeEnabled || !!state.rootPending || !!state.rootUncertain || !!state.deletionPending || !!state.deletionUncertain || !!state.importPending || !!state.importUncertain;
   }
   const [fileRetry, setFileRetry] = React.useState(0);
   const profileCleanup = React.useRef<(() => void) | null>(null);
@@ -388,6 +389,60 @@ export default function SkillsPage() {
   const [uploading, setUploading] = React.useState(false);
   const uploadRef = React.useRef<HTMLInputElement>(null);
 
+  // Python archive imports are create-only, separate from Go's upload/overwrite.
+  const [importOpen, setImportOpenState] = React.useState(false);
+  const importDialog = React.useRef({ open: false });
+  const importSession = importDialog.current;
+  const [importFile, setImportFile] = React.useState<File | null>(null);
+  const importFileRef = React.useRef<File | null>(null);
+  const importRequest = React.useRef<object | null>(null);
+  const importAlive = React.useRef(false);
+  const [importing, setImporting] = React.useState(false);
+  React.useLayoutEffect(() => {
+    importAlive.current = true;
+    setImporting(importRequest.current !== null);
+    return () => { importAlive.current = false; };
+  }, []);
+  function setImportOpen(value: boolean) {
+    if (!importAlive.current) return;
+    if (importDialog.current.open !== value) importDialog.current = { open: value };
+    setImportOpenState(value);
+  }
+  function pickImportFile(e: React.ChangeEvent<HTMLInputElement>, owner: { open: boolean }) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!importAlive.current || !owner.open || importDialog.current !== owner || !file) return;
+    importFileRef.current = file;
+    setImportFile(file);
+  }
+  async function importArchive() {
+    const owner = importDialog.current;
+    const file = importFileRef.current;
+    const state = workspace.getSnapshot();
+    if (!RESTRICTED_SKILLS || !importAlive.current || !owner.open || owner !== importSession ||
+      importRequest.current || !file || !state.importModeEnabled || rootWritesSuspended() ||
+      state.pending.size || state.uncertain.size) return;
+    const request = {};
+    importRequest.current = request;
+    setImporting(true);
+    try {
+      const receipt = await workspace.importArchive(file);
+      if (!receipt || !importAlive.current || importRequest.current !== request) return;
+      toast.success(`${MOCK ? "Simulated import" : "Imported"}: ${receipt.name} (${receipt.files} files)`);
+      load();
+      if (importFileRef.current === file && importDialog.current === owner) {
+        importFileRef.current = null;
+        setImportFile(null);
+        setImportOpen(false);
+      }
+    } finally {
+      if (importRequest.current === request) {
+        importRequest.current = null;
+        if (importAlive.current) setImporting(false);
+      }
+    }
+  }
+
   // skill detail — MCP edit state (optimistic, rolls back on error)
   const [detailMcps, setDetailMcps] = React.useState<string[]>([]);
 
@@ -410,7 +465,7 @@ export default function SkillsPage() {
   function pathDeletionBlocked(skill: string, path: string) {
     const state = workspace.getSnapshot();
     return !state.deleteModeEnabled || !!state.rootPending || !!state.rootUncertain ||
-      !!state.deletionUncertain || state.pending.size > 0 || state.uncertain.size > 0 ||
+      !!state.deletionUncertain || !!state.importPending || !!state.importUncertain || state.pending.size > 0 || state.uncertain.size > 0 ||
       (RESTRICTED_SKILLS && /^skill\.md$/iu.test(path)) ||
       [...state.deletedPaths.values()].some((item) => item.skill === skill && (path === item.path || path.startsWith(`${item.path}/`)));
   }
@@ -540,7 +595,7 @@ export default function SkillsPage() {
   const newEntryRef = React.useRef("");
   function startCreate(skill: string, inDir: string, kind: "file" | "dir") {
     const state = workspace.getSnapshot();
-    if (!state.writeModeEnabled || state.rootPending || state.rootUncertain || state.deletionPending || state.deletionUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
+    if (!state.writeModeEnabled || state.rootPending || state.rootUncertain || state.deletionPending || state.deletionUncertain || state.importPending || state.importUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
     cancelRef.current = false;
     ensureExpanded(skill, inDir);
     const next = { skill, inDir, kind };
@@ -666,7 +721,7 @@ export default function SkillsPage() {
   async function createNewSkill() {
     const state = workspace.getSnapshot();
     if (!alive.current || !newDialog.current.open || newRequest.current || !state.writeModeEnabled || state.rootPending
-      || state.rootUncertain || state.deletionUncertain || state.pending.size || state.uncertain.size) return;
+      || state.rootUncertain || state.deletionUncertain || state.importPending || state.importUncertain || state.pending.size || state.uncertain.size) return;
     const draft = newDraftRef.current;
     const name = draft.name.trim();
     if (!validSkillCreationName(name)) {
@@ -819,6 +874,8 @@ export default function SkillsPage() {
     });
   }
 
+  const uploadLabel = uploading ? "Uploading…" : "Upload archive";
+  const importLabel = MOCK ? "Simulate import" : "Import without replacing";
   const dialogDeleteError = pendingDelete && pendingDelete.kind !== "skill"
     && workspaceState.errors.get(pendingDelete.skill)?.path === pendingDelete.path
     ? workspaceState.errors.get(pendingDelete.skill)?.message : null;
@@ -864,7 +921,7 @@ export default function SkillsPage() {
           </Popover>
         )}
       </div>
-      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">{MOCK ? "Fixture-only Skills demo; no real filesystem host is contacted. Deletion acknowledgements are simulated without host-mode discovery." : "Browse the host-granted skills root and retain local drafts. Saving files, creating skills and creating folders require a confirmed write-enabled host mode; the host still authorizes every request. Deletion needs a separate confirmed host option and supports only individual files or empty folders; required SKILL.md cannot be deleted."} Whole-skill deletion, ZIP import, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
+      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">{MOCK ? "Fixture-only Skills demo; no real filesystem host is contacted. Deletion acknowledgements are simulated without host-mode discovery." : "Browse the host-granted skills root and retain local drafts. Saving files, creating skills and creating folders require a confirmed write-enabled host mode; the host still authorizes every request. Deletion needs a separate confirmed host option and supports only individual files or empty folders; required SKILL.md cannot be deleted."} {MOCK ? "ZIP import also uses only fixture acknowledgements, without host discovery." : "Create-only ZIP import needs its own confirmed host option."} Whole-skill deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
       <div className="flex items-center gap-2 border-b px-4 py-2 text-xs">
         <Button size="sm" variant="outline" onClick={load} disabled={catalogLoading}>Refresh catalog</Button>
         {catalogLoading && <span role="status">Loading catalog…</span>}
@@ -877,9 +934,13 @@ export default function SkillsPage() {
           {workspaceState.profile.status === "unchecked" && <span role="status">Skills host mode has not been confirmed; writes are disabled.</span>}
           {workspaceState.profile.status === "error" && <span role="alert">Host mode unavailable: {workspaceState.profile.error} Writes remain disabled. Local drafts remain available; browsing still depends on host access.</span>}
           {workspaceState.profile.status === "ready" && <span>{workspaceState.profile.writesEnabled ? "Host configured for writes; each request is still checked. Mode refresh cannot clear unconfirmed operations." : "Read-only Skills host. Browsing and local drafts are available; saving and creation are disabled."}</span>}
+          {workspaceState.profile.status === "ready" && <span>{workspaceState.importModeEnabled ? "Host separately configured for create-only archive import." : "Archive import disabled; write or delete mode alone does not enable it."}</span>}
           {workspaceState.profile.status === "ready" && <span>{workspaceState.deleteModeEnabled ? "Host separately configured for deletion; every request is still checked." : "File and folder deletion disabled; write mode alone does not enable it."}</span>}
         </div>
       )}
+      {workspaceState.importPending && <p role="status" className="px-4 py-2 text-xs">Importing archive {workspaceState.importPending.archiveName}; all new tracked workspace mutations are waiting. Local drafts remain editable.</p>}
+      {workspaceState.importError && !workspaceState.importUncertain && <p role="alert" className="px-4 py-2 text-destructive text-xs">Could not import archive {workspaceState.importError.archiveName || "(selected archive)"}: {workspaceState.importError.message}. Reopen Import archive to review the retained selection.</p>}
+      {workspaceState.importUncertain && <p role="alert" className="px-4 py-2 text-destructive text-xs">Import of archive {workspaceState.importUncertain.archiveName} is unconfirmed; the installed skill identity is not verified. All tracked workspace mutations are suspended. Do not retry, rename or overwrite to work around this. Keep local drafts and reconcile the filesystem before reopening; catalog and mode refresh do not unlock writes.</p>}
       {workspaceState.deletionPending && <p role="status" className="px-4 py-2 text-xs">Deletion in progress; all new workspace mutations are waiting. Local drafts remain editable.</p>}
       {workspaceState.deletionUncertain && <p role="alert" className="px-4 py-2 text-destructive text-xs">Deletion at {workspaceState.deletionUncertain.skill}/{workspaceState.deletionUncertain.path} is unconfirmed. All workspace mutations are suspended. Do not repeat deletion. Refreshing host mode or the catalog does not unlock writes; keep local drafts and reconcile the filesystem before reopening.</p>}
       {workspaceState.rootPending && <p role="status" className="px-4 py-2 text-muted-foreground text-xs">Creating {workspaceState.rootPending.name}; other workspace writes are waiting.</p>}
@@ -902,23 +963,23 @@ export default function SkillsPage() {
             <Button size="sm" variant="outline" className="w-full" onClick={() => setNewOpen(true)}>
               <PlusIcon className="size-3.5" />New skill
             </Button>
-            <input
+            {!RESTRICTED_SKILLS && <input
               ref={uploadRef}
               type="file"
               accept=".zip,application/zip"
               className="hidden"
               onChange={onUploadPick}
-            />
+            />}
             <Button
               size="sm"
               variant="outline"
               className="w-full"
-              disabled={RESTRICTED_SKILLS || rootWriteBlocked || uploading}
-              onClick={() => uploadRef.current?.click()}
-              title="Upload a .zip archive containing SKILL.md"
+              disabled={!RESTRICTED_SKILLS && (rootWriteBlocked || uploading)}
+              onClick={() => RESTRICTED_SKILLS ? setImportOpen(true) : uploadRef.current?.click()}
+              title={RESTRICTED_SKILLS ? "Import a new skill without replacing existing files" : "Upload a .zip archive containing SKILL.md"}
             >
               <UploadIcon className="size-3.5" />
-              {uploading ? "Uploading…" : "Upload archive"}
+              {RESTRICTED_SKILLS ? "Import archive" : uploadLabel}
             </Button>
           </div>
           {/* Radix viewport wraps children in a display:table div that grows with
@@ -1182,6 +1243,29 @@ export default function SkillsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Python-only create-only archive import; Go's picker/overwrite flow stays separate. */}
+      {RESTRICTED_SKILLS && <Sheet open={importOpen} onOpenChange={setImportOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-4 data-[side=right]:sm:max-w-xl">
+          <SheetHeader><SheetTitle>Import new skill archive</SheetTitle><SheetDescription>{MOCK ? "Simulate a create-only archive acknowledgement." : "Install a new skill from a supported ZIP without replacing an existing skill."}</SheetDescription></SheetHeader>
+          <div className="space-y-3 px-4 text-sm">
+            <p>{MOCK ? "Fixture-only acknowledgement; no archive is installed or inspected." : "Create-only import into the host-granted root. Existing skills are never overwritten. The host validates the ZIP and derives the installed name from SKILL.md, not this filename."}</p>
+            <p className="text-muted-foreground text-xs">Archive at most 1 MiB; inflated total at most 1 MiB, each file at most 256 KiB, at most 128 entries. Bounded Store/Deflate subset only, one SKILL.md with an explicit valid name and nonblank description. Regular files count in the receipt; folders also count toward the entry limit. A file-picker filter is not archive validation.</p>
+            <p className="text-muted-foreground text-xs">Not supported: streamed/data-descriptor ZIPs, extra or comment fields, preamble/trailer data, legacy non-UTF-8-marked names or MCP metadata. Partial effects cannot be assumed rolled back if an import outcome is unknown.</p>
+            <Label htmlFor="skill-import-file">ZIP archive</Label>
+            <Input id="skill-import-file" type="file" accept=".zip,application/zip" onChange={(e) => pickImportFile(e, importSession)} />
+            {importFile && <p className="break-all">Selected: {importFile.name} ({importFile.size} bytes). Kept until this page closes or an unchanged import is acknowledged.</p>}
+            {!workspaceState.importModeEnabled && <p role="status">Import is disabled until a compatible host explicitly confirms import mode. Existing local drafts are unchanged.</p>}
+            {workspaceState.importPending && <p role="status">Importing {workspaceState.importPending.archiveName}. Do not repeat this request.</p>}
+            {workspaceState.importError?.file === importFile && <p role="alert" className="text-destructive">{workspaceState.importError?.archiveName}: {workspaceState.importError?.message}</p>}
+            {workspaceState.importUncertain && <p role="alert" className="text-destructive">The earlier import of {workspaceState.importUncertain.archiveName} is unconfirmed. All tracked mutations are suspended, even if a different archive is selected. Do not retry or overwrite; reconcile the filesystem first.</p>}
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Close</Button>
+            <Button onClick={importArchive} disabled={importing || !importFile || !workspaceState.importModeEnabled || rootWriteBlocked || workspaceState.pending.size > 0 || workspaceState.uncertain.size > 0}>{importing ? "Importing…" : importLabel}</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>}
 
       {/* ── New skill dialog ── */}
       <Sheet open={newOpen} onOpenChange={setNewOpen}>
