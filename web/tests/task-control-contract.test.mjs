@@ -91,7 +91,8 @@ function detailHarness() {
     id: '17', task: { id: '17', status: 'running', paused: false, name: 'existing' }, paused: false, archiving: false,
     currentTaskID: { current: '17' }, viewActive: { current: true }, archiveRequested: { current: false },
     controlRequests: { current: new Map() }, uncertainControls: { current: new Set() }, taskLoadInFlight: { current: null },
-    mutationMustWait, React: { useCallback: (fn) => fn },
+    mutationMustWait, ApiError, React: { useCallback: (fn) => fn },
+    readFeedback: { id: '17', loading: false, error: null, notFound: false },
     api: {
       controlTask(id, action) { const d = deferred(); controls.push({ id, action, ...d }); return d.promise; },
       archiveTask(id) { const d = deferred(); archives.push({ id, ...d }); updates.push(['archive', id]); return d.promise; },
@@ -102,13 +103,13 @@ function detailHarness() {
     router: { push: (url) => updates.push(['navigate', url]) },
     setTask(value) { context.task = typeof value === 'function' ? value(context.task) : value; updates.push(['task']); },
     setPaused(value) { context.paused = value; updates.push(['paused', value]); },
-    setLoaded(value) { updates.push(['loaded', value]); },
+    setReadFeedback(value) { context.readFeedback = typeof value === 'function' ? value(context.readFeedback) : value; },
     setControllingIDs(value) { context.controllingIDs = value; updates.push(['pending']); },
     setUncertainControlIDs(value) { context.uncertainControlIDs = value; updates.push(['uncertain']); },
     setArchiving(value) { context.archiving = value; updates.push(['archiving']); },
     load() { loads.push(context.currentTaskID.current); },
   });
-  const controlsCode = section(view, '  async function togglePause()', '\n  if (!task)');
+  const controlsCode = section(view, '  async function togglePause()', '\n  if (!task || task.id !== id)');
   const pollCode = section(view, '  const load = React.useCallback(', '\n  React.useEffect(');
   // Factory parameters imitate a render's captured props/state; refs remain shared.
   vm.runInContext(stripTypeScriptTypes(`globalThis.actions = function(id, task, paused, archiving, load) {

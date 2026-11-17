@@ -37,7 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
-import { mutationMustWait } from "@/lib/mutation-contract.mjs";
+import { ApiError, mutationMustWait } from "@/lib/mutation-contract.mjs";
 import type { LLMProfile, Task } from "@/lib/types";
 
 import { AssetsTab } from "./_tabs/assets-tab";
@@ -209,7 +209,12 @@ function TaskDetailInner() {
   const id = searchParams.get("id") ?? "";
   const [task, setTask] = React.useState<Task | null>(null);
   const [paused, setPaused] = React.useState(false);
-  const [loaded, setLoaded] = React.useState(false);
+  const [readFeedback, setReadFeedback] = React.useState({
+    id,
+    loading: true,
+    error: null as string | null,
+    notFound: false,
+  });
   const [tab, setTab] = React.useState("sessions");
   const [interceptPendingCount, setInterceptPendingCount] = React.useState(0);
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
@@ -263,6 +268,11 @@ function TaskDetailInner() {
     // Identity, rather than only the task ID, also fences an older A -> B -> A read.
     const request = { id };
     taskLoadInFlight.current = request;
+    setReadFeedback((current) =>
+      current.id === id
+        ? { ...current, loading: true }
+        : { id, loading: true, error: null, notFound: false },
+    );
     Promise.all([api.task(id), api.stats(id).catch(() => null)])
       .then(([task, s]) => {
         if (!viewActive.current || currentTaskID.current !== id || taskLoadInFlight.current !== request) return;
@@ -277,14 +287,21 @@ function TaskDetailInner() {
         }
         setTask(base);
         setPaused(at?.paused ?? base.paused ?? false);
+        setReadFeedback({ id, loading: false, error: null, notFound: false });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (!viewActive.current || currentTaskID.current !== id || taskLoadInFlight.current !== request) return;
         // Keep the last rendered task state during a transient poll failure.
+        setReadFeedback({
+          id,
+          loading: false,
+          error: error instanceof Error && error.message.trim() ? error.message : "Read failed.",
+          notFound: error instanceof ApiError && error.status === 404,
+        });
       })
       .finally(() => {
         if (taskLoadInFlight.current === request) {
           taskLoadInFlight.current = null;
-          if (viewActive.current && currentTaskID.current === id) setLoaded(true);
         }
       });
   }, [id]);
@@ -352,16 +369,31 @@ function TaskDetailInner() {
     }
   }
 
-  if (!task) {
+  if (!task || task.id !== id) {
+    const feedback = readFeedback.id === id ? readFeedback : null;
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
-        <p className="text-muted-foreground">{loaded ? `Task ${id} was deleted or archived, or does not exist` : "Loading…"}</p>
-        {loaded && (
-          <Button asChild variant="outline">
-            <Link href="/function/tasks">
-              <ArrowLeftIcon /> Back to tasks
-            </Link>
-          </Button>
+        {feedback?.error ? (
+          <Alert variant="destructive" role="alert" className="max-w-xl text-left">
+            <AlertTitle>
+              {feedback.notFound ? `Task ${id} could not be found (HTTP 404).` : "Could not load task"}
+            </AlertTitle>
+            <AlertDescription>{feedback.error}</AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-muted-foreground">Loading…</p>
+        )}
+        {feedback?.error && (
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={load} disabled={feedback.loading}>
+              {feedback.loading ? "Retrying read…" : "Retry read"}
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/function/tasks">
+                <ArrowLeftIcon /> Back to tasks
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
     );
