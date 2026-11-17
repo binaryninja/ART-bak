@@ -9,7 +9,7 @@ no symlinks are followed, but directory renames by a privileged actor are outsid
 this boundary. Delete/export, compaction policy and task lifetime guards are not
 implemented. Unknown JSON record/message fields survive read/commit unchanged.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -18,6 +18,7 @@ import os
 import re
 import stat
 import uuid
+from threading import RLock
 
 class TranscriptError(RuntimeError): pass
 class TranscriptConflict(TranscriptError): pass
@@ -58,18 +59,71 @@ class TranscriptStore:
         if not isinstance(root,str) or not root.startswith('/') or any(p in ('.','..') for p in root.split('/')):raise ValueError('Existing absolute root required')
         if type(max_bytes) is not int or not 1<=max_bytes<=1024**3:raise ValueError('Invalid transcript size limit')
         self.root=root;self.max_bytes=max_bytes
+        self._runtime_lock=RLock();self._runtime_lease=None;self._runtime_binding=None;self._runtime_started=False
+
+    def _bind_runtime_lease(self,lease):
+        from .runtime_lease import RuntimeLease
+        with self._runtime_lock:
+            if (type(lease) is not RuntimeLease or lease._namespace_store is not self
+                    or lease._namespace_root != self.root or self._runtime_lease is not None
+                    or self._runtime_binding is not None or self._runtime_started):
+                raise TranscriptUnavailable('Namespace ownership requires an unused original store')
+            self._runtime_lease=self._runtime_binding=lease
+
+    def _runtime_owner(self):
+        with self._runtime_lock:
+            # The original pin prevents one accidental pointer change from
+            # silently downgrading an explicitly bound store to legacy I/O.
+            if self._runtime_lease is not self._runtime_binding:
+                raise TranscriptUnavailable('Transcript namespace binding changed')
+            self._runtime_started=True
+            return self._runtime_binding
+
+    @contextmanager
+    def _runtime_io(self):
+        owner=_RUNTIME_OWNER(self)
+        if owner is None:scope=nullcontext()
+        else:
+            from .runtime_lease import RuntimeLease
+            scope=RuntimeLease._transcript_io(owner,self)
+        with scope:yield
 
     def _root(self):
-        fd=os.open('/',os.O_RDONLY|os.O_DIRECTORY)
+        owner=_RUNTIME_OWNER(self)
+        fd=self._open_root_directory(namespace=owner is not None)
         try:
+            if owner is not None:
+                from .runtime_lease import RuntimeLease
+                RuntimeLease._check_transcript_root(owner,self,fd)
+            return fd
+        except BaseException:
+            os.close(fd);raise
+
+    def _open_root_directory(self,*,namespace=False):
+        def trusted(descriptor):
+            if not namespace:return
+            info=os.fstat(descriptor)
+            if (info.st_uid not in (0,os.geteuid())
+                    or info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX):
+                raise TranscriptUnavailable('Trusted namespace ancestry required')
+        fd=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC)
+        try:
+            trusted(fd)
             for part in filter(None,self.root.split('/')):
-                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
-                os.close(fd);fd=child
+                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC,dir_fd=fd)
+                parent,fd=fd,child
+                os.close(parent)
+                trusted(fd)
             return fd
         except BaseException:os.close(fd);raise
 
     @contextmanager
     def _locked(self,session,agent=''):
+        with self._runtime_io():
+            with self._locked_native(session,agent) as value:yield value
+
+    @contextmanager
+    def _locked_native(self,session,agent=''):
         import fcntl
         _name(session)
         if agent:_name(agent)
@@ -169,6 +223,11 @@ class TranscriptStore:
 
     def delete(self,*args,**kwargs):raise TranscriptUnavailable('Transcript deletion lifecycle is not ported')
     def export(self,*args,**kwargs):raise TranscriptUnavailable('Transcript export lifecycle is not ported')
+
+
+# Selection must not trust a substituted helper to return None and downgrade an
+# explicitly bound store before RuntimeLease can check original-method identity.
+_RUNTIME_OWNER=TranscriptStore._runtime_owner
 
 
 def messages(records):

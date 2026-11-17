@@ -11,7 +11,7 @@ import fcntl
 import hashlib
 import os
 import stat
-from .transcripts import TranscriptStore, TranscriptError, _name, _decode
+from .transcripts import TranscriptStore, TranscriptError, TranscriptUnavailable, _name, _decode
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,18 @@ def inspect_checkpoint(store, session_id, *, agent_id='', max_records=10000):
     bound=store.max_bytes
     if type(bound) is not int or not 1 <= bound <= 1024**3:
         raise ValueError('Bounded transcript store required')
+    # Unlike ordinary begin(), inspection must not create the session lock.
+    # Share only the native lifetime scope, retaining it through read cleanup
+    # and its final namespace identity check before exposing the observation.
+    from .runtime_lease import LeaseUnavailable
+    try:
+        with TranscriptStore._runtime_io(store):
+            return _inspect_checkpoint(store,session_id,agent_id,max_records,bound)
+    except (LeaseUnavailable,TranscriptUnavailable):
+        raise TranscriptError('Transcript checkpoint unavailable') from None
+
+
+def _inspect_checkpoint(store,session_id,agent_id,max_records,bound):
     root=lock=directory=fd=None
     try:
         root=store._root()

@@ -37,7 +37,7 @@ class RuntimeSession:
     def __init__(self, listener, lease, *, lease_owner=None):
         if type(listener) is not RuntimeListener or type(lease) is not RuntimeLease:
             raise ValueError('Exact development listener and acquired process lease required')
-        lease.validate()
+        lease.validate_runtime_store(listener._bundle.runtime.transcript.store)
         listener._check()
         pump = listener._bundle.pump
         if listener._server is not None or listener._closed or listener._stopping or pump._thread is not None or pump._active:
