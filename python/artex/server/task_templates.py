@@ -41,7 +41,9 @@ class TaskTemplateService:
                 if not self.store.delete(key):raise TemplateMissing()
                 return json_response(200,{'deleted':key})
             if len(request.body)>MAX_BODY:return error_response(413,'Request body too large')
-            data=json.loads(request.body,object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(TemplateInvalid()))
+            # Match the JSON wire contract rather than json.loads(bytes), which
+            # auto-detects UTF-16/32 and silently consumes a leading UTF-8 BOM.
+            data=json.loads(request.body.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(TemplateInvalid()))
             result=self.store.create(data) if action=='create' else self.store.patch(key,data)
             return json_response(201 if action=='create' else 200,result.to_dict())
         except (TemplateInvalid,ValueError,UnicodeError):return error_response(400,'Invalid task template request')
