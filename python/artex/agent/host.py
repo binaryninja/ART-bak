@@ -90,6 +90,8 @@ class AgentHost:
         self._original_manager, self._original_runner = manager, runner
         self._condition = Condition(RLock())
         self._mutations = 0
+        self._admissions = 0
+        self._admission_sealed = False
         self._draining = False
         self._settling = False
         self._settlement_thread = None
@@ -130,17 +132,22 @@ class AgentHost:
             raise RuntimeUnavailable('Original intent control runner required')
         with self._condition:
             other_mutations=self._mutations-(1 if self._working else 0)
+            if action=='resume' and self._admission_sealed:
+                raise RuntimeUnavailable('Host admission is permanently sealed')
             if (self._intent_control is not None or self._settling or self._draining or other_mutations
                 or (self._working and (action=='resume' or self._working_thread==get_ident()))):
                 raise TaskConflict('Intent control conflicts with owned lifecycle work')
             slot=(key,intent_id,action,get_ident());self._intent_control=slot;self._mutations+=1
+            if action=='resume':self._admissions+=1
         try:
             self._identity()
             result=EngineRunner.control_intent(self.runner,key,intent_id,action,timeout=timeout)
             self._identity();return result
         finally:
             with self._condition:
-                self._intent_control=None;self._mutations-=1;self._condition.notify_all()
+                self._intent_control=None;self._mutations-=1
+                if action=='resume':self._admissions-=1
+                self._condition.notify_all()
 
     def inspect_intent_control(self,task_id,intent_id,*,timeout=5.0):
         return self.control_intent(task_id,intent_id,'inspect',timeout=timeout)
@@ -197,6 +204,8 @@ class AgentHost:
     def _invoke(self, callback, *, admission):
         self._identity()
         with self._condition:
+            if admission and self._admission_sealed:
+                raise RuntimeUnavailable('Host admission is permanently sealed')
             if self._intent_control is not None:
                 raise TaskConflict('Intent control owns lifecycle mutation')
             if self._settling:
@@ -206,15 +215,38 @@ class AgentHost:
             if admission and self._draining:
                 raise TaskConflict('Admission is suspended during cooperative drain')
             self._mutations += 1
+            if admission:self._admissions += 1
         try:
             result = callback()
         finally:
             with self._condition:
                 self._mutations -= 1
+                if admission:self._admissions -= 1
                 self._condition.notify_all()
         # Do not auto-poll here: a settlement-store failure must not masquerade
         # as a failed create/start and encourage a duplicate retry. Poll explicitly.
         return result
+
+    def stop_admissions(self):
+        """Permanently reject new host admissions, including intent resume.
+
+        Seal and admission entry share the host condition mutex. True observes
+        no admitted host calls still unwinding, not zero running tasks or clean
+        resources. False keeps the seal installed; an earlier admitted call may
+        finish with effects, and the owner must observe again after it returns.
+        Never waits for call completion or calls user callbacks under the mutex. Pause, inspection,
+        owned advancement, settlement and drain remain available. Direct manager
+        or runner admission bypass is outside this host's ownership contract.
+        """
+        # _identity() can call runner.claim_host(), which acquires the runner's
+        # lock. A factory may hold that lock while an admitted call is pending;
+        # shutdown must not wait on it. Pin only original host ownership here.
+        if (self.manager is not self._original_manager or self.runner is not self._original_runner
+                or self._original_manager.runner is not self._original_runner):
+            raise RuntimeUnavailable('Host admission ownership changed')
+        with self._condition:
+            self._admission_sealed = True
+            return self._admissions == 0
 
     def install_continuation(self,owner):
         """Explicit same-process zero-timeout continuation; no default enablement."""

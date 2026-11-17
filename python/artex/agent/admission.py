@@ -35,7 +35,7 @@ class AdmissionController:
             raise RuntimeUnavailable('Exact single-process engine host required')
         if type(limit) is not int or not 1<=limit<=host.runner.max_pending:raise ValueError('Bounded capacity must not exceed runner capacity')
         self.host,self._manager,self._runner=host,host.manager,host.runner
-        self.limit=limit;self._lock=Lock();self._busy=False;self._quarantined=False
+        self.limit=limit;self._lock=Lock();self._busy=False;self._quarantined=False;self._sealed=False
         self._active_claim=None;self._active_thread=None;self._operation=None;self._task=None
         self._claim=object();self._adapter=LocalHostAdapter(host,single_process=True)
         with _owners_lock:
@@ -49,8 +49,37 @@ class AdmissionController:
     def _reserve(self,*,reconcile=False,operation=None,task_id=None):
         self._identity()
         with self._lock:
-            if self._busy or (self._quarantined and not reconcile):return False
+            if self._busy or (self._quarantined and not reconcile) or (self._sealed and operation is not None):return False
             self._busy=True;self._active_claim=object();self._active_thread=get_ident();self._operation=operation;self._task=task_id;return True
+    def stop_admissions(self):
+        """Permanently fence this controller's create/start/resume/queued paths.
+
+        Seal and reservation are serialized by the same mutex. The original
+        host is then permanently sealed without holding this controller mutex.
+        True means both seals are installed, no controller reservation was active
+        and no original host admission was active at their observations;
+        it does NOT mean existing tasks, callbacks or resources have drained.
+        False still installs the permanent seal, but an earlier reservation may
+        finish/perform effects. Wait for its caller to finish, then explicitly
+        retry this observation. No new admission reservation can enter meanwhile.
+
+        Does not invoke user callbacks, wait or cancel work. Controller and host
+        mutexes are never held together.
+        Poll/reconcile/drain remain available and never remove the seal. A seal
+        observed during pre-admission inventory prevents the guard from yielding;
+        sealing an already yielded guard does not revoke its original claim.
+        The host seal also covers direct host admission and intent resume. Direct
+        manager/runner bypass remains unsupported as before.
+        """
+        self._identity()
+        with self._lock:
+            self._sealed=True
+            idle=not self._busy
+        # Do not dispatch a replaceable instance callback or skip sealing the
+        # host when a controller reservation was already present.
+        host_idle=AgentHost.stop_admissions(self.host)
+        self._identity()
+        return idle and host_idle
     def _release(self,*,quarantine=False):
         with self._lock:
             self._quarantined=quarantine;self._busy=False;self._active_claim=None;self._active_thread=None;self._operation=None;self._task=None
@@ -74,7 +103,7 @@ class AdmissionController:
         if operation not in ('create','start','resume','queued'):raise ValueError('Unknown admission operation')
         if (operation=='create' and task_id is not None) or (operation!='create' and (type(task_id) not in (str,int) or not str(task_id).isascii() or not str(task_id).isdecimal() or not 0<int(task_id)<2**63)):
             raise ValueError('Exact task identity required')
-        if not self._reserve(operation=operation,task_id=task_id):raise RuntimeUnavailable('Admission capacity authority is busy or quarantined')
+        if not self._reserve(operation=operation,task_id=task_id):raise RuntimeUnavailable('Admission capacity authority is busy, quarantined or sealed')
         entered=False;inspected=False;quarantine=False;credit=None
         try:
             state=self._poll_owned();inspected=True
@@ -88,6 +117,8 @@ class AdmissionController:
                 replacement=1
             if state.running+state.pending-replacement>=self.limit:raise RuntimeUnavailable('Task capacity exhausted')
             if credit is not None and self._manager.validate_continuation_admission(credit) is not True:raise RuntimeUnavailable('Replacement changed before admission')
+            with self._lock:
+                if self._sealed:raise RuntimeUnavailable('Admission capacity authority is sealed')
             entered=True
             yield True
         finally:
