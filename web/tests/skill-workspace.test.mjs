@@ -395,7 +395,7 @@ function pageHarness() {
       state.name = x;
     },
     workspace: {
-      getSnapshot: () => ({ pending: new Map(), uncertain: new Map() }),
+      getSnapshot: () => ({ writeModeEnabled: true, pending: new Map(), uncertain: new Map() }),
       create: (...args) => {
         const d = deferred();
         operations.push({ args, ...d });

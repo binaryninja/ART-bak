@@ -26,6 +26,8 @@ from .server.runtime_listener import DevListenerConfig, QuietRuntimeHandler, _Bo
 from .server.runtime_signals import RuntimeSignalScope
 from .server import runtime_signals as _signals_module
 from .server.wsgi import WSGIApplication
+from .server.core import json_response, error_response
+from .server.disclosure import DisclosureResponse
 from .skills.file_listing import SkillDirectoryScope, SkillFileListingReader
 from .skills.file_read import SkillFileReader
 from .skills.catalog_read import SkillCatalogReader
@@ -154,7 +156,9 @@ class SkillsWorkspaceHost:
             listing = SkillFileListingReader(self._scope, authorize=current, current=current, lifecycle_guard=guard)
             catalog = SkillCatalogReader(self._scope, source, authorize_global=current, current=current, lifecycle_guard=guard)
             self._auth = AuthService(_MemoryPassword(encoded), BcryptCodec(), secrets.token_bytes(32))
-            base = WSGIApplication(self._auth.router(version='skills-workspace-dev'), max_body_bytes=MAX_JSON_BYTES)
+            router = self._auth.router(version='skills-workspace-dev')
+            router.add('GET', '/api/skills-workspace', self._profile)
+            base = WSGIApplication(router, max_body_bytes=MAX_JSON_BYTES)
             self._bundle = bind_skills_workspace(base,
                 catalog_service=SkillCatalogReadService(catalog, authorize=current),
                 files_service=SkillFilesReadService(listing, authorize=current),
@@ -190,6 +194,30 @@ class SkillsWorkspaceHost:
 
     def _write_allowed(self, *args):
         return self._config.enable_writes and self._allowed()
+
+    def _profile(self, request, _parameters):
+        """Bounded configured-mode hint, never a grant or a quarantine bypass."""
+        if request.target != '/api/skills-workspace' or request.body:
+            return error_response(400, 'Invalid Skills workspace profile request')
+        config, auth = self._config, self._auth
+        mode = config.enable_writes
+        def bindings():
+            if (self._config is not config or self._auth is not auth
+                    or type(mode) is not bool or config.enable_writes is not mode):
+                raise WorkspaceUnavailable('Skills workspace profile unavailable')
+        def current():
+            bindings()
+            if not self._allowed() or not auth.authorized(request):
+                raise WorkspaceUnavailable('Skills workspace profile unavailable')
+            bindings()
+        try:
+            current()
+            response = json_response(200, {'profile':'skills-workspace', 'writes_enabled':mode})
+            current()
+            return DisclosureResponse(response.status, response.body,
+                {**response.headers, 'Cache-Control':'no-store'}, current)
+        except Exception:
+            return error_response(503, 'Skills workspace profile unavailable')
 
     @contextmanager
     def _guard(self, *args):

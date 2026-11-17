@@ -57,6 +57,26 @@ memory-only and does not update the operator's input file. Restart invalidates
 all old tokens and reloads the explicit password file. The launcher never prints
 passwords, hashes, signing keys, tokens, request paths or query parameters.
 
+### Discovering configured read-only mode
+
+Only this explicit Skills host mounts authenticated `GET /api/skills-workspace`.
+The exact successful JSON is `{"profile":"skills-workspace","writes_enabled":false}`
+by default, or the same shape with `true` when the operator supplied
+`--enable-writes`. `HEAD` supplies the representation length without a body.
+Successful responses carry `Cache-Control: no-store`; queries and request bodies
+are rejected with 400, and other authenticated methods with 405. An ordinary
+application without this host does not acquire the route.
+
+This bounded response contains no root paths, credentials, skill contents or
+permission-changing controls. It describes configuration at that request, not
+authorization, durable capability, revocation notification or a promise that a
+later write will succeed. Every mutation still uses the original write grant and
+root/lease/request checks. Missing, malformed or unavailable profile data must
+not be interpreted as write permission by a client. A profile refresh must never
+clear an unconfirmed mutation. A sealed or quarantined host continues to reject
+new profile requests with 503; discovery cannot bypass that state. No cache or
+already-delivered response can prove that authority remains current.
+
 For the separately configured development frontend/proxy, an operator may add
 `--frontend-origin http://127.0.0.1:3000` (or another accepted canonical HTTP
 loopback origin). This trusts that entire origin, not a particular proxy identity.

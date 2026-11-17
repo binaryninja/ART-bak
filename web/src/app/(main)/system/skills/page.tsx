@@ -43,6 +43,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { MOCK } from "@/lib/mock/enabled";
 import { isPythonProfile } from "@/lib/mutation-contract.mjs";
 import { createSkillWorkspace, skillFileKey, validSkillCreationName } from "@/lib/skill-workspace.mjs";
 
@@ -332,19 +333,28 @@ export default function SkillsPage() {
 
   // Mounted workspace caches drafts by exact skill/path. The model fences
   // callbacks synchronously, independently of React's next render.
-  const [workspace] = React.useState(() => createSkillWorkspace(api));
+  const [workspace] = React.useState(() => createSkillWorkspace(api, { requireProfile: RESTRICTED_SKILLS && !MOCK }));
   const workspaceState = React.useSyncExternalStore(workspace.subscribe, workspace.getSnapshot, workspace.getSnapshot);
   const fileDraft = selected?.path != null
     ? workspaceState.drafts.get(skillFileKey(selected.skill, selected.path)) : undefined;
   const fileLoading = !fileDraft?.loaded && !fileDraft?.error;
   const saving = !!selected && workspaceState.pending.has(selected.skill);
-  const rootWriteBlocked = !!workspaceState.rootPending || !!workspaceState.rootUncertain;
+  const rootWriteBlocked = !workspaceState.writeModeEnabled || !!workspaceState.rootPending || !!workspaceState.rootUncertain;
   const blocked = rootWriteBlocked || (!!selected && workspaceState.uncertain.has(selected.skill));
   function rootWritesSuspended() {
     const state = workspace.getSnapshot();
-    return !!state.rootPending || !!state.rootUncertain;
+    return !state.writeModeEnabled || !!state.rootPending || !!state.rootUncertain;
   }
   const [fileRetry, setFileRetry] = React.useState(0);
+  const profileCleanup = React.useRef<(() => void) | null>(null);
+  const refreshProfile = React.useCallback(() => {
+    profileCleanup.current?.();
+    profileCleanup.current = workspace.readProfile();
+  }, [workspace]);
+  React.useEffect(() => {
+    refreshProfile();
+    return () => { profileCleanup.current?.(); profileCleanup.current = null; };
+  }, [refreshProfile]);
 
   // inline create — using a ref to avoid stale closure in onBlur
   const [creating, setCreating] = React.useState<Creating>(null);
@@ -510,7 +520,7 @@ export default function SkillsPage() {
   const newEntryRef = React.useRef("");
   function startCreate(skill: string, inDir: string, kind: "file" | "dir") {
     const state = workspace.getSnapshot();
-    if (state.rootPending || state.rootUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
+    if (!state.writeModeEnabled || state.rootPending || state.rootUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
     cancelRef.current = false;
     ensureExpanded(skill, inDir);
     const next = { skill, inDir, kind };
@@ -521,7 +531,7 @@ export default function SkillsPage() {
   }
 
   async function commitCreate(owner: Creating) {
-    if (!owner || creatingRef.current !== owner) return;
+    if (!owner || creatingRef.current !== owner || !workspace.getSnapshot().writeModeEnabled) return;
     if (cancelRef.current) { cancelRef.current = false; return; }
     const c = creatingRef.current;
     const name = newEntryRef.current.trim();
@@ -627,7 +637,7 @@ export default function SkillsPage() {
 
   async function createNewSkill() {
     const state = workspace.getSnapshot();
-    if (!alive.current || !newDialog.current.open || newRequest.current || state.rootPending
+    if (!alive.current || !newDialog.current.open || newRequest.current || !state.writeModeEnabled || state.rootPending
       || state.rootUncertain || state.pending.size || state.uncertain.size) return;
     const draft = newDraftRef.current;
     const name = draft.name.trim();
@@ -818,12 +828,21 @@ export default function SkillsPage() {
           </Popover>
         )}
       </div>
-      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">Browse, create skills, edit, write empty files and create folders within the host-granted skills root. ZIP import, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
+      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">{MOCK ? "Fixture-only Skills demo; no real filesystem host is contacted." : "Browse the host-granted skills root and retain local drafts. Saving files, creating skills and creating folders require a confirmed write-enabled host mode; the host still authorizes every request."} ZIP import, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
       <div className="flex items-center gap-2 border-b px-4 py-2 text-xs">
         <Button size="sm" variant="outline" onClick={load} disabled={catalogLoading}>Refresh catalog</Button>
         {catalogLoading && <span role="status">Loading catalog…</span>}
         {catalogError && <span role="alert">Catalog unavailable: {catalogError}. Previously loaded entries may be stale.</span>}
       </div>
+      {workspaceState.profile && (
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
+          <Button size="sm" variant="outline" onClick={refreshProfile}>Recheck host mode</Button>
+          {workspaceState.profile.status === "loading" && <span role="status">Checking Skills host mode; writes are disabled.</span>}
+          {workspaceState.profile.status === "unchecked" && <span role="status">Skills host mode has not been confirmed; writes are disabled.</span>}
+          {workspaceState.profile.status === "error" && <span role="alert">Host mode unavailable: {workspaceState.profile.error} Writes remain disabled. Local drafts remain available; browsing still depends on host access.</span>}
+          {workspaceState.profile.status === "ready" && <span>{workspaceState.profile.writesEnabled ? "Host configured for writes; each request is still checked. Mode refresh cannot clear unconfirmed operations." : "Read-only Skills host. Browsing and local drafts are available; saving and creation are disabled."}</span>}
+        </div>
+      )}
       {workspaceState.rootPending && <p role="status" className="px-4 py-2 text-muted-foreground text-xs">Creating {workspaceState.rootPending.name}; other workspace writes are waiting.</p>}
       {workspaceState.rootUncertain && (
         <p role="alert" className="px-4 py-2 text-destructive text-xs">Creation of {workspaceState.rootUncertain.name} is unconfirmed. All writes in this Skills workspace are suspended. Do not repeat creation or switch names to retry. Inspect and reconcile the filesystem before reopening the workspace; catalog refresh does not unlock writes. Keep or copy unsaved drafts.</p>
@@ -1129,6 +1148,7 @@ export default function SkillsPage() {
             <SheetTitle>New skill</SheetTitle>
           </SheetHeader>
           {RESTRICTED_SKILLS && <p className="px-4 pt-2 text-muted-foreground text-xs">Creates a new folder and SKILL.md under the granted root, without replacing an existing skill. Metadata must be single-line. MCP links and visibility are unavailable.</p>}
+          {!workspaceState.writeModeEnabled && <p role="status" className="px-4 pt-2 text-muted-foreground text-xs">Creation is disabled until this Skills host confirms write-enabled mode. You can keep or copy this draft.</p>}
           {workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">Creation is unconfirmed. All workspace writes are suspended; do not repeat it. Your draft is kept.</p>}
           {workspaceState.rootError && !workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">{workspaceState.rootError.message}</p>}
           {workspaceState.uncertain.size > 0 && !workspaceState.rootUncertain && <p role="alert" className="px-4 pt-2 text-destructive text-xs">Reconcile existing unconfirmed file operations before creating a new skill. Catalog refresh does not unlock creation.</p>}

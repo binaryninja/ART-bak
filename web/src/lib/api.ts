@@ -1,5 +1,5 @@
 import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
-import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDirectory, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
+import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDirectory, confirmedSkillWorkspaceProfile, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -1147,6 +1147,8 @@ export const api = {
     }>("/sync/scopesentry/sync", body),
 
   // ---- skills (filesystem) ----
+  skillWorkspaceProfile: (signal?: AbortSignal) =>
+    http<unknown>("/skills-workspace", { signal, cache: "no-store" }, 200).then(confirmedSkillWorkspaceProfile),
   skills: () => get<unknown>("/skills").then(confirmedSkillCatalog),
   createSkill: (s: {
     name: string;

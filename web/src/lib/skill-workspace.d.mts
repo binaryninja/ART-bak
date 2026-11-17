@@ -1,6 +1,11 @@
 import type { SkillItem } from "./types";
 export function skillFileKey(skill: string, path: string): string;
 export function skillResourcePath(skill: string, path?: string): string;
+export interface SkillWorkspaceProfile {
+  profile: "skills-workspace";
+  writes_enabled: boolean;
+}
+export function confirmedSkillWorkspaceProfile(value: unknown): SkillWorkspaceProfile;
 export interface SkillCreationInput {
   name: string;
   description: string;
@@ -31,16 +36,23 @@ export interface SkillWorkspaceSnapshot {
   rootPending: { name: string } | null;
   rootUncertain: { name: string; message: string } | null;
   rootError: { name: string; message: string } | null;
+  profile: { status: "unchecked" | "loading" | "ready" | "error"; writesEnabled: boolean; error: string | null } | null;
+  writeModeEnabled: boolean;
 }
 export interface SkillWorkspaceApi {
+  skillWorkspaceProfile?(signal?: AbortSignal): Promise<unknown>;
   createSkill(input: SkillCreationInput): Promise<unknown>;
   readSkillFile(skill: string, path: string): Promise<string>;
   writeSkillFile(skill: string, path: string, content: string): Promise<unknown>;
   createSkillDir(skill: string, path: string): Promise<unknown>;
 }
-export function createSkillWorkspace(api: SkillWorkspaceApi): {
+export function createSkillWorkspace(
+  api: SkillWorkspaceApi,
+  options?: { requireProfile?: boolean },
+): {
   subscribe(listener: () => void): () => void;
   getSnapshot(): SkillWorkspaceSnapshot;
+  readProfile(): () => void;
   read(skill: string, path: string): () => void;
   edit(skill: string, path: string, content: string): void;
   createSkill(input: SkillCreationInput): Promise<{ name: string } | null>;

@@ -39,6 +39,19 @@ function object(value) {
 function confirmed(value) {
   return object(value) && value.pending !== true && value.unknown !== true && value.retry !== false;
 }
+// The explicit Skills host reports configured mode, not authority or a promise
+// that the next write will be accepted. Unknown hosts never enable Python writes.
+export function confirmedSkillWorkspaceProfile(value) {
+  if (
+    !object(value) ||
+    Object.keys(value).length !== 2 ||
+    value.profile !== "skills-workspace" ||
+    typeof value.writes_enabled !== "boolean"
+  ) {
+    throw new Error("Skills host mode response is unavailable or incompatible. Writes remain disabled.");
+  }
+  return { profile: "skills-workspace", writes_enabled: value.writes_enabled };
+}
 export function validSkillCreationName(name) {
   if (typeof name !== "string") return false;
   const chars = [...name];
@@ -110,7 +123,7 @@ export function confirmedSkillCatalog(value) {
 }
 const errorText = (error) => (error instanceof Error ? error.message : "Request failed");
 
-export function createSkillWorkspace(api) {
+export function createSkillWorkspace(api, { requireProfile = false } = {}) {
   const drafts = new Map(),
     reads = new Map(),
     pending = new Map(),
@@ -118,6 +131,9 @@ export function createSkillWorkspace(api) {
     errors = new Map();
   const listeners = new Set();
   let snapshot;
+  let profile = requireProfile ? { status: "unchecked", writesEnabled: false, error: null } : null;
+  let profileRequest = null;
+  const writeModeEnabled = () => profile === null || (profile.status === "ready" && profile.writesEnabled);
   let rootPending = null,
     rootUncertain = null,
     rootError = null;
@@ -130,6 +146,8 @@ export function createSkillWorkspace(api) {
       rootPending,
       rootUncertain,
       rootError,
+      profile,
+      writeModeEnabled: writeModeEnabled(),
     };
     for (const listener of listeners) listener();
   }
@@ -158,6 +176,40 @@ export function createSkillWorkspace(api) {
     },
     getSnapshot() {
       return snapshot;
+    },
+    readProfile() {
+      if (!requireProfile)
+        return () => {
+          /* Go/mock has no host-profile read owner. */
+        };
+      profileRequest?.abort();
+      const owner = new AbortController();
+      profileRequest = owner;
+      profile = { status: "loading", writesEnabled: false, error: null };
+      publish();
+      const current = () => profileRequest === owner;
+      Promise.resolve()
+        .then(() => (current() ? api.skillWorkspaceProfile(owner.signal) : undefined))
+        .then((value) => {
+          if (!current()) return;
+          const receipt = confirmedSkillWorkspaceProfile(value);
+          profile = { status: "ready", writesEnabled: receipt.writes_enabled, error: null };
+        })
+        .catch((error) => {
+          if (current()) profile = { status: "error", writesEnabled: false, error: errorText(error) };
+        })
+        .finally(() => {
+          if (!current()) return;
+          profileRequest = null;
+          publish();
+        });
+      return () => {
+        if (!current()) return;
+        profileRequest = null;
+        owner.abort();
+        profile = { status: "unchecked", writesEnabled: false, error: null };
+        publish();
+      };
     },
     // The effect owns this exact token. Cleanup retires hanging reads without
     // clearing a replacement effect's token (including StrictMode replay).
@@ -208,7 +260,7 @@ export function createSkillWorkspace(api) {
       // Top-level creation shares a synchronous fence with file/folder writes.
       // An unknown root mutation suspends writes across every skill, not only
       // the requested name. Reads, draft edits and catalog refresh stay usable.
-      if (rootPending || rootUncertain || pending.size || uncertain.size) return null;
+      if (!writeModeEnabled() || rootPending || rootUncertain || pending.size || uncertain.size) return null;
       if (!validSkillCreationName(input?.name) || typeof input?.description !== "string" || !input.description.trim()) {
         rootError = {
           name: typeof input?.name === "string" ? input.name : "",
@@ -252,7 +304,7 @@ export function createSkillWorkspace(api) {
     },
   };
   async function mutate(skill, path, kind, content) {
-    if (rootPending || rootUncertain || pending.has(skill) || uncertain.has(skill)) return false;
+    if (!writeModeEnabled() || rootPending || rootUncertain || pending.has(skill) || uncertain.has(skill)) return false;
     try {
       skillResourcePath(skill, path);
     } catch (error) {

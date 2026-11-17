@@ -419,7 +419,7 @@ test("actual JSX gates global writes, retains draft edits and hides Python MCP/v
     /setSelected/,
   );
   assert.match(view, /disabled=\{creatingSkill \|\| rootWriteBlocked/);
-  assert.match(view, /if \(state.rootPending \|\| state.rootUncertain/);
+  assert.match(view, /if \(!state.writeModeEnabled \|\| state.rootPending \|\| state.rootUncertain/);
 });
 
 test("confirmed primary creation is announced/refreshed before optional visibility settles", async () => {
