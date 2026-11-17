@@ -142,7 +142,13 @@ def _validate(profile):
     if not 0<=profile.context_window_k<=1000 or profile.max_tokens<0:raise ProfileInvalid('invalid token bounds')
     for name in ('rate_per_second','rate_per_minute'):
         value=getattr(profile,name)
-        if type(value) not in (int,float) or not math.isfinite(value) or value<0:raise ProfileInvalid('rate limits must be finite and nonnegative')
+        try:
+            valid=type(value) in (int,float) and math.isfinite(value) and value>=0
+        except OverflowError:
+            # JSON integers have arbitrary precision in Python; isfinite must
+            # convert them to a float and can overflow before returning False.
+            valid=False
+        if not valid:raise ProfileInvalid('rate limits must be finite and nonnegative')
     if profile.session_header_key and not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+",profile.session_header_key):
         raise ProfileInvalid('invalid session header name')
     for name,schemes in [('base_url',('http','https')),('proxy',('http','https','socks5','socks5h'))]:
