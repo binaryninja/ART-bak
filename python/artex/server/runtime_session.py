@@ -2,8 +2,9 @@
 
 The caller acquires RuntimeLease BEFORE assembling this listener and owns all
 assembly-failure cleanup. Supply only a fresh, unstarted exact RuntimeListener.
-No context-manager cleanup, automatic restart, signals, force release, default
+No context-manager cleanup, automatic restart, force release, default
 policies, schema changes or credential/provider discovery are provided.
+Signals are installed only by the separate explicit run_until_signalled entry.
 """
 from dataclasses import dataclass
 import math
@@ -23,6 +24,13 @@ class SessionResult:
 class ForegroundResult:
     reason: str
     shutdown: SessionResult
+
+
+@dataclass(frozen=True)
+class SignalForegroundResult:
+    foreground: ForegroundResult
+    signal_number: int | None
+    handlers_restored: bool
 
 
 class RuntimeSession:
@@ -113,6 +121,10 @@ class RuntimeSession:
         Health is a finite observation, not proof of readiness or atomic liveness.
         Do not independently start/tick/stop the session while this driver owns it.
         """
+        return self._run_foreground(stop_requested, poll_interval=poll_interval,
+                                    shutdown_timeout=shutdown_timeout)
+
+    def _validate_foreground(self, stop_requested, poll_interval, shutdown_timeout):
         if type(stop_requested) is not Event:
             raise ValueError('An explicit stop Event is required')
         if type(poll_interval) not in (int, float) or not math.isfinite(poll_interval) or not .01 <= poll_interval <= 1:
@@ -122,11 +134,44 @@ class RuntimeSession:
             self._bindings()
             if self._driving or self._busy or self._state != 'new':
                 raise RuntimeError('Foreground run requires an unused session')
+
+    def run_until_signalled(self, signals, stop_requested, *, poll_interval=0.1, shutdown_timeout=10):
+        """Explicit main-thread SIGINT/SIGTERM -> existing foreground drain.
+
+        Supply a fresh RuntimeSignalScope and retain it if restoration fails.
+        Signals coalesce; they never force exit or interrupt cleanup. No event,
+        runtime callback or lock is touched by the handler. Existing callbacks
+        remain cooperative, so poll_interval is not a bound on overall latency.
+        An unresolved drain retains the session/lease. Returning from this call
+        does not authorize process exit or restart; the host owns reconciliation.
+        """
+        from .runtime_signals import RuntimeSignalScope
+        if type(signals) is not RuntimeSignalScope:
+            raise ValueError('An explicit fresh runtime signal scope is required')
+        self._validate_foreground(stop_requested, poll_interval, shutdown_timeout)
+        signals.install()
+        try:
+            result = self._run_foreground(stop_requested, poll_interval=poll_interval,
+                                         shutdown_timeout=shutdown_timeout, signals=signals)
+        finally:
+            restored = signals.restore()
+        return SignalForegroundResult(result, signals.signal_number, restored)
+
+    def _run_foreground(self, stop_requested, *, poll_interval, shutdown_timeout, signals=None):
+        with self._lock:
+            self._validate_foreground(stop_requested, poll_interval, shutdown_timeout)
             self._driving = True
+        def requested():
+            if signals is not None:
+                signals.validate()
+                if signals.signal_number is not None:
+                    return 'signal_received'
+            return 'stop_requested' if stop_requested.is_set() else None
         reason = 'runtime_unavailable'
         try:
-            if stop_requested.is_set():
-                reason = 'stop_requested'
+            pending = requested()
+            if pending is not None:
+                reason = pending
             else:
                 result = self.start(shutdown_timeout=shutdown_timeout)
                 if not result.started:
@@ -135,8 +180,9 @@ class RuntimeSession:
                     with self._lock: self._driving = False
                     return ForegroundResult('startup_failed', result)
                 while True:
-                    if stop_requested.is_set():
-                        reason = 'stop_requested'
+                    pending = requested()
+                    if pending is not None:
+                        reason = pending
                         break
                     self._bindings()
                     listener, lease = self._pins
@@ -152,8 +198,13 @@ class RuntimeSession:
                     if pump._thread is None or not pump._thread.is_alive():
                         reason = 'pump_stopped'
                         break
+                    # Signal handlers deliberately do not set this Event. The
+                    # next bounded poll observes their lock-free latch instead.
+                    # Preserve an accepted Event notification even if another
+                    # host thread clears the Event before the next is_set().
                     if stop_requested.wait(poll_interval):
-                        reason = 'stop_requested'
+                        reason = ('signal_received' if signals is not None and signals.signal_number is not None
+                                  else 'stop_requested')
                         break
         except (KeyboardInterrupt, SystemExit):
             reason = 'interrupted'
