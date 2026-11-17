@@ -31,7 +31,13 @@ class ToolCatalogService:
             if action=='delete':
                 self.store.delete(identifier);return json_response(200,{'deleted':identifier})
             if len(request.body)>1048576:return error_response(413,'Request body too large')
-            body=json.loads(request.body.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(ToolInvalid()))
+            # Only decoder failures describe malformed client input. The same
+            # exception types from a store or response can follow a write and
+            # must not be relabeled as a safe client-side rejection.
+            try:
+                body=json.loads(request.body.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(ToolInvalid()))
+            except (ValueError,UnicodeError,TypeError,RecursionError):
+                raise ToolInvalid('Invalid JSON input') from None
             fields={'description','schema','agents','enabled'}
             if action!='update':fields|={'key','kind','exec','deferred'}
             if not isinstance(body,dict) or set(body)-fields:raise ToolInvalid()
@@ -51,5 +57,5 @@ class ToolCatalogService:
         except ToolConflict:return error_response(409,'Tool key already exists')
         except ToolMissing:return error_response(404,'Tool not found')
         except ToolUnavailable:return error_response(503,'Tool capability unavailable')
-        except (ValueError,UnicodeError,TypeError,RecursionError):return error_response(400,'Invalid tool metadata')
+        except ToolInvalid:return error_response(400,'Invalid tool metadata')
         except Exception:return error_response(500,'Tool catalog operation failed')

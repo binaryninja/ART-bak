@@ -67,7 +67,10 @@ def _row(row):
 def validate(tool,*,custom=True):
     if not isinstance(tool,CatalogTool):raise ToolInvalid('Tool metadata required')
     key(tool.key,custom=custom)
-    if not isinstance(tool.description,str) or '\0' in tool.description or len(tool.description.encode('utf-8'))>65536:raise ToolInvalid('Invalid description')
+    if not isinstance(tool.description,str) or '\0' in tool.description:raise ToolInvalid('Invalid description')
+    try:description_bytes=tool.description.encode('utf-8')
+    except UnicodeEncodeError:raise ToolInvalid('Invalid description') from None
+    if len(description_bytes)>65536:raise ToolInvalid('Invalid description')
     if any(type(v) is not bool for v in (tool.system,tool.enabled,tool.deferred)):raise ToolInvalid('Invalid flags')
     if custom and (tool.system or tool.kind not in ('command','script','http','shell')):raise ToolInvalid('Invalid custom kind')
     schema=value_json(tool.schema);execution=value_json(tool.exec)
