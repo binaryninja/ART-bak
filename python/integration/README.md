@@ -32,3 +32,10 @@ This is not a network-listener/browser test, production configuration, security 
 
 Assertions must be enabled. The runner refuses Python `-O`/`-OO` or
 `PYTHONOPTIMIZE` before connecting or creating schema objects.
+
+## Optional Skills preview smoke
+
+The separate `skills_preview_acceptance.py` uses only freshly generated local
+Skills fixtures and an already-built Next preview, with no PostgreSQL. See
+[`web/SKILLS_PREVIEW_ACCEPTANCE.md`](../../web/SKILLS_PREVIEW_ACCEPTANCE.md) for
+prerequisites, the exact command, covered paths and evidence limitations.

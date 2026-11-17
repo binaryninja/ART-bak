@@ -74,3 +74,8 @@ reacquisition. This is **not** a mounted React/browser interaction test, not dir
 execution of the `api.ts` fetch wrapper, and not a development-watcher pass.
 A standard Chromium launch was blocked by the environment's socket restriction;
 no sandbox/network workaround is part of this profile.
+
+A repeatable, optional API/model-to-proxy smoke runner is now available. See
+[Skills preview acceptance](SKILLS_PREVIEW_ACCEPTANCE.md). It exercises the
+original `api.ts` fetch wrapper, unlike the older evidence above, but is still
+not a mounted React or rendered-browser check.
