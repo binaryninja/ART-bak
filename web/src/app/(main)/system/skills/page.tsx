@@ -43,7 +43,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { isPythonProfile } from "@/lib/mutation-contract.mjs";
+import { createSkillWorkspace, skillFileKey } from "@/lib/skill-workspace.mjs";
+
 import type { Agent, SkillItem, MCPServer, SkillCall, MissingSkill } from "@/lib/types";
+
+const RESTRICTED_SKILLS = isPythonProfile(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE);
 
 function fmtTime(ts?: string) {
   if (!ts) return "Never used";
@@ -296,15 +301,31 @@ function SkillsOverview({
 export default function SkillsPage() {
   const [skills, setSkills] = React.useState<SkillItem[]>([]);
   const [agents, setAgents] = React.useState<Agent[]>([]);
-  const [selected, setSelected] = React.useState<Selected | null>(null);
+  const [selected, setSelectedState] = React.useState<Selected | null>(null);
+  const selectionRef = React.useRef<Selected | null>(null);
+  function setSelected(next: Selected | null) {
+    selectionRef.current = next;
+    setSelectedState(next);
+  }
+  const catalogRequest = React.useRef<object | null>(null);
+  const alive = React.useRef(false);
+  React.useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; catalogRequest.current = null; };
+  }, []);
   const [visibility, setVisibility] = React.useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
-  // file editor
-  const [fileContent, setFileContent] = React.useState("");
-  const [fileLoading, setFileLoading] = React.useState(false);
-  const [dirty, setDirty] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
+  // Mounted workspace caches drafts by exact skill/path. The model fences
+  // callbacks synchronously, independently of React's next render.
+  const [workspace] = React.useState(() => createSkillWorkspace(api));
+  const workspaceState = React.useSyncExternalStore(workspace.subscribe, workspace.getSnapshot, workspace.getSnapshot);
+  const fileDraft = selected?.path != null
+    ? workspaceState.drafts.get(skillFileKey(selected.skill, selected.path)) : undefined;
+  const fileLoading = !fileDraft?.loaded && !fileDraft?.error;
+  const saving = !!selected && workspaceState.pending.has(selected.skill);
+  const blocked = !!selected && workspaceState.uncertain.has(selected.skill);
+  const [fileRetry, setFileRetry] = React.useState(0);
 
   // inline create — using a ref to avoid stale closure in onBlur
   const [creating, setCreating] = React.useState<Creating>(null);
@@ -341,18 +362,29 @@ export default function SkillsPage() {
   const [missing, setMissing] = React.useState<MissingSkill[]>([]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
+  const [catalogLoading, setCatalogLoading] = React.useState(true);
+  const [catalogError, setCatalogError] = React.useState<string | null>(null);
   const load = React.useCallback(() => {
-    api.agents().then(setAgents).catch(() => {});
-    api.mcpServers().then(setMcpOptions).catch(() => {});
-    api.missingSkills().then(setMissing).catch(() => {});
+    const request = {};
+    catalogRequest.current = request;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    const current = () => alive.current && catalogRequest.current === request;
+    if (!RESTRICTED_SKILLS) {
+      api.agents().then((items) => { if (current()) setAgents(items); }).catch(() => { /* Optional Go-only decoration. */ });
+      api.mcpServers().then((items) => { if (current()) setMcpOptions(items); }).catch(() => { /* Optional Go-only decoration. */ });
+      api.missingSkills().then((items) => { if (current()) setMissing(items); }).catch(() => { /* Optional Go-only decoration. */ });
+    }
     api.skills().then((ss) => {
+      if (!current()) return;
       setSkills(ss);
-      ss.forEach((s) =>
-        api.skillVisibility(s.name)
-          .then((ids) => setVisibility((v) => ({ ...v, [s.name]: ids })))
-          .catch(() => {}),
-      );
-    }).catch(() => {});
+      if (!RESTRICTED_SKILLS) ss.forEach((s) => {
+        void api.skillVisibility(s.name)
+          .then((ids) => { if (current()) setVisibility((v) => ({ ...v, [s.name]: ids })); })
+          .catch(() => { /* Optional Go-only decoration. */ });
+      });
+    }).catch((error) => { if (current()) setCatalogError((error as Error).message || "Failed to load skills"); })
+      .finally(() => { if (current()) setCatalogLoading(false); });
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
@@ -401,7 +433,7 @@ export default function SkillsPage() {
 
   // Recent calls for the selected skill (detail panel only).
   React.useEffect(() => {
-    if (!selected || selected.path !== null) { setUsageCalls([]); return; }
+    if (RESTRICTED_SKILLS || !selected || selected.path !== null) { setUsageCalls([]); return; }
     const name = selected.skill;
     setUsageLoading(true);
     api.skillUsage(name, 20)
@@ -410,14 +442,14 @@ export default function SkillsPage() {
       .finally(() => setUsageLoading(false));
   }, [selected]);
 
+  // Retry is part of the request identity, not an extra ignored effect dependency.
+  const readTarget = React.useMemo(() => ({
+    skill: selected?.skill, path: selected?.path, retry: fileRetry,
+  }), [selected?.skill, selected?.path, fileRetry]);
   React.useEffect(() => {
-    if (!selected || selected.path === null) { setFileContent(""); setDirty(false); return; }
-    setFileLoading(true);
-    api.readSkillFile(selected.skill, selected.path)
-      .then((c) => { setFileContent(c); setDirty(false); })
-      .catch(() => toast.error("Failed to read file"))
-      .finally(() => setFileLoading(false));
-  }, [selected]);
+    if (readTarget.skill == null || readTarget.path == null) return;
+    return workspace.read(readTarget.skill, readTarget.path);
+  }, [workspace, readTarget]);
 
   // ── Expand helpers ────────────────────────────────────────────────────────
   function toggleExpanded(key: string) {
@@ -443,48 +475,47 @@ export default function SkillsPage() {
   }
 
   // ── Inline create ─────────────────────────────────────────────────────────
+  const creatingRef = React.useRef<Creating>(null);
+  const newEntryRef = React.useRef("");
   function startCreate(skill: string, inDir: string, kind: "file" | "dir") {
+    const state = workspace.getSnapshot();
+    if (state.pending.has(skill) || state.uncertain.has(skill)) return;
     cancelRef.current = false;
     ensureExpanded(skill, inDir);
-    setCreating({ skill, inDir, kind });
+    const next = { skill, inDir, kind };
+    creatingRef.current = next;
+    newEntryRef.current = "";
+    setCreating(next);
     setNewEntryName("");
   }
 
-  // Use a ref snapshot so commitCreate reads the latest creating value
-  // without depending on potentially stale closure state.
-  const creatingRef = React.useRef<Creating>(null);
-  React.useEffect(() => { creatingRef.current = creating; }, [creating]);
-  const newEntryRef = React.useRef("");
-  React.useEffect(() => { newEntryRef.current = newEntryName; }, [newEntryName]);
-
-  async function commitCreate() {
+  async function commitCreate(owner: Creating) {
+    if (!owner || creatingRef.current !== owner) return;
     if (cancelRef.current) { cancelRef.current = false; return; }
     const c = creatingRef.current;
     const name = newEntryRef.current.trim();
+    // Consume this exact input before confirmation/await: Enter plus blur
+    // cannot dispatch the same write twice, and later inputs keep ownership.
+    creatingRef.current = null;
+    newEntryRef.current = "";
     setCreating(null);
     setNewEntryName("");
-    if (!c || !name) return;
-
+    if (!c || !name || !alive.current) return;
     const fullPath = c.inDir ? `${c.inDir}/${name}` : name;
-    try {
-      if (c.kind === "dir") {
-        await api.createSkillDir(c.skill, fullPath);
-        toast.success(`Created folder: ${fullPath}`);
-        ensureExpanded(c.skill, fullPath);
-      } else {
-        await api.writeSkillFile(c.skill, fullPath, "");
-        toast.success(`Created file: ${fullPath}`);
-        setSelected({ skill: c.skill, path: fullPath });
-        ensureExpanded(c.skill, c.inDir);
-      }
-      load();
-    } catch (e) {
-      toast.error("Create failed: " + (e as Error).message);
-    }
+    if (c.kind === "file" && !window.confirm(`Write an empty file at ${c.skill}/${fullPath}? If that path already exists, its contents will be replaced. This is not exclusive file creation.`)) return;
+    const ok = await workspace.create(c.skill, fullPath, c.kind);
+    if (!alive.current || !ok) return;
+    toast.success(c.kind === "dir" ? `Folder ready: ${fullPath}` : `Wrote empty file: ${fullPath}`);
+    // Do not select the created path: the user may have navigated or edited a
+    // different draft. Catalog refresh never hydrates/clears file drafts.
+    load();
   }
 
-  function cancelCreate() {
+  function cancelCreate(owner: Creating) {
+    if (!owner || creatingRef.current !== owner) return;
     cancelRef.current = true;
+    creatingRef.current = null;
+    newEntryRef.current = "";
     setCreating(null);
     setNewEntryName("");
   }
@@ -525,15 +556,10 @@ export default function SkillsPage() {
   }
 
   async function saveFile() {
-    if (!selected || selected.path === null) return;
-    setSaving(true);
-    try {
-      await api.writeSkillFile(selected.skill, selected.path, fileContent);
-      toast.success("Saved");
-      setDirty(false);
-    } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
-    } finally { setSaving(false); }
+    if (!selected || selected.path === null || selectionRef.current !== selected || !alive.current) return;
+    const target = selected;
+    const ok = await workspace.save(target.skill, target.path);
+    if (alive.current && ok) toast.success(`Saved ${target.skill}/${target.path}`);
   }
 
   async function toggleSkillMcp(skillName: string, mcpName: string, mcpOn: boolean) {
@@ -607,12 +633,12 @@ export default function SkillsPage() {
           className="h-6 flex-1 px-1 py-0 font-mono text-xs"
           placeholder={creating?.kind === "dir" ? "folder-name" : "filename.py"}
           value={newEntryName}
-          onChange={(e) => setNewEntryName(e.target.value)}
+          onChange={(e) => { if (creatingRef.current === creating) { newEntryRef.current = e.target.value; setNewEntryName(e.target.value); } }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") { cancelRef.current = false; void commitCreate(); }
-            if (e.key === "Escape") cancelCreate();
+            if (e.key === "Enter") { cancelRef.current = false; void commitCreate(creating); }
+            if (e.key === "Escape") cancelCreate(creating);
           }}
-          onBlur={() => { void commitCreate(); }}
+          onBlur={() => { void commitCreate(creating); }}
         />
       </div>
     );
@@ -642,15 +668,15 @@ export default function SkillsPage() {
               <span className="min-w-0 flex-1 truncate" title={node.path}>{node.name}</span>
               {/* Absolute so a long name can never push the actions out of view */}
               <span className="absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded bg-muted pl-1 group-hover:flex">
-                <Button size="icon" variant="ghost" className="size-5" title="New file"
+                <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
                   onClick={(e) => { e.stopPropagation(); startCreate(skill, node.path, "file"); }}>
                   <FilePlusIcon className="size-3 text-muted-foreground" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-5" title="New folder"
+                <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={workspaceState.pending.has(skill) || workspaceState.uncertain.has(skill)}
                   onClick={(e) => { e.stopPropagation(); startCreate(skill, node.path, "dir"); }}>
                   <FolderPlusIcon className="size-3 text-muted-foreground" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-5" title="Delete folder"
+                <Button size="icon" variant="ghost" className="size-5" title="Delete folder" disabled={RESTRICTED_SKILLS}
                   onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "dir", skill, path: node.path }); }}>
                   <Trash2Icon className="size-3 text-destructive" />
                 </Button>
@@ -686,7 +712,7 @@ export default function SkillsPage() {
             isSelected ? "bg-accent" : "bg-muted",
           )}>
             <Button size="icon" variant="ghost" className="size-5"
-              title="Delete file"
+              title="Delete file" disabled={RESTRICTED_SKILLS}
               onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "file", skill, path: node.path }); }}>
               <Trash2Icon className="size-3 text-destructive" />
             </Button>
@@ -705,7 +731,7 @@ export default function SkillsPage() {
       <div className="flex items-center gap-3 border-b px-4 py-2.5 lg:px-6">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-sm font-semibold leading-tight">Skill</h1>
-          <p className="text-muted-foreground text-xs">Skill library · agentskills.io specification · Per-agent visibility</p>
+          <p className="text-muted-foreground text-xs">{RESTRICTED_SKILLS ? "Scoped skills workspace · Existing skills only · No usage ledger" : "Skill library · agentskills.io specification · Per-agent visibility"}</p>
         </div>
         {/* Missing skills: explicitly requested by agents but absent from the library; identifies useful additions. */}
         {missing.length > 0 && (
@@ -733,11 +759,23 @@ export default function SkillsPage() {
           </Popover>
         )}
       </div>
+      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">Browse, edit, write empty files and create folders within the host-granted skills root. ZIP import, skill creation, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
+      <div className="flex items-center gap-2 border-b px-4 py-2 text-xs">
+        <Button size="sm" variant="outline" onClick={load} disabled={catalogLoading}>Refresh catalog</Button>
+        {catalogLoading && <span role="status">Loading catalog…</span>}
+        {catalogError && <span role="alert">Catalog unavailable: {catalogError}. Previously loaded entries may be stale.</span>}
+      </div>
+      {[...workspaceState.errors].map(([skill, error]) => (
+        <p key={skill} role="alert" className="px-4 py-2 text-destructive text-xs">{skill}/{error.path}: {error.message}</p>
+      ))}
+      {[...workspaceState.uncertain].map(([skill, operation]) => (
+        <p key={skill} role="alert" className="px-4 py-2 text-destructive text-xs">Unconfirmed operation at {skill}/{operation.path}. Further file writes and folder creation for this skill are blocked in this workspace. Do not repeat it. Inspect the filesystem and reconcile the outcome before reopening the workspace; refreshing the catalog does not clear this warning. Keep or copy any unsaved draft.</p>
+      ))}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left file tree ── */}
         <div className="flex w-64 shrink-0 flex-col border-r">
           <div className="flex flex-col gap-2 border-b p-2">
-            <Button size="sm" variant="outline" className="w-full" onClick={() => setNewOpen(true)}>
+            <Button size="sm" variant="outline" className="w-full" disabled={RESTRICTED_SKILLS} onClick={() => setNewOpen(true)}>
               <PlusIcon className="size-3.5" />New skill
             </Button>
             <input
@@ -751,7 +789,7 @@ export default function SkillsPage() {
               size="sm"
               variant="outline"
               className="w-full"
-              disabled={uploading}
+              disabled={RESTRICTED_SKILLS || uploading}
               onClick={() => uploadRef.current?.click()}
               title="Upload a .zip archive containing SKILL.md"
             >
@@ -787,7 +825,7 @@ export default function SkillsPage() {
                         : <FolderIcon className="size-3.5 shrink-0 text-blue-500" />
                       }
                       <span className="min-w-0 flex-1 truncate font-semibold" title={s.name}>{s.name}</span>
-                      {s.calls > 0 && (
+                      {!RESTRICTED_SKILLS && s.calls > 0 && (
                         <span
                           className="shrink-0 rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground"
                           title={`${s.calls} calls · Last ${fmtTime(s.last_used)}`}
@@ -799,15 +837,15 @@ export default function SkillsPage() {
                         "absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded pl-1 group-hover:flex",
                         isSkillSelected ? "bg-accent" : "bg-muted",
                       )}>
-                        <Button size="icon" variant="ghost" className="size-5" title="New file"
+                        <Button size="icon" variant="ghost" className="size-5" title="Write empty file (may replace existing content)" disabled={workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
                           onClick={(e) => { e.stopPropagation(); startCreate(s.name, "", "file"); }}>
                           <FilePlusIcon className="size-3 text-muted-foreground" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-5" title="New folder"
+                        <Button size="icon" variant="ghost" className="size-5" title="New folder" disabled={workspaceState.pending.has(s.name) || workspaceState.uncertain.has(s.name)}
                           onClick={(e) => { e.stopPropagation(); startCreate(s.name, "", "dir"); }}>
                           <FolderPlusIcon className="size-3 text-muted-foreground" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="size-5" title="Delete skill"
+                        <Button size="icon" variant="ghost" className="size-5" title="Delete skill" disabled={RESTRICTED_SKILLS}
                           onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "skill", skill: s.name }); }}>
                           <Trash2Icon className="size-3 text-destructive" />
                         </Button>
@@ -826,8 +864,8 @@ export default function SkillsPage() {
                 );
               })}
 
-              {skills.length === 0 && (
-                <p className="p-3 text-xs text-muted-foreground">No skills yet. Click New to begin.</p>
+              {skills.length === 0 && !catalogLoading && !catalogError && (
+                <p className="p-3 text-muted-foreground text-xs">{RESTRICTED_SKILLS ? "No skills in the granted root." : "No skills yet. Click New to begin."}</p>
               )}
             </div>
           </ScrollArea>
@@ -835,7 +873,7 @@ export default function SkillsPage() {
 
         {/* ── Right panel ── */}
         <div className="flex flex-1 flex-col overflow-auto p-4">
-          {!selected && (
+          {!selected && !RESTRICTED_SKILLS && !catalogError && !catalogLoading && (
             <SkillsOverview
               skills={skills}
               missing={missing}
@@ -843,6 +881,7 @@ export default function SkillsPage() {
             />
           )}
 
+          {!selected && RESTRICTED_SKILLS && <p className="text-muted-foreground text-sm">Select a skill or file. Drafts are retained while this page stays mounted; save or copy them before leaving. Usage statistics are not available from this scoped filesystem workspace.</p>}
           {selected && selected.path === null && selectedSkill && (
             <div className="max-w-5xl space-y-5">
               <div>
@@ -863,7 +902,7 @@ export default function SkillsPage() {
               {/* Two columns: primary configuration (MCP/visibility) on the left, usage statistics on the right.
                   Below lg, flex-row-reverse falls back to a single column. Statistics come first in DOM order,
                   so narrow screens place them above configuration, preserving the previous order. */}
-              <div className="flex flex-col gap-6 lg:flex-row-reverse lg:items-start">
+              {!RESTRICTED_SKILLS && <div className="flex flex-col gap-6 lg:flex-row-reverse lg:items-start">
                 {/* ── Right: usage statistics ── */}
                 <div className="space-y-2 lg:w-80 lg:shrink-0">
                   <Label className="text-xs text-muted-foreground">Usage statistics</Label>
@@ -955,7 +994,7 @@ export default function SkillsPage() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </div>}
             </div>
           )}
 
@@ -965,17 +1004,20 @@ export default function SkillsPage() {
                 <span className="font-medium text-foreground">{selected.skill}</span>
                 <span>/</span>
                 <span className="font-mono">{selected.path}</span>
-                <Button size="sm" className="ml-auto" onClick={saveFile} disabled={!dirty || saving}>
+                <Button size="sm" className="ml-auto" onClick={saveFile} disabled={!fileDraft?.loaded || !fileDraft.dirty || saving || blocked}>
                   {saving ? "Saving…" : "Save"}
                 </Button>
               </div>
-              {fileLoading ? (
-                <p className="text-xs text-muted-foreground">Loading…</p>
-              ) : (
+              {fileDraft?.dirty && <p className="text-muted-foreground text-xs">Unsaved draft retained for this file until you leave this page.</p>}
+              {fileDraft?.error && (
+                <div role="alert" className="text-destructive text-sm">Read failed: {fileDraft.error} <Button variant="outline" onClick={() => setFileRetry((n) => n + 1)}>Retry read</Button></div>
+              )}
+              {!fileDraft?.error && fileLoading && <p className="text-muted-foreground text-xs">Loading…</p>}
+              {!fileDraft?.error && !fileLoading && (
                 <Textarea
                   className="flex-1 resize-none font-mono text-xs"
-                  value={fileContent}
-                  onChange={(e) => { setFileContent(e.target.value); setDirty(true); }}
+                  value={fileDraft?.content ?? ""}
+                  onChange={(e) => { if (selected.path !== null && selectionRef.current === selected) workspace.edit(selected.skill, selected.path, e.target.value); }}
                 />
               )}
             </div>

@@ -1,4 +1,5 @@
 import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
+import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillDirectory, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -76,7 +77,6 @@ import type {
   Settings,
   Severity,
   SkillCall,
-  SkillItem,
   SSProject,
   SSTask,
   Stats,
@@ -1147,7 +1147,7 @@ export const api = {
     }>("/sync/scopesentry/sync", body),
 
   // ---- skills (filesystem) ----
-  skills: () => get<{ skills: SkillItem[] }>("/skills").then((r) => arr(r.skills)),
+  skills: () => get<unknown>("/skills").then(confirmedSkillCatalog),
   createSkill: (s: {
     name: string;
     description: string;
@@ -1177,12 +1177,19 @@ export const api = {
     name: string,
     meta: { mcps?: string[]; description?: string; license?: string; compatibility?: string },
   ) => put<{ ok: boolean }>(`/skills/${name}/meta`, meta),
-  createSkillDir: (skill: string, path: string) => post<{ dir: string }>(`/skills/${skill}/dirs`, { path }),
+  createSkillDir: async (skill: string, path: string) => {
+    skillResourcePath(skill, path); // Validate canonical path before dispatch.
+    return confirmedSkillDirectory(await http<unknown>(`${skillResourcePath(skill)}/dirs`, {
+      method: "POST", body: JSON.stringify({ path }),
+    }, 201), path);
+  },
   skillFiles: (name: string) => get<{ files: string[] }>(`/skills/${name}/files`).then((r) => r.files),
   readSkillFile: (name: string, file: string) =>
-    get<{ content: string; file: string }>(`/skills/${name}/files/${file}`).then((r) => r.content),
-  writeSkillFile: (name: string, file: string, content: string) =>
-    put<{ ok: boolean }>(`/skills/${name}/files/${file}`, { content }),
+    get<unknown>(skillResourcePath(name, file)).then((r) => confirmedSkillContent(r, file)),
+  writeSkillFile: async (name: string, file: string, content: string) =>
+    confirmedSkillWrite(await http<unknown>(skillResourcePath(name, file), {
+      method: "PUT", body: JSON.stringify({ content }),
+    }, 200)),
   deleteSkillPath: (skill: string, path: string) => del<{ deleted: string }>(`/skills/${skill}/files/${path}`),
   skillUsage: (name: string, limit = 50) =>
     get<{ calls: SkillCall[] }>(`/skills/${name}/usage?limit=${limit}`).then((r) => arr(r.calls)),

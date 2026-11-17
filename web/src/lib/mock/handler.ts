@@ -2391,8 +2391,17 @@ function route(m: string, path: string, seg: string[], q: URLSearchParams, b: Re
   if (seg[0] === "skills" && seg[2] === "usage") return { calls: D.skillCalls };
   if (path === "/skills" && m === "POST") return { name: String(b.name ?? "new-skill") };
   if (seg[0] === "skills" && seg[2] === "files" && seg.length === 3) return { files: ["SKILL.md"] };
-  if (seg[0] === "skills" && seg[2] === "files" && seg.length >= 4)
-    return { content: "# SKILL.md\n\n(demo) Example documentation for this skill.", file: seg.slice(3).join("/") };
+  // Match the real synchronous receipts while retaining fixture-only demo
+  // behavior: these acknowledgements do not persist to a real filesystem.
+  if (seg[0] === "skills" && seg[2] === "dirs" && seg.length === 3 && m === "POST")
+    return { dir: String(b.path ?? "") };
+  if (seg[0] === "skills" && seg[2] === "files" && seg.length >= 4) {
+    if (m === "PUT") return { ok: true };
+    if (m === "GET") return {
+      content: "# SKILL.md\n\n(demo) Example documentation for this skill.",
+      file: seg.slice(3).map((part) => decodeURIComponent(part)).join("/"),
+    };
+  }
 
   // ── visibility ──
   if (seg[0] === "visibility" && m === "GET") return { agents: [] };

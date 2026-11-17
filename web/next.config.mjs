@@ -1,3 +1,4 @@
+import { previewBackend, previewEnvironment } from "./dev/python-preview-profile.mjs";
 import { fileURLToPath } from "node:url";
 
 // Static export: NEXT_EXPORT=1 next build generates web/out for direct hosting
@@ -6,11 +7,19 @@ const isExport = process.env.NEXT_EXPORT === "1";
 // Vercel demo: use mocks throughout, with no backend or API proxy.
 const isMock = process.env.NEXT_PUBLIC_MOCK === "1";
 
+// Separate, explicitly prebuilt Python preview. Default dev/build/export behavior is unchanged.
+const isPythonPreview = process.env.ARTEX_PYTHON_PREVIEW === "1";
+if (isPythonPreview) {
+  if (isExport || isMock) throw new Error("Non-export, non-mock Python preview build required");
+  previewBackend(process.env.AUTOPENTEST_API);
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Prevent parent lockfiles from affecting root inference and asset paths.
   turbopack: { root: fileURLToPath(new URL(".", import.meta.url)) },
   reactCompiler: true,
+  ...(isPythonPreview ? { env: previewEnvironment } : {}),
   // Allow LAN IP access to development assets/HMR; adjust as needed.
   // During development, allow any IPv4 origin for /_next/* and HMR, including changing LAN IPs.
   // Next forbids bare wildcard origins; segmented *.*.*.* matches any IPv4 address.
