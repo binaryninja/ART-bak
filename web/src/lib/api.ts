@@ -1,5 +1,5 @@
 import { ApiError, confirmedTaskControl, isPythonProfile, ruleVersionHeaders, toolsVersionHeaders } from "./mutation-contract.mjs";
-import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDirectory, confirmedSkillWorkspaceProfile, confirmedSkillWrite, skillResourcePath } from "./skill-workspace.mjs";
+import { confirmedSkillCatalog, confirmedSkillContent, confirmedSkillCreation, confirmedSkillDeletion, confirmedSkillDirectory, confirmedSkillWorkspaceProfile, confirmedSkillWrite, skillDeletionPath, skillResourcePath } from "./skill-workspace.mjs";
 // Real backend client. /api/* is proxied to the Go backend (next.config rewrites).
 // Returns the domain types in lib/types.ts. Shapes match the backend handlers;
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
@@ -1196,7 +1196,8 @@ export const api = {
     confirmedSkillWrite(await http<unknown>(skillResourcePath(name, file), {
       method: "PUT", body: JSON.stringify({ content }),
     }, 200)),
-  deleteSkillPath: (skill: string, path: string) => del<{ deleted: string }>(`/skills/${skill}/files/${path}`),
+  deleteSkillPath: async (skill: string, path: string) =>
+    confirmedSkillDeletion(await http<unknown>(skillDeletionPath(skill, path), { method: "DELETE" }, 200), path),
   skillUsage: (name: string, limit = 50) =>
     get<{ calls: SkillCall[] }>(`/skills/${name}/usage?limit=${limit}`).then((r) => arr(r.calls)),
   missingSkills: (limit = 20) =>

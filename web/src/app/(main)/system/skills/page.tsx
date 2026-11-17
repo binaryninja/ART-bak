@@ -337,13 +337,13 @@ export default function SkillsPage() {
   const workspaceState = React.useSyncExternalStore(workspace.subscribe, workspace.getSnapshot, workspace.getSnapshot);
   const fileDraft = selected?.path != null
     ? workspaceState.drafts.get(skillFileKey(selected.skill, selected.path)) : undefined;
-  const fileLoading = !fileDraft?.loaded && !fileDraft?.error;
+  const fileLoading = !fileDraft?.loaded && !fileDraft?.error && !fileDraft?.deleted;
   const saving = !!selected && workspaceState.pending.has(selected.skill);
-  const rootWriteBlocked = !workspaceState.writeModeEnabled || !!workspaceState.rootPending || !!workspaceState.rootUncertain;
+  const rootWriteBlocked = !workspaceState.writeModeEnabled || !!workspaceState.rootPending || !!workspaceState.rootUncertain || !!workspaceState.deletionPending || !!workspaceState.deletionUncertain;
   const blocked = rootWriteBlocked || (!!selected && workspaceState.uncertain.has(selected.skill));
   function rootWritesSuspended() {
     const state = workspace.getSnapshot();
-    return !state.writeModeEnabled || !!state.rootPending || !!state.rootUncertain;
+    return !state.writeModeEnabled || !!state.rootPending || !!state.rootUncertain || !!state.deletionPending || !!state.deletionUncertain;
   }
   const [fileRetry, setFileRetry] = React.useState(0);
   const profileCleanup = React.useRef<(() => void) | null>(null);
@@ -392,8 +392,28 @@ export default function SkillsPage() {
   const [detailMcps, setDetailMcps] = React.useState<string[]>([]);
 
   // delete confirmation
-  const [pendingDelete, setPendingDelete] = React.useState<PendingDelete>(null);
+  const [pendingDelete, setPendingDeleteState] = React.useState<PendingDelete>(null);
+  const pendingDeleteRef = React.useRef<PendingDelete>(null);
+  const deleteRequest = React.useRef<object | null>(null);
+  const deleteAlive = React.useRef(false);
   const [deleting, setDeleting] = React.useState(false);
+  React.useLayoutEffect(() => {
+    deleteAlive.current = true;
+    setDeleting(deleteRequest.current !== null);
+    return () => { deleteAlive.current = false; };
+  }, []);
+  function setPendingDelete(next: PendingDelete) {
+    if (!deleteAlive.current) return;
+    pendingDeleteRef.current = next;
+    setPendingDeleteState(next);
+  }
+  function pathDeletionBlocked(skill: string, path: string) {
+    const state = workspace.getSnapshot();
+    return !state.deleteModeEnabled || !!state.rootPending || !!state.rootUncertain ||
+      !!state.deletionUncertain || state.pending.size > 0 || state.uncertain.size > 0 ||
+      (RESTRICTED_SKILLS && /^skill\.md$/iu.test(path)) ||
+      [...state.deletedPaths.values()].some((item) => item.skill === skill && (path === item.path || path.startsWith(`${item.path}/`)));
+  }
 
   // Usage counts and last-used times arrive with api.skills(); selecting a skill fetches its
   // recent call details. missing contains requested skills absent from the library.
@@ -520,7 +540,7 @@ export default function SkillsPage() {
   const newEntryRef = React.useRef("");
   function startCreate(skill: string, inDir: string, kind: "file" | "dir") {
     const state = workspace.getSnapshot();
-    if (!state.writeModeEnabled || state.rootPending || state.rootUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
+    if (!state.writeModeEnabled || state.rootPending || state.rootUncertain || state.deletionPending || state.deletionUncertain || state.pending.has(skill) || state.uncertain.has(skill)) return;
     cancelRef.current = false;
     ensureExpanded(skill, inDir);
     const next = { skill, inDir, kind };
@@ -562,15 +582,8 @@ export default function SkillsPage() {
   }
 
   async function deletePath(skill: string, path: string) {
-    if (rootWritesSuspended()) return;
-    try {
-      await api.deleteSkillPath(skill, path);
-      toast.success(`Deleted: ${path}`);
-      if (selected?.skill === skill && selected.path === path) setSelected(null);
-      load();
-    } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
-    }
+    if (rootWritesSuspended() || pathDeletionBlocked(skill, path)) return false;
+    return workspace.remove(skill, path);
   }
 
   async function deleteSkill(name: string) {
@@ -586,15 +599,30 @@ export default function SkillsPage() {
   }
 
   async function runPendingDelete() {
-    const p = pendingDelete;
-    if (!p) return;
+    const p = pendingDeleteRef.current;
+    if (!p || p !== pendingDelete || !deleteAlive.current || deleteRequest.current) return;
+    if (p.kind === "skill" ? RESTRICTED_SKILLS || rootWritesSuspended() : pathDeletionBlocked(p.skill, p.path)) return;
+    const owner = {};
+    deleteRequest.current = owner;
     setDeleting(true);
     try {
-      if (p.kind === "skill") await deleteSkill(p.skill);
-      else await deletePath(p.skill, p.path);
+      if (p.kind === "skill") {
+        // Existing Go-only whole-skill workflow is not enabled for Python.
+        await deleteSkill(p.skill);
+      } else {
+        const ok = await deletePath(p.skill, p.path);
+        if (!ok || !deleteAlive.current || deleteRequest.current !== owner) return;
+        toast.success(`Deleted: ${p.skill}/${p.path}. Any cached local text is retained; this is not recoverable host storage.`);
+        // Never clear selection: the user may have navigated, or edited while
+        // the delete was pending. Deleted drafts stay visible and cannot Save.
+        load();
+      }
+      if (deleteAlive.current && pendingDeleteRef.current === p) setPendingDelete(null);
     } finally {
-      setDeleting(false);
-      setPendingDelete(null);
+      if (deleteRequest.current === owner) {
+        deleteRequest.current = null;
+        if (deleteAlive.current) setDeleting(false);
+      }
     }
   }
 
@@ -638,7 +666,7 @@ export default function SkillsPage() {
   async function createNewSkill() {
     const state = workspace.getSnapshot();
     if (!alive.current || !newDialog.current.open || newRequest.current || !state.writeModeEnabled || state.rootPending
-      || state.rootUncertain || state.pending.size || state.uncertain.size) return;
+      || state.rootUncertain || state.deletionUncertain || state.pending.size || state.uncertain.size) return;
     const draft = newDraftRef.current;
     const name = draft.name.trim();
     if (!validSkillCreationName(name)) {
@@ -745,7 +773,7 @@ export default function SkillsPage() {
                   onClick={(e) => { e.stopPropagation(); startCreate(skill, node.path, "dir"); }}>
                   <FolderPlusIcon className="size-3 text-muted-foreground" />
                 </Button>
-                <Button size="icon" variant="ghost" className="size-5" title="Delete folder" disabled={RESTRICTED_SKILLS || rootWriteBlocked}
+                <Button size="icon" variant="ghost" className="size-5" title={RESTRICTED_SKILLS ? "Delete empty folder" : "Delete folder"} disabled={pathDeletionBlocked(skill, node.path)}
                   onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "dir", skill, path: node.path }); }}>
                   <Trash2Icon className="size-3 text-destructive" />
                 </Button>
@@ -781,7 +809,7 @@ export default function SkillsPage() {
             isSelected ? "bg-accent" : "bg-muted",
           )}>
             <Button size="icon" variant="ghost" className="size-5"
-              title="Delete file" disabled={RESTRICTED_SKILLS || rootWriteBlocked}
+              title="Delete file" disabled={pathDeletionBlocked(skill, node.path)}
               onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: "file", skill, path: node.path }); }}>
               <Trash2Icon className="size-3 text-destructive" />
             </Button>
@@ -790,6 +818,14 @@ export default function SkillsPage() {
       );
     });
   }
+
+  const dialogDeleteError = pendingDelete && pendingDelete.kind !== "skill"
+    && workspaceState.errors.get(pendingDelete.skill)?.path === pendingDelete.path
+    ? workspaceState.errors.get(pendingDelete.skill)?.message : null;
+  const dialogDeleteUncertain = workspaceState.deletionUncertain;
+  const folderDeleteDescription = RESTRICTED_SKILLS
+    ? "Only an empty folder can be deleted. A nonempty folder is refused, not recursively removed. This permanent deletion cannot be undone."
+    : "All files in this folder will also be deleted. This cannot be undone.";
 
   const selectedSkill = selected
     ? skills.find((s) => s.name === selected.skill) ?? null
@@ -828,7 +864,7 @@ export default function SkillsPage() {
           </Popover>
         )}
       </div>
-      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">{MOCK ? "Fixture-only Skills demo; no real filesystem host is contacted." : "Browse the host-granted skills root and retain local drafts. Saving files, creating skills and creating folders require a confirmed write-enabled host mode; the host still authorizes every request."} ZIP import, deletion, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
+      {RESTRICTED_SKILLS && <p className="border-b px-4 py-2 text-muted-foreground text-xs">{MOCK ? "Fixture-only Skills demo; no real filesystem host is contacted. Deletion acknowledgements are simulated without host-mode discovery." : "Browse the host-granted skills root and retain local drafts. Saving files, creating skills and creating folders require a confirmed write-enabled host mode; the host still authorizes every request. Deletion needs a separate confirmed host option and supports only individual files or empty folders; required SKILL.md cannot be deleted."} Whole-skill deletion, ZIP import, MCP, visibility and usage are unavailable here. A file write replaces existing content; it is not create-only.</p>}
       <div className="flex items-center gap-2 border-b px-4 py-2 text-xs">
         <Button size="sm" variant="outline" onClick={load} disabled={catalogLoading}>Refresh catalog</Button>
         {catalogLoading && <span role="status">Loading catalog…</span>}
@@ -841,8 +877,11 @@ export default function SkillsPage() {
           {workspaceState.profile.status === "unchecked" && <span role="status">Skills host mode has not been confirmed; writes are disabled.</span>}
           {workspaceState.profile.status === "error" && <span role="alert">Host mode unavailable: {workspaceState.profile.error} Writes remain disabled. Local drafts remain available; browsing still depends on host access.</span>}
           {workspaceState.profile.status === "ready" && <span>{workspaceState.profile.writesEnabled ? "Host configured for writes; each request is still checked. Mode refresh cannot clear unconfirmed operations." : "Read-only Skills host. Browsing and local drafts are available; saving and creation are disabled."}</span>}
+          {workspaceState.profile.status === "ready" && <span>{workspaceState.deleteModeEnabled ? "Host separately configured for deletion; every request is still checked." : "File and folder deletion disabled; write mode alone does not enable it."}</span>}
         </div>
       )}
+      {workspaceState.deletionPending && <p role="status" className="px-4 py-2 text-xs">Deletion in progress; all new workspace mutations are waiting. Local drafts remain editable.</p>}
+      {workspaceState.deletionUncertain && <p role="alert" className="px-4 py-2 text-destructive text-xs">Deletion at {workspaceState.deletionUncertain.skill}/{workspaceState.deletionUncertain.path} is unconfirmed. All workspace mutations are suspended. Do not repeat deletion. Refreshing host mode or the catalog does not unlock writes; keep local drafts and reconcile the filesystem before reopening.</p>}
       {workspaceState.rootPending && <p role="status" className="px-4 py-2 text-muted-foreground text-xs">Creating {workspaceState.rootPending.name}; other workspace writes are waiting.</p>}
       {workspaceState.rootUncertain && (
         <p role="alert" className="px-4 py-2 text-destructive text-xs">Creation of {workspaceState.rootUncertain.name} is unconfirmed. All writes in this Skills workspace are suspended. Do not repeat creation or switch names to retry. Inspect and reconcile the filesystem before reopening the workspace; catalog refresh does not unlock writes. Keep or copy unsaved drafts.</p>
@@ -1091,10 +1130,11 @@ export default function SkillsPage() {
                 <span className="font-medium text-foreground">{selected.skill}</span>
                 <span>/</span>
                 <span className="font-mono">{selected.path}</span>
-                <Button size="sm" className="ml-auto" onClick={saveFile} disabled={!fileDraft?.loaded || !fileDraft.dirty || saving || blocked}>
+                <Button size="sm" className="ml-auto" onClick={saveFile} disabled={!fileDraft?.loaded || !fileDraft.dirty || fileDraft.deleted || saving || blocked}>
                   {saving ? "Saving…" : "Save"}
                 </Button>
               </div>
+              {fileDraft?.deleted && <p role="status" className="text-destructive text-xs">This path was deleted on the host. Cached text is retained only in this page; copy anything needed before leaving. Save and recreation are disabled until you reconcile and reopen the workspace.</p>}
               {fileDraft?.dirty && <p className="text-muted-foreground text-xs">Unsaved draft retained for this file until you leave this page.</p>}
               {fileDraft?.error && (
                 <div role="alert" className="text-destructive text-sm">Read failed: {fileDraft.error} <Button variant="outline" onClick={() => setFileRetry((n) => n + 1)}>Retry read</Button></div>
@@ -1118,21 +1158,23 @@ export default function SkillsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {pendingDelete?.kind === "skill" && `Delete skill“${pendingDelete.skill}”?`}
-              {pendingDelete?.kind === "dir" && `Delete folder“${pendingDelete.path}”?`}
-              {pendingDelete?.kind === "file" && `Delete file“${pendingDelete.path}”?`}
+              {pendingDelete?.kind === "dir" && `Delete folder “${pendingDelete.skill}/${pendingDelete.path}”?`}
+              {pendingDelete?.kind === "file" && `Delete file “${pendingDelete.skill}/${pendingDelete.path}”?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete?.kind === "skill"
                 ? "All skill files, MCP links and visibility settings will be deleted. This cannot be undone."
                 : pendingDelete?.kind === "dir"
-                  ? "All files in this folder will also be deleted. This cannot be undone."
-                  : "This cannot be undone."}
+                  ? folderDeleteDescription
+                  : "This permanently deletes the named file. This cannot be undone. Unsaved local drafts block deletion; cached text is not a backup."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {dialogDeleteError && <p role="alert" className="text-destructive text-sm">{pendingDelete?.skill}/{pendingDelete && pendingDelete.kind !== "skill" ? pendingDelete.path : ""}: {dialogDeleteError}</p>}
+          {dialogDeleteUncertain && <p role="alert" className="text-destructive text-sm">The earlier deletion of {dialogDeleteUncertain.skill}/{dialogDeleteUncertain.path} is unconfirmed. All workspace mutations are suspended, including this dialog's target. Do not retry; keep local drafts and reconcile the filesystem first.</p>}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={deleting || rootWriteBlocked}
+              disabled={deleting || !pendingDelete || (pendingDelete.kind === "skill" ? RESTRICTED_SKILLS || rootWriteBlocked : pathDeletionBlocked(pendingDelete.skill, pendingDelete.path))}
               onClick={(e) => { e.preventDefault(); void runPendingDelete(); }}
             >
               {deleting ? "Deleting…" : "Delete"}

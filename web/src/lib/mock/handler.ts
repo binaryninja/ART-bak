@@ -2397,6 +2397,7 @@ function route(m: string, path: string, seg: string[], q: URLSearchParams, b: Re
     return { dir: String(b.path ?? "") };
   if (seg[0] === "skills" && seg[2] === "files" && seg.length >= 4) {
     if (m === "PUT") return { ok: true };
+    if (m === "DELETE") return { deleted: seg.slice(3).map((part) => decodeURIComponent(part)).join("/") };
     if (m === "GET") return {
       content: "# SKILL.md\n\n(demo) Example documentation for this skill.",
       file: seg.slice(3).map((part) => decodeURIComponent(part)).join("/"),

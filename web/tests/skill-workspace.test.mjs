@@ -500,7 +500,7 @@ test("page wires keyed external snapshot, cleanup reads, current-selection save/
   assert.match(view, /if \(!RESTRICTED_SKILLS\) \{\s+api.agents/);
   assert.match(view, /if \(RESTRICTED_SKILLS \|\| !selected/);
   assert.match(view, /!RESTRICTED_SKILLS && <div className="flex flex-col gap-6/);
-  assert.match(view, /title="Delete file" disabled=\{RESTRICTED_SKILLS \|\| rootWriteBlocked\}/);
+  assert.match(view, /title="Delete file" disabled=\{pathDeletionBlocked\(skill, node.path\)\}/);
   assert.match(view, /Previously loaded entries may be stale/);
   assert.match(view, /refreshing the catalog does not clear this warning/);
 });

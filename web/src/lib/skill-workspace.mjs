@@ -33,6 +33,12 @@ export function skillResourcePath(skill, path) {
     throw new Error("Use a canonical relative file path");
   return `${root}/files/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
+// Unlike the general helper, a deletion target can never omit its file path:
+// DELETE on the optional root route would be a different whole-skill action.
+export function skillDeletionPath(skill, path) {
+  if (typeof path !== "string" || !path) throw new Error("Deletion requires a nonempty relative file path");
+  return skillResourcePath(skill, path);
+}
 function object(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -44,13 +50,20 @@ function confirmed(value) {
 export function confirmedSkillWorkspaceProfile(value) {
   if (
     !object(value) ||
-    Object.keys(value).length !== 2 ||
+    ![2, 3].includes(Object.keys(value).length) ||
+    Object.keys(value).some((key) => !["profile", "writes_enabled", "deletes_enabled"].includes(key)) ||
     value.profile !== "skills-workspace" ||
-    typeof value.writes_enabled !== "boolean"
+    typeof value.writes_enabled !== "boolean" ||
+    ("deletes_enabled" in value && typeof value.deletes_enabled !== "boolean") ||
+    (value.deletes_enabled === true && value.writes_enabled !== true)
   ) {
     throw new Error("Skills host mode response is unavailable or incompatible. Writes remain disabled.");
   }
-  return { profile: "skills-workspace", writes_enabled: value.writes_enabled };
+  return {
+    profile: "skills-workspace",
+    writes_enabled: value.writes_enabled,
+    ...("deletes_enabled" in value ? { deletes_enabled: value.deletes_enabled } : {}),
+  };
 }
 export function validSkillCreationName(name) {
   if (typeof name !== "string") return false;
@@ -93,6 +106,28 @@ export function confirmedSkillDirectory(value, path) {
     );
   return { dir: path };
 }
+export function confirmedSkillDeletion(value, path) {
+  let canonical = false;
+  try {
+    skillDeletionPath("receipt", path);
+    canonical = true;
+  } catch {
+    /* Missing or invalid request identity cannot acknowledge deletion. */
+  }
+  if (
+    !canonical ||
+    !confirmed(value) ||
+    Object.keys(value).length !== 1 ||
+    !Object.hasOwn(value, "deleted") ||
+    value.deleted !== path
+  )
+    throw new ApiError(
+      200,
+      { unknown: true, retry: false },
+      "Deletion is unconfirmed. Do not repeat it; inspect the workspace before further mutations.",
+    );
+  return { deleted: path };
+}
 export function confirmedSkillContent(value, path) {
   if (!object(value) || value.file !== path || typeof value.content !== "string")
     throw new Error("File response did not match the requested path");
@@ -128,12 +163,22 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
     reads = new Map(),
     pending = new Map(),
     uncertain = new Map(),
-    errors = new Map();
+    errors = new Map(),
+    deletedPaths = new Map();
   const listeners = new Set();
   let snapshot;
-  let profile = requireProfile ? { status: "unchecked", writesEnabled: false, error: null } : null;
+  let profile = requireProfile
+    ? { status: "unchecked", writesEnabled: false, deletesEnabled: false, error: null }
+    : null;
   let profileRequest = null;
   const writeModeEnabled = () => profile === null || (profile.status === "ready" && profile.writesEnabled);
+  const deleteModeEnabled = () =>
+    profile === null || (profile.status === "ready" && profile.writesEnabled && profile.deletesEnabled);
+  let deletionUncertain = null;
+  const deletionPending = () => [...pending.values()].find((item) => item.kind === "delete") ?? null;
+  const within = (path, parent) => path === parent || path.startsWith(`${parent}/`);
+  const wasDeleted = (skill, path) =>
+    [...deletedPaths.values()].some((item) => item.skill === skill && within(path, item.path));
   let rootPending = null,
     rootUncertain = null,
     rootError = null;
@@ -148,6 +193,10 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       rootError,
       profile,
       writeModeEnabled: writeModeEnabled(),
+      deleteModeEnabled: deleteModeEnabled(),
+      deletionUncertain,
+      deletionPending: deletionPending(),
+      deletedPaths: new Map(deletedPaths),
     };
     for (const listener of listeners) listener();
   }
@@ -161,6 +210,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
         loaded: false,
         loading: false,
         dirty: false,
+        deleted: wasDeleted(skill, path),
         error: null,
       });
     return drafts.get(key);
@@ -185,7 +235,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       profileRequest?.abort();
       const owner = new AbortController();
       profileRequest = owner;
-      profile = { status: "loading", writesEnabled: false, error: null };
+      profile = { status: "loading", writesEnabled: false, deletesEnabled: false, error: null };
       publish();
       const current = () => profileRequest === owner;
       Promise.resolve()
@@ -193,10 +243,16 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
         .then((value) => {
           if (!current()) return;
           const receipt = confirmedSkillWorkspaceProfile(value);
-          profile = { status: "ready", writesEnabled: receipt.writes_enabled, error: null };
+          profile = {
+            status: "ready",
+            writesEnabled: receipt.writes_enabled,
+            deletesEnabled: receipt.deletes_enabled === true,
+            error: null,
+          };
         })
         .catch((error) => {
-          if (current()) profile = { status: "error", writesEnabled: false, error: errorText(error) };
+          if (current())
+            profile = { status: "error", writesEnabled: false, deletesEnabled: false, error: errorText(error) };
         })
         .finally(() => {
           if (!current()) return;
@@ -207,7 +263,7 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
         if (!current()) return;
         profileRequest = null;
         owner.abort();
-        profile = { status: "unchecked", writesEnabled: false, error: null };
+        profile = { status: "unchecked", writesEnabled: false, deletesEnabled: false, error: null };
         publish();
       };
     },
@@ -216,6 +272,15 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
     read(skill, path) {
       const key = skillFileKey(skill, path),
         entry = draft(skill, path);
+      if (entry.deleted) {
+        // A stale catalog can select a removed path with no prior cached draft.
+        // Publish its tombstone instead of leaving the page in a loading state.
+        replace(key, { loaded: true, loading: false });
+        publish();
+        return () => {
+          /* Deleted paths never acquire another read owner. */
+        };
+      }
       if (entry.loaded)
         return () => {
           /* No read owner exists for a cached draft. */
@@ -260,7 +325,8 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
       // Top-level creation shares a synchronous fence with file/folder writes.
       // An unknown root mutation suspends writes across every skill, not only
       // the requested name. Reads, draft edits and catalog refresh stay usable.
-      if (!writeModeEnabled() || rootPending || rootUncertain || pending.size || uncertain.size) return null;
+      if (!writeModeEnabled() || rootPending || rootUncertain || deletionUncertain || pending.size || uncertain.size)
+        return null;
       if (!validSkillCreationName(input?.name) || typeof input?.description !== "string" || !input.description.trim()) {
         rootError = {
           name: typeof input?.name === "string" ? input.name : "",
@@ -287,6 +353,56 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
         publish();
       }
     },
+    async remove(skill, path) {
+      // Mode is only a hint. The host independently checks its explicit deletion
+      // authority. Legacy mode replies never enable this destructive operation.
+      if (!deleteModeEnabled() || rootPending || rootUncertain || deletionUncertain || pending.size || uncertain.size)
+        return false;
+      try {
+        skillDeletionPath(skill, path);
+        if (requireProfile && /^skill\.md$/iu.test(path))
+          throw new Error("The skill's required SKILL.md cannot be deleted here.");
+        if (wasDeleted(skill, path))
+          throw new Error("This path was already deleted. Reconcile before another mutation.");
+        for (const [key, entry] of drafts) {
+          const [draftSkill, draftPath] = JSON.parse(key);
+          if (draftSkill === skill && within(draftPath, path) && entry.dirty)
+            throw new Error(
+              "This path contains an unsaved draft. Save it or keep editing; deletion is blocked while the draft is unsaved.",
+            );
+        }
+      } catch (error) {
+        errors.set(skill, { path, message: errorText(error) });
+        publish();
+        return false;
+      }
+      const token = { path, kind: "delete" };
+      pending.set(skill, token);
+      errors.delete(skill);
+      publish();
+      try {
+        confirmedSkillDeletion(await api.deleteSkillPath(skill, path), path);
+        deletedPaths.set(skillFileKey(skill, path), { skill, path });
+        // Preserve all cached text, including edits made after dispatch. Retire
+        // late reads and mark removed paths so Save cannot silently recreate them.
+        for (const [key] of drafts) {
+          const [draftSkill, draftPath] = JSON.parse(key);
+          if (draftSkill === skill && within(draftPath, path)) {
+            reads.delete(key);
+            replace(key, { deleted: true, loaded: true, loading: false, error: null });
+          }
+        }
+        return true;
+      } catch (error) {
+        errors.set(skill, { path, message: errorText(error) });
+        if (mutationMustWait(error) || (error instanceof ApiError && error.status >= 500))
+          deletionUncertain = { skill, ...token, message: errorText(error) };
+        return false;
+      } finally {
+        if (pending.get(skill) === token) pending.delete(skill);
+        publish();
+      }
+    },
     async save(skill, path) {
       const entry = drafts.get(skillFileKey(skill, path));
       if (!entry?.loaded || !entry.dirty) return false;
@@ -304,9 +420,20 @@ export function createSkillWorkspace(api, { requireProfile = false } = {}) {
     },
   };
   async function mutate(skill, path, kind, content) {
-    if (!writeModeEnabled() || rootPending || rootUncertain || pending.has(skill) || uncertain.has(skill)) return false;
+    if (
+      !writeModeEnabled() ||
+      rootPending ||
+      rootUncertain ||
+      deletionUncertain ||
+      deletionPending() ||
+      pending.has(skill) ||
+      uncertain.has(skill)
+    )
+      return false;
     try {
       skillResourcePath(skill, path);
+      if (wasDeleted(skill, path))
+        throw new Error("This path was deleted. Copy retained text and reconcile before recreating it.");
     } catch (error) {
       errors.set(skill, { path, message: errorText(error) });
       publish();

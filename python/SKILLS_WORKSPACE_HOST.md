@@ -40,6 +40,26 @@ through `/dirs` are idempotent; parent directories must exist. Existing file and
 directory service limits and filesystem restrictions remain unchanged. The host caps content reads
 at 256 KiB and uses the existing bounded request/body/connection transport.
 
+Permanent removal requires the **separate** `--enable-deletes` flag as well as
+`--enable-writes`. Write access alone does not grant deletion. This opt-in permits
+only a selected regular single-link file or empty subdirectory through
+`DELETE /api/skills/{name}/files/{path}`. It cannot remove a skill root, the
+mandatory top-level `SKILL.md` (including case-folded aliases), nonempty
+directories, symlinks, hard links or special files. There is no recursive delete,
+trash, automatic backup, restore or rollback. Confirm the exact skill/path and
+permanent-removal consequence for each operator action; an automation must not
+treat the host flag as the user's action-time confirmation.
+
+A confirmed removal returns exactly `200 {"deleted":"the-relative-path"}`.
+Missing paths return 404 rather than an invented idempotent success; nonempty
+folders conflict with 409 without recursively removing any contents. A current
+in-request target fingerprint and fresh parent/root checks detect observed drift,
+but this is not a stale-browser compare-and-delete or a fence against unrelated
+writers. The exclusive-owner requirement still applies. If removal, durability,
+authorization or acknowledgement becomes uncertain, keep the observed filesystem
+state and reconcile manually; never repeat the deletion automatically. Retained
+editor drafts are not a verified backup or restoration mechanism.
+
 `POST /api/skills` is enabled only through this host's explicit write grant. It
 requires `name` and a nonblank `description`; optional `license`, `compatibility`
 and `instructions` are inert text. It does not accept MCP or visibility settings
@@ -62,7 +82,10 @@ passwords, hashes, signing keys, tokens, request paths or query parameters.
 Only this explicit Skills host mounts authenticated `GET /api/skills-workspace`.
 The exact successful JSON is `{"profile":"skills-workspace","writes_enabled":false}`
 by default, or the same shape with `true` when the operator supplied
-`--enable-writes`. `HEAD` supplies the representation length without a body.
+`--enable-writes`. The default response remains exactly those two fields. Only
+an explicit delete-enabled host adds `"deletes_enabled":true`; absence never
+implies deletion permission. Older strict two-field clients may fail closed on
+that opt-in extended response. `HEAD` supplies the representation length without a body.
 Successful responses carry `Cache-Control: no-store`; queries and request bodies
 are rejected with 400, and other authenticated methods with 405. An ordinary
 application without this host does not acquire the route.
@@ -90,7 +113,7 @@ No frontend dependency installation or real browser acceptance is implied.
 One `RuntimeLease` uses `.artex-skills.lock` in the owned root. Never unlink this
 file. Its descriptor and guarded owner permit are retained until verified clean
 shutdown. This root-level regular file is not a skill and its contents are not
-reachable through a valid skill route. The shared RLock covers all six service
+reachable through a valid skill route. The shared RLock covers all seven service
 guards; original request tokens are required for their permissions. The lock and
 lease coordinate this host and cooperating launchers only, not arbitrary writers
 or a distributed/restart authority.
@@ -105,8 +128,8 @@ mutation iterable closed after dispatch is conservatively uncertain.
 
 A mutation 500, exceptional response/disclosure/close, or uncertain thread launch
 cannot be called clean. Unknown mutation seals all new work and retains the lease.
-The exact top-level `POST /api/skills` is included in this accounting, not just
-file/directory routes beneath `/api/skills/`. Safe pre-effect refusals such as
+The exact top-level `POST /api/skills` and `DELETE` beneath `/api/skills/` are
+included in this accounting, not just file/directory writes. Safe pre-effect refusals such as
 401, 403 or an existing-entry 409 do not themselves quarantine the workspace.
 After an unresolved shutdown the CLI stays alive, holding the exact host and
 signal scope; it does not automatically retry, reconcile, release or restart.
@@ -130,7 +153,12 @@ read/write/HEAD, upsert/idempotent mkdir, symlink refusal, hostile Host/Origin a
 duplicate Host, actual post-rename fsync uncertainty and held lease, root revocation,
 request-tail/in-flight drain, interrupted launch, real signal restoration faults,
 and a child CLI that authenticates/writes then drains on SIGTERM without secret
-output. Fault probes distinguish in-process injections from actual HTTP behavior.
+output. Separate deletion tests cover write-only refusal, opt-in file/empty-folder
+removal and exact receipts, preserved manifests/nonempty directories/links,
+actual post-unlink fsync failure and client disconnect with retained ownership,
+plus explicit delete-enabled child CLI shutdown and lease reacquisition. These
+fixtures contain only temporary synthetic data. Fault probes distinguish
+in-process injections from actual HTTP behavior.
 Lowercase HTTP PUT currently refuses 405 in the original write overlay; normalized
 host quarantine accounting is additionally tested with a synthetic lowercase 500.
 

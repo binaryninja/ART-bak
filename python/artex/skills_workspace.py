@@ -37,6 +37,7 @@ from .server.skill_catalog_read import SkillCatalogReadService
 from .server.skill_content_write import SkillContentWriteService, MAX_JSON_BYTES
 from .server.skill_directory_create import SkillDirectoryCreateService
 from .server.skill_create import SkillCreateService
+from .server.skill_path_delete import SkillPathDeleteService
 from .server.skills_workspace_setup import bind_skills_workspace
 
 
@@ -66,10 +67,13 @@ class WorkspaceConfig:
     enable_writes: bool = False
     port: int = 8787
     frontend_origin: str | None = None
+    enable_deletes: bool = False
 
     def validate(self):
         if self.exclusive_owner is not True or type(self.enable_writes) is not bool:
             raise ValueError('Explicit exclusive root ownership required')
+        if type(self.enable_deletes) is not bool or (self.enable_deletes and not self.enable_writes):
+            raise ValueError('Explicit deletion authority requires write authority too')
         _root_identity(self.root)
         _canonical(self.password_file)
         if os.path.commonpath((self.root, self.password_file)) == self.root:
@@ -150,7 +154,7 @@ class SkillsWorkspaceHost:
         try:
             self._permit = self._lease.claim(self, guarded=True)
             self._scope = SkillDirectoryScope(config.root, *self._identity, secrets.token_hex(16))
-            guard = self._guard  # Exact same callable object across all six services.
+            guard = self._guard  # Exact same callable object across all seven services.
             current = self._allowed
             source = SkillFileReader(self._scope, authorize=current, current=current, lifecycle_guard=guard, max_bytes=262144)
             listing = SkillFileListingReader(self._scope, authorize=current, current=current, lifecycle_guard=guard)
@@ -169,9 +173,12 @@ class SkillsWorkspaceHost:
                     mutation_authorize=self._write_allowed, current=current, writer_guard=guard),
                 create_service=SkillCreateService(self._scope, authorize=self._write_allowed,
                     mutation_authorize=self._write_allowed, current=current, writer_guard=guard),
+                delete_service=SkillPathDeleteService(self._scope, authorize=self._delete_allowed,
+                    mutation_authorize=self._write_allowed, delete_authorize=self._delete_allowed,
+                    current=current, writer_guard=guard),
                 authorize_catalog=current, authorize_files=current, authorize_content=current,
                 authorize_write=self._write_allowed, authorize_directory=self._write_allowed,
-                authorize_create=self._write_allowed)
+                authorize_create=self._write_allowed, authorize_delete=self._delete_allowed)
             self._application = self._bundle.application
             self._check()
             return self
@@ -195,15 +202,20 @@ class SkillsWorkspaceHost:
     def _write_allowed(self, *args):
         return self._config.enable_writes and self._allowed()
 
+    def _delete_allowed(self, *args):
+        return self._config.enable_deletes and self._write_allowed()
+
     def _profile(self, request, _parameters):
         """Bounded configured-mode hint, never a grant or a quarantine bypass."""
         if request.target != '/api/skills-workspace' or request.body:
             return error_response(400, 'Invalid Skills workspace profile request')
         config, auth = self._config, self._auth
-        mode = config.enable_writes
+        mode, deletes = config.enable_writes, config.enable_deletes
         def bindings():
             if (self._config is not config or self._auth is not auth
-                    or type(mode) is not bool or config.enable_writes is not mode):
+                    or type(mode) is not bool or config.enable_writes is not mode
+                    or type(deletes) is not bool or config.enable_deletes is not deletes
+                    or deletes and not mode):
                 raise WorkspaceUnavailable('Skills workspace profile unavailable')
         def current():
             bindings()
@@ -212,7 +224,11 @@ class SkillsWorkspaceHost:
             bindings()
         try:
             current()
-            response = json_response(200, {'profile':'skills-workspace', 'writes_enabled':mode})
+            value = {'profile':'skills-workspace', 'writes_enabled':mode}
+            # Keep the original two-field profile byte-compatible by default.
+            # This is a configured-mode hint, never the deletion grant itself.
+            if deletes:value['deletes_enabled']=True
+            response = json_response(200, value)
             current()
             return DisclosureResponse(response.status, response.body,
                 {**response.headers, 'Cache-Control':'no-store'}, current)
@@ -251,7 +267,7 @@ class SkillsWorkspaceHost:
             path = environ.get('PATH_INFO', '')
             mutation = type(path) is str and (
                 method == 'POST' and path == '/api/skills'
-                or method in ('PUT', 'POST') and path.startswith('/api/skills/'))
+                or method in ('PUT', 'POST', 'DELETE') and path.startswith('/api/skills/'))
             result = None
             status = None
             started = False
@@ -358,6 +374,7 @@ def main(argv=None):
     parser.add_argument('--password-file', required=True)
     parser.add_argument('--exclusive-owner', required=True, action='store_true')
     parser.add_argument('--enable-writes', action='store_true')
+    parser.add_argument('--enable-deletes', action='store_true')
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--frontend-origin')
     args = parser.parse_args(argv)
