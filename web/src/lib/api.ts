@@ -252,8 +252,8 @@ export const api = {
     post<{ ok: boolean }>("/auth/change-password", { old_password: oldPassword, new_password: newPassword }),
 
   // ---- tasks ----
-  tasks: () =>
-    get<{ tasks: Task[]; active: string }>("/tasks").then((r) => ({ tasks: arr(r.tasks), active: r.active ?? "" })),
+  tasks: (signal?: AbortSignal) =>
+    http<{ tasks: Task[]; active: string }>("/tasks", { signal }).then((r) => ({ tasks: arr(r.tasks), active: r.active ?? "" })),
   task: (id: string) => get<Task>(`/tasks/${encodeURIComponent(id)}`),
   createTask: (input: {
     name?: string;
@@ -283,7 +283,7 @@ export const api = {
       coverage_enabled: input.coverageEnabled ?? true, // Enabled by default; false disables asset coverage
       intercept_rules: input.interceptRules ?? [], // Task-specific asset interception rules
     }),
-  taskCategories: () => get<{ categories: TaskCategory[] }>("/task-categories").then((r) => arr(r.categories)),
+  taskCategories: (signal?: AbortSignal) => http<{ categories: TaskCategory[] }>("/task-categories", { signal }).then((r) => arr(r.categories)),
   updateTask: (id: string, input: { name?: string; pinned?: boolean }) => patch<Task>(`/tasks/${id}`, input),
   renameTask: (id: string, name: string) => patch<Task>(`/tasks/${id}`, { name }),
   pinTask: (id: string, pinned: boolean) => patch<Task>(`/tasks/${id}`, { pinned }),

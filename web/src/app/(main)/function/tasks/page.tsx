@@ -121,6 +121,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api } from "@/lib/api";
 import { getLocalStorageValue, setLocalStorageValue } from "@/lib/local-storage.client";
 import { type SortDirection, useStoredSortPreference } from "@/lib/sort-preference";
+import { createTaskListReader } from "@/lib/task-list-reader.mjs";
 import type {
   AssetInterceptRuleInput,
   ChatAttachment,
@@ -302,9 +303,20 @@ function compareTasks(left: Task, right: Task, field: TaskSortField, direction: 
   return -compareTaskIDs(left.id, right.id);
 }
 
+function taskListPlaceholder(loaded: boolean, loading: boolean, total: number, filteredTotal: number): string {
+  if (!loaded) return loading ? "Loading tasks…" : "Task list unavailable. Retry the read above.";
+  if (total === 0) return 'No tasks yet. Click "New task" in the upper-right corner to start.';
+  if (filteredTotal === 0) return "No matching tasks.";
+  return "";
+}
+
 export default function TasksPage() {
   const [activeTab, setActiveTab] = React.useState("current");
   const [tasks, setTasks] = React.useState<Task[]>([]);
+  const [tasksLoaded, setTasksLoaded] = React.useState(false);
+  const [tasksLoading, setTasksLoading] = React.useState(true);
+  const [tasksError, setTasksError] = React.useState<string | null>(null);
+  const [categoriesError, setCategoriesError] = React.useState<string | null>(null);
   const [categories, setCategories] = React.useState<TaskCategory[]>([]);
   const [categoriesLoaded, setCategoriesLoaded] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -453,39 +465,44 @@ export default function TasksPage() {
   // re-render the whole page for nothing. Bail out when it matches.
   const lastRef = React.useRef<string>("");
 
-  const load = React.useCallback(() => {
-    api
-      .tasks()
-      .then((r) => {
-        const next = r.tasks.map((t) => (t.id === r.active ? { ...t, active: true } : t));
-        const sig = JSON.stringify(next);
-        if (sig === lastRef.current) return;
+  const [taskReader] = React.useState(() => createTaskListReader({
+    read: (signal) => api.tasks(signal),
+    onStart: (foreground) => { if (foreground) setTasksLoading(true); },
+    onData: (r) => {
+      const next = r.tasks.map((t) => (t.id === r.active ? { ...t, active: true } : t));
+      const sig = JSON.stringify(next);
+      if (sig !== lastRef.current) {
         lastRef.current = sig;
         setTasks(next);
-      })
-      .catch(() => {
-        // Polling is best-effort; the next interval retries automatically.
-      });
-  }, []);
-
-  const loadCategories = React.useCallback(() => {
-    api
-      .taskCategories()
-      .then((next) => {
-        setCategories(next);
-        setCategoriesLoaded(true);
-      })
-      .catch(() => {
-        // Category management remains retryable without blocking the task list.
-      });
-  }, []);
+      }
+      setTasksLoaded(true);
+      setTasksError(null);
+    },
+    onError: (error) => setTasksError(error instanceof Error ? error.message : "Read failed."),
+    onSettled: () => setTasksLoading(false),
+  }));
+  const [categoryReader] = React.useState(() => createTaskListReader({
+    read: (signal) => api.taskCategories(signal),
+    onStart: () => { /* Keep the last read error visible until a successful retry. */ },
+    onData: (next) => { setCategories(next); setCategoriesLoaded(true); setCategoriesError(null); },
+    onError: (error) => setCategoriesError(error instanceof Error ? error.message : "Read failed."),
+    onSettled: () => { /* Categories have their own retry without blocking task rows. */ },
+  }));
+  const load = React.useCallback(() => { taskReader.run(); }, [taskReader]);
+  const loadCategories = React.useCallback(() => { categoryReader.run(); }, [categoryReader]);
 
   React.useEffect(() => {
+    taskReader.activate();
+    categoryReader.activate();
     load();
     loadCategories();
-    const i = setInterval(load, POLL_MS);
-    return () => clearInterval(i);
-  }, [load, loadCategories]);
+    const i = setInterval(() => taskReader.run(false), POLL_MS);
+    return () => {
+      clearInterval(i);
+      taskReader.deactivate();
+      categoryReader.deactivate();
+    };
+  }, [taskReader, categoryReader, load, loadCategories]);
 
   const refreshCategoriesAndTasks = React.useCallback(() => {
     lastRef.current = "";
@@ -495,6 +512,8 @@ export default function TasksPage() {
 
   const applyTaskCategoryMove = React.useCallback(
     (taskID: string, category: TaskCategory | null) => {
+      // A response dispatched before this acknowledged move must not undo it.
+      taskReader.retire();
       setTasks((current) => {
         const next = current.map((task) =>
           task.id === taskID ? { ...task, category_id: category?.id, category_name: category?.name } : task,
@@ -503,8 +522,9 @@ export default function TasksPage() {
         return next;
       });
       loadCategories();
+      load();
     },
-    [loadCategories],
+    [taskReader, loadCategories, load],
   );
 
   React.useEffect(() => {
@@ -777,6 +797,8 @@ export default function TasksPage() {
     [movingCategory, refreshCategoriesAndTasks, selectedIds],
   );
 
+  const listMessage = taskListPlaceholder(tasksLoaded, tasksLoading, tasks.length, filtered.length);
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
       <TabsList className="mx-4 lg:mx-6">
@@ -912,13 +934,21 @@ export default function TasksPage() {
               />
             </div>
 
-            {tasks.length === 0 ? (
-              <div className="text-muted-foreground mx-4 flex items-center justify-center rounded-lg border border-dashed py-20 text-sm lg:mx-6">
-                No tasks yet. Click "New task" in the upper-right corner to start.
+            {tasksError && (
+              <div role="alert" className="mx-4 flex items-center gap-2 text-sm lg:mx-6">
+                <span>{tasksLoaded ? "Could not refresh tasks. Showing last loaded results." : "Could not load tasks."} {tasksError}</span>
+                <Button variant="outline" size="sm" onClick={load} disabled={tasksLoading}>Retry tasks</Button>
               </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-muted-foreground mx-4 flex items-center justify-center rounded-lg border border-dashed py-20 text-sm lg:mx-6">
-                No matching tasks.
+            )}
+            {categoriesError && (
+              <div role="alert" className="mx-4 flex items-center gap-2 text-sm lg:mx-6">
+                <span>Could not load task categories. {categoriesError}</span>
+                <Button variant="outline" size="sm" onClick={loadCategories}>Retry categories</Button>
+              </div>
+            )}
+            {listMessage ? (
+              <div role="status" className="text-muted-foreground mx-4 flex items-center justify-center rounded-lg border border-dashed py-20 text-sm lg:mx-6">
+                {listMessage}
               </div>
             ) : (
               <Table className="**:data-[slot='table-cell']:px-4 **:data-[slot='table-head']:px-4">
