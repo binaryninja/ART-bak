@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { signInLanding } from "@/lib/host-landing.mjs";
+import { MOCK } from "@/lib/mock/enabled";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,7 +49,7 @@ export default function LoginPage() {
       // Credentials may remain in localStorage after cookie loss. Sync first, then issue a fresh request
       // so server guards or route caches cannot redirect back to a login page still checking auth.
       auth.setToken(token);
-      window.location.replace("/function/tasks");
+      window.location.replace(signInLanding(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE, MOCK));
       return;
     }
     api
@@ -70,7 +72,7 @@ export default function LoginPage() {
     try {
       const { token } = await api.login("ARTEX", password);
       auth.setToken(token);
-      window.location.replace("/function/tasks");
+      window.location.replace(signInLanding(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE, MOCK));
     } catch {
       setError("Incorrect username or password");
     } finally {

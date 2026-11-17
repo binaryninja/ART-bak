@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { signInLanding } from "@/lib/host-landing.mjs";
+
 const AUTH_PAGES = ["/login", "/setup"];
 
 export function proxy(request: NextRequest) {
@@ -18,7 +20,7 @@ export function proxy(request: NextRequest) {
 
   // Redirect authenticated requests for login/setup to the main page.
   if (token && isAuthPage) {
-    return NextResponse.redirect(new URL("/function/tasks", request.url));
+    return NextResponse.redirect(new URL(signInLanding(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE, false), request.url));
   }
 
   return NextResponse.next();
