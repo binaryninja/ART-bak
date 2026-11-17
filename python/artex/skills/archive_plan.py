@@ -1,7 +1,8 @@
 """Memory-only, deliberately narrow ZIP plan. Archive bytes are inert data.
 
 No extraction API, filesystem access, codec fallback, encrypted entries, ZIP64,
-streaming descriptors, extras, comments, preamble, trailer or multiple disks.
+streaming descriptors, unknown extras, comments, preamble, trailer or multiple
+disks. Bounded paired Info-ZIP timestamp/UID-GID extras are checked then ignored.
 Names are ASCII or explicitly flagged UTF-8, canonical NFC, collision-free.
 Actual bounded raw decompression, not ZipExtFile's declared-length truncation,
 proves complete stream length/CRC before any installer can start.
@@ -19,6 +20,7 @@ MAX_ARCHIVE_BYTES = 1 << 20
 MAX_TOTAL_BYTES = 1 << 20
 MAX_FILE_BYTES = 1 << 18
 MAX_ENTRIES = 128
+MAX_EXTRA_BYTES = 32
 _PARSE = parse_skill
 
 
@@ -54,6 +56,40 @@ def _path(value):
     return value
 
 
+def _extras(data, *, central):
+    """Only inert UT / new Unix metadata, never filename/feature overrides.
+
+    Each header has at most one of each allowed tag. UT's central form contains
+    only mtime, while its flags describe the local timestamps. UID/GID are
+    version 1, bounded to 1..4 bytes each. No values are restored or used as
+    authority. The returned projection only checks agreement between headers.
+    """
+    if len(data) > MAX_EXTRA_BYTES: raise ValueError()
+    cursor = 0; result = {}
+    while cursor < len(data):
+        if cursor+4 > len(data): raise ValueError()
+        tag,size = struct.unpack_from('<HH',data,cursor)
+        cursor += 4
+        if tag not in (0x5455,0x7875) or tag in result or cursor+size > len(data): raise ValueError()
+        payload = data[cursor:cursor+size]; cursor += size
+        if tag == 0x5455:
+            if not payload or payload[0] & ~7: raise ValueError()
+            flags = payload[0]
+            count = (flags & 1) if central else flags.bit_count()
+            if len(payload) != 1+4*count: raise ValueError()
+            # atime/ctime have no central representation. Validate their local
+            # lengths, but intentionally neither interpret nor apply them.
+            result[tag] = (flags,payload[1:5] if flags & 1 else b'')
+        else:
+            if len(payload) < 5 or payload[0] != 1: raise ValueError()
+            uid_size = payload[1]
+            if not 1 <= uid_size <= 4 or 2+uid_size >= len(payload): raise ValueError()
+            gid_size = payload[2+uid_size]
+            if not 1 <= gid_size <= 4 or len(payload) != 3+uid_size+gid_size: raise ValueError()
+            result[tag] = payload
+    return result
+
+
 def plan_archive(data):
     """Validate a complete standard stored/raw-deflate ZIP before any effects."""
     if type(data) is not bytes: raise ValueError()
@@ -69,12 +105,14 @@ def plan_archive(data):
         fields = struct.unpack_from('<4s6H3I5H2I',data,cursor)
         (sig,made,need,flags,method,mtime,mdate,crc,compressed,expanded,nlen,xlen,clen,
          start_disk,internal,external,local_offset) = fields
-        if (sig != b'PK\x01\x02' or made >> 8 not in (0,3) or made & 255 > 20
+        # Producer version is informational; only needed-version gates features.
+        if (sig != b'PK\x01\x02' or made >> 8 not in (0,3)
                 or need not in (10,20) or flags & ~0x800 or method not in (0,8)
-                or xlen or clen or start_disk or internal not in (0,1) or not nlen
-                or local_offset != local or cursor+46+nlen > len(data)-22): raise ValueError()
+                or xlen > MAX_EXTRA_BYTES or clen or start_disk or internal not in (0,1) or not nlen
+                or local_offset != local or cursor+46+nlen+xlen > len(data)-22): raise ValueError()
         if expanded > MAX_FILE_BYTES: raise ArchiveLimit()
         raw_name = data[cursor+46:cursor+46+nlen]
+        central_extra = _extras(data[cursor+46+nlen:cursor+46+nlen+xlen],central=True)
         name = raw_name.decode('utf-8' if flags & 0x800 else 'ascii')
         directory = name.endswith('/')
         path = _path(name[:-1] if directory else name)
@@ -92,9 +130,15 @@ def plan_archive(data):
                 or external & 0x10 and not directory): raise ValueError()
         if local+30 > offset: raise ValueError()
         head = struct.unpack_from('<4s5H3I2H',data,local)
-        if head != (b'PK\x03\x04',need,flags,method,mtime,mdate,crc,compressed,expanded,nlen,0): raise ValueError()
-        begin = local+30+nlen; end = begin+compressed
-        if end > offset or data[local+30:begin] != raw_name: raise ValueError()
+        local_xlen = head[-1]
+        if (head[:-1] != (b'PK\x03\x04',need,flags,method,mtime,mdate,crc,compressed,expanded,nlen)
+                or local_xlen > MAX_EXTRA_BYTES): raise ValueError()
+        name_end = local+30+nlen
+        begin = name_end+local_xlen; end = begin+compressed
+        if end > offset or data[local+30:name_end] != raw_name: raise ValueError()
+        local_extra = _extras(data[name_end:begin],central=False)
+        # This subset requires paired tags and identical common metadata.
+        if local_extra != central_extra: raise ValueError()
         packed = data[begin:end]
         if method == 0:
             content = packed
@@ -110,7 +154,7 @@ def plan_archive(data):
         total += len(content)
         if total > MAX_TOTAL_BYTES: raise ArchiveLimit()
         members.append((path,directory,content))
-        local = end; cursor += 46+nlen
+        local = end; cursor += 46+nlen+xlen
     if cursor != len(data)-22 or local != offset: raise ValueError()
     kinds = {path: directory for path,directory,_ in members}
     for path in kinds:

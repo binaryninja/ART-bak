@@ -39,9 +39,19 @@ Python overwrite is offered, including when an error contains “already exists�
 The coordinated host subset accepts at most 1 MiB compressed and 1 MiB expanded,
 at most 256 KiB per regular file and 128 total entries (directories count toward
 that budget; the success count is regular files only). Only the bounded
-Store/Deflate subset is supported: no data descriptors/streamed ZIPs, extra or
-comment fields, self-extracting preamble/trailer data or legacy non-ASCII names
-without the UTF-8 marker. Exactly one SKILL.md requires an explicit valid name
+Store/Deflate subset is supported, including standard Info-ZIP archives within
+these restrictions. Names must be ASCII or explicitly UTF-8 flagged; Unicode
+filename override fields are not supported. Only timestamp (`0x5455`) and
+version-1 UID/GID (`0x7875`) extra fields are accepted, at most one of each and
+32 total extra bytes per header. Tags must be paired between local and central
+headers; flags and common values must match. UID/GID widths are 1–4 bytes.
+These inert fields are parsed for consistency, not restored: imported timestamps,
+ownership and modes are not taken from the archive. This is not support for all
+Info-ZIP archives or all Unicode filename encodings.
+
+Other extra fields, ZIP64, encryption, additional codecs, data descriptors/streamed
+ZIPs, comments and self-extracting preamble/trailer data remain unsupported.
+Exactly one SKILL.md requires an explicit valid name
 and nonblank description; MCP frontmatter is not supported. No path outside the
 chosen root or overwriting existing skill is permitted. Other bounded files may
 be inert binary data and need not be readable by the text editor.

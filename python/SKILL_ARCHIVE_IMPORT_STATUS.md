@@ -21,14 +21,34 @@ are refused even on the supported POSIX host.
 
 Only standard stored or raw-Deflate entries are accepted. Names must be ASCII or
 explicitly UTF-8 flagged. There is no encryption, ZIP64, multiple disks, data
-descriptor, extra field, comment, preamble, padding or trailer support. Central
-and local headers/names must agree, with contiguous local records in central
-order. Unsupported flags, link/special/setid metadata and ambiguous directory
+descriptor, unknown extra field, comment, preamble, padding or trailer support.
+Central and local headers/names must agree, with contiguous local records in
+central order. Unsupported flags, link/special/setid metadata and ambiguous directory
 attributes fail closed. All actual expansion and CRCs are checked before any
 filesystem effect. Bounded raw decompression rejects incomplete streams, unused
 trailing streams and falsely understated expanded sizes; the implementation does
 not rely on `ZipExtFile` truncating to a declared length. It never calls an archive
 extraction API.
+
+The producer-version byte is informational and does not raise the required
+feature version. Creator attribute systems remain DOS/Unix only; the required
+version remains 1.0 or 2.0 and all existing method/flag restrictions still apply.
+Ordinary Info-ZIP 3.0 default, `-X` and `-X -0` archives within this subset are
+supported. Only the inert timestamp (`0x5455`) and version-1 UID/GID (`0x7875`)
+extra fields are allowed, at most one each and 32 total extra bytes per header.
+UID/GID widths are restricted to 1–4 bytes. Tags must be paired between headers;
+common values and timestamp flags must agree exactly. Local timestamp payloads
+must include exactly the flagged times; the central payload includes only the
+flagged modification time. Unknown tags, repeated tags, reserved bits, bad
+lengths and inconsistent values fail before effects. No timestamps, ownership
+or modes from the archive are restored. Filename overrides, legacy Unix extras,
+ZIP64, ACL/xattrs and additional codecs remain unsupported.
+
+Format references: [PKWARE APPNOTE, sections 4.4.2–4.4.3](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)
+distinguish producer and required versions; [Info-ZIP's upstream extra-field
+specification](https://sources.debian.org/src/zip/3.0-6/proginfo/extrafld.txt/)
+defines the two accepted metadata layouts. The stricter byte/width/pairing limits
+here are deliberate importer restrictions, not claims of complete ZIP support.
 
 Exactly one canonical `SKILL.md` must be at the archive root or directly inside a
 single wrapper directory. Anything outside that selected root is rejected, not
@@ -87,6 +107,8 @@ Synthetic tests cover stored/deflated root/wrapper/Unicode/binary content; malfo
 header relationships, actual-size and CRC lies, raw-stream tails and expansion
 bounds; path/alias/member collisions; independent grants and original JWT;
 root/parent/target changes, hardlinks, partial writes and filesystem failures;
+Info-ZIP producer fixtures and strict local/central metadata parsing without
+owner/mode/time restoration;
 bound-owner drift; guard/header/body revocation; immutable plan/request drift;
 create-only conflict and concurrent duplicates. Tests use only private temporary
 data. Full Python/SQL-syntax/Node checks and independent component/combined
