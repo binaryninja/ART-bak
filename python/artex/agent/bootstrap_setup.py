@@ -44,6 +44,7 @@ class BootstrapConfiguration:
 class BootstrapApplication:
     hosted:HostedApplication
     admission:AdmissionController
+    coordinator:BootstrapCoordinator
     @property
     def app(self):return self.hosted.app
     @property
@@ -99,4 +100,4 @@ def build_bootstrap_application(executor,signing_key,password_codec,*,coordinato
         profile_available=profile_available,application_options=application_options)
     binding()
     controller=AdmissionController(hosted.host,limit=capacity,single_process=True)
-    return BootstrapApplication(hosted,controller)
+    return BootstrapApplication(hosted,controller,coordinator=coordinator)

@@ -62,7 +62,8 @@ class TaskRuntimeApplication:
         if (self.pump.host is not self.host or self.pump.runner is not self.runner
                 or self.pump.manager is not self.manager
                 or self.admission.host is not self.host
-                or self.manager.repository.executor is not self.runtime.executor):
+                or self.manager.repository.executor is not self.runtime.executor
+                or self.bootstrap.coordinator is not self.runtime.coordinator):
             raise RuntimeUnavailable('Task runtime application ownership changed')
     def tick(self):
         self._check();return self.pump.tick()
