@@ -1,0 +1,64 @@
+name: Python port checks
+
+# Never use pull_request_target or a privileged workflow_run follow-up here.
+# No path filter: a required PR check must not remain pending on unrelated edits.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-port-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authored-tests:
+    name: Python ${{ matrix.python-version }} authored tests and SQL syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the PR merge revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+      - name: Select CPython
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+          # No dependency cache shared with another trust context.
+      - name: Install hash-locked official wheels in a fresh virtual environment
+        run: |
+          python -m venv "$RUNNER_TEMP/artex-ci-venv"
+          "$RUNNER_TEMP/artex-ci-venv/bin/python" -m pip --isolated install \
+            --disable-pip-version-check --no-cache-dir --only-binary=:all: \
+            --require-hashes --index-url https://pypi.org/simple \
+            -r python/ci/requirements-linux.txt
+          echo "$RUNNER_TEMP/artex-ci-venv/bin" >> "$GITHUB_PATH"
+      - name: Verify optional dependency imports
+        run: |
+          python -m pip check
+          python -c "import bcrypt, pglast, psycopg, psycopg_binary, typing_extensions, zstandard; assert psycopg.pq.__impl__ == 'binary'"
+      - name: Run authored tests without inherited application configuration
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/artex-ci-home" "$RUNNER_TEMP/artex-ci-tmp"
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-ci-home" TMPDIR="$RUNNER_TEMP/artex-ci-tmp" \
+            PYTHONPATH=python PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 \
+            python -m unittest discover -s python/tests -v
+      - name: Parse SQL constructed by authored tests
+        run: |
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/artex-ci-home" TMPDIR="$RUNNER_TEMP/artex-ci-tmp" \
+            PYTHONPATH=python PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 \
+            python python/tools/check_sql_syntax.py

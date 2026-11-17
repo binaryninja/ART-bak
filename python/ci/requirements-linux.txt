@@ -1,0 +1,30 @@
+# Linux x86_64 CPython 3.11/3.12 CI wheels from official PyPI.
+# Exact versions and SHA256 digests, not a general-purpose cross-platform lock.
+# Refresh intentionally from each https://pypi.org/pypi/NAME/VERSION/json
+# release, then verify both matrix downloads and the full test/SQL checks.
+
+bcrypt==5.0.0 \
+    --hash=sha256:0c8e093ea2532601a6f686edbc2c6b2ec24131ff5c52f7610dd64fa4553b5464 \
+    --hash=sha256:560ddb6ec730386e7b3b26b8b4c88197aaed924430e7b74666a586ac997249ef \
+    --hash=sha256:611f0a17aa4a25a69362dcc299fda5c8a3d4f160e2abb3831041feb77393a14a \
+    --hash=sha256:7aeef54b60ceddb6f30ee3db090351ecf0d40ec6e2abf41430997407a46d2254 \
+    --hash=sha256:89042e61b5e808b67daf24a434d89bab164d4de1746b37a8d173b6b14f3db9ff \
+    --hash=sha256:f8429e1c410b4073944f03bd778a9e066e7fad723564a52ff91841d278dfc822
+
+pglast==8.8 \
+    --hash=sha256:88faab53456ff210cd833a89b6d7bc32e60a49c505cca9f2c5c9228937127a1d \
+    --hash=sha256:a2debd30f7e96c137f06e68efc9c25af57328223fe51d3b9a33173d61797c924
+
+psycopg==3.2.13 \
+    --hash=sha256:a481374514f2da627157f767a9336705ebefe93ea7a0522a6cbacba165da179a
+
+psycopg-binary==3.2.13 \
+    --hash=sha256:27150515de5f709e4142429db6fd36a1d01f0b8b17d915b5f7bb095364465398 \
+    --hash=sha256:8f1189dc78553ef4b2e55d9e116fc74870191bc6a9a5f4442412a703c4cc6c3b
+
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+
+zstandard==0.25.0 \
+    --hash=sha256:5a56ba0db2d244117ed744dfa8f6f5b366e14148e00de44723413b2f3938a902 \
+    --hash=sha256:9300d02ea7c6506f00e627e287e0492a5eb0371ec1670ae852fefffa6164b072
