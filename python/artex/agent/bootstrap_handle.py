@@ -14,6 +14,7 @@ before checking cancellation. Cleanup-only manager ownership never authorizes
 model/tool execution. No deadlines or first-intent seeding are implemented.
 """
 from copy import deepcopy
+from inspect import getattr_static
 from threading import Condition,RLock,get_ident
 from time import monotonic
 import math
@@ -23,9 +24,20 @@ from ..manager import TaskManager,CancellationToken
 from ..db.tasks import TaskStore
 from ..sidequestion import Model
 
+_OWNS_GENERATION = TaskManager.owns_generation
+
+
+def _original_generation_predicate(manager):
+    # Inspect the class descriptor without running a substituted property.
+    return ('owns_generation' not in vars(manager)
+            and getattr_static(type(manager), 'owns_generation', None) is _OWNS_GENERATION)
+
+
 class BootstrapHandle:
     def __init__(self,task,token,*,coordinator,manager,model,system,policy_revision,request_id,engine_factory,timed_admission=None):
         if type(token) is not CancellationToken or not isinstance(coordinator,BootstrapCoordinator) or not isinstance(manager,TaskManager) or not isinstance(manager.repository,TaskStore):raise ValueError('Actual coordinator, manager repository and token required')
+        if not _original_generation_predicate(manager):
+            raise ValueError('Original manager generation predicate required')
         if not isinstance(task,dict) or not callable(engine_factory):raise ValueError('Explicit task snapshot and inert engine factory required')
         raw=task.get('id')
         if isinstance(raw,str) and raw.isascii() and raw.isdecimal():raw=int(raw)
@@ -88,6 +100,8 @@ class BootstrapHandle:
             self._admission_check()
         if self.manager is not self._manager or self.coordinator is not self._coordinator or self.token is not self._token or self.manager.repository is not self._repository or self._repository.executor is not self._executor or self.coordinator.journal.executor is not self._executor:
             raise BootstrapConflict('Bootstrap owning resource changed')
+        if not _original_generation_predicate(self._manager):
+            raise BootstrapConflict('Manager generation predicate changed')
         if (self.model,self.system,self.policy_revision,self.request_id,self.task_id,self.exploration_id,self._task.get('timeout_seconds',0))!=self._configuration:raise BootstrapConflict('Bootstrap configuration changed')
     def validate_construction(self):
         """Validate pinned inert bindings before installation, without SQL/work.
@@ -117,7 +131,7 @@ class BootstrapHandle:
         return True
     def _owned(self,*,allow_cancelled=False):
         self._binding()
-        if self.manager.owns_generation(self.task_id,self.token,self,allow_cancelled=allow_cancelled) is not True:raise BootstrapConflict('Bootstrap generation not installed')
+        if _OWNS_GENERATION(self._manager,self.task_id,self.token,self,allow_cancelled=allow_cancelled) is not True:raise BootstrapConflict('Bootstrap generation not installed')
         if not allow_cancelled:self.token.check()
         self._binding()
     def _admitted_check(self):
