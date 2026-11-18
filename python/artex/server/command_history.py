@@ -12,11 +12,13 @@ import re
 from ..db.command_history import CommandHistoryStore,CommandDenied,CommandUnavailable
 from .core import json_response,error_response
 class CommandHistoryService:
-    def __init__(self,store,*,authorize,max_response_bytes=2097152):
+    def __init__(self,store,*,authorize,max_response_bytes=2097152,redact=None):
         if type(store) is not CommandHistoryStore or not callable(authorize):raise ValueError('Actual history store and request policy required')
         if type(max_response_bytes) is not int or not 1024<=max_response_bytes<=16777216:raise ValueError('Invalid response bound')
         self.store=store;self._store=store;self._executor=store.executor;self._scope=store.scope;self._guard=store.guard
         self.authorize=authorize;self.max_bytes=max_response_bytes
+        if redact is not None and not callable(redact):raise ValueError('Explicit redactor required')
+        self.redact=redact
     def _check(self):
         s=self.store
         if s is not self._store or s.executor is not self._executor or s._executor is not self._executor or s.scope is not self._scope or s._scope is not self._scope or s.guard is not self._guard:raise CommandDenied()
@@ -64,6 +66,9 @@ class CommandHistoryService:
                 check()
                 if self.authorize(request,self._scope,op,keyword) is not True:raise CommandDenied()
                 check();self.store.validate_read(op,keyword)
+                if self.redact is not None:
+                    for row in result.get('commands',[]):
+                        row['command']=self.redact(row['command']);row['output']=self.redact(row['output'])
                 check();response=json_response(200,result)
                 if len(response.body)>self.max_bytes:raise CommandUnavailable()
                 return response

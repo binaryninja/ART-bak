@@ -75,11 +75,16 @@ the separate `qa` extra. This runs authored tests only, not a database.
 
 The assessment launcher uses the shared `TaskRuntimeAssembly`, bootstrap journal,
 `EngineRunner`, planner/worker tool registry, and `AgentHost`. The first registered
-definition is `servicenow.inventory` v1. It accepts an approved HTTPS instance URL
+definition is `servicenow.inventory` v2. It accepts an approved HTTPS instance URL
 and optional host-private credential reference. Its named GET operations discover
 identity, roles, public pages, build metadata, applications, tables, and scripted
-REST API metadata. Reports distinguish completed inventory from authenticated
-access and record denied or truncated reads.
+REST API metadata. Its 19 registered checks also cover application scopes,
+delegated developers, integration metadata, ACL definitions and role bindings,
+role inheritance, scripted REST authentication settings, and selected security
+properties. Checks declare their required observed capability. Table reads use
+stable ordering, at most five 100-row pages, per-page hashes, and explicit
+completeness/limit evidence. Reports distinguish completed inventory from
+authenticated access and record denied or truncated reads.
 
 ```sh
 PYTHONPATH=python python -m artex.assessment_server \
@@ -119,6 +124,68 @@ The old `artex.servicenow_recon` launcher is retained for inspecting/reconciling
 its existing runs. `--migrate-legacy` copies terminal reports into assessment
 records without rerunning them. The ordinary task-detail URL now displays the
 assessment report, evidence, discovery provenance, and recorded execution sessions.
+
+Every admitted model tool call now writes a durable receipt and paired
+`activity.tool_use` / `activity.tool_result` rows. The receipt retains the task,
+generation, session, turn, and unique call identity; tool-usage counts are recorded
+in the existing `tool_usage` table. The inventory orchestrator records each named
+check as a nested invocation. Inputs/results are redacted and bounded; complete
+inventory evidence remains in `artex_assessment_observations`. The existing
+Commands page and its statistics API read these records. Its legacy `task` query
+parameter denotes an **exploration ID**. Existing runs are not replayed or given
+invented execution events.
+
+The shared assessment toolkit provides `assessment_scope`,
+`assessment_capabilities`, `list_assessment_checks`, `list_assets`,
+`read_assessment_evidence`, and evidence-backed `report_finding`. The normal
+graph registry provides facts and goals. `Read` and `LS` operate only beneath
+`<state-root>/artifacts`; reads discover in-scope instances and store extracted
+credentials privately before returning text. Text imports also save a redacted
+artifact in that directory.
+
+Optional adapters are installed with `--extensions-file /absolute/extensions.json
+--install-schema`. This is a host-owned version-1 JSON manifest with a `tools`
+array. Every entry has `name`, `description`, a closed JSON `schema`,
+`read_only: true`, `allowed_origins`, and a `kind`. The allowed origins must be a
+subset of the launcher's explicit scope. Catalog metadata is seeded once and
+resolved through the existing worker registry. Executable changes invalidate the
+runtime; restart with the reviewed manifest and schema installation to adopt
+them. `SearchExtraTools` exposes the available schemas and `ExecuteExtraTool`
+invokes one exact registered tool.
+
+For example, after placing an authorized evidence file at
+`<state-root>/artifacts/evidence.txt`, this entry runs the installed checksum
+utility with a fixed, separately quoted argument:
+
+```json
+{
+  "version": 1,
+  "tools": [{
+    "name": "artifact_digest",
+    "description": "Hash the imported evidence.txt artifact",
+    "kind": "command",
+    "read_only": true,
+    "allowed_origins": ["https://dev366312.service-now.com"],
+    "schema": {"type":"object","properties":{},"additionalProperties":false},
+    "argv": ["/usr/bin/sha256sum", "evidence.txt"],
+    "timeout_ms": 10000
+  }]
+}
+```
+
+`command` entries require a canonical executable path and an argv array;
+`script` entries require a canonical interpreter followed by a canonical script
+path. Both files are hash-pinned. Arguments may reference schema properties or
+the host-owned `{origin}` and `{host}` values. Processes use an explicit
+environment, bounded output, deadlines, and the existing foreground process-group
+runner. Configure only trusted programs whose effects fit the declared operation.
+`http` entries use `method: "GET"` and an origin-relative `path`; placeholders
+are URL-encoded and redirects are not followed. `mcp` entries specify an HTTPS
+`url`, `server`, `remote_tool`, exact `remote_schema`, and `target_parameter` into
+which the admitted origin is injected. Optional `headers_env` maps header names
+to credential environment-variable names. The existing MCP bridge verifies the
+remote schema, scopes every call, and closes the session. No command or remote
+MCP server is enabled merely because it appears in the database catalog.
 
 `python -m artex --check-config` validates explicit `ARTEX_PG_DSN` and
 `ARTEX_SIGNING_KEY_HEX` inputs without opening a database or listener.

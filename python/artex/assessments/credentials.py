@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import re
 import stat
+import base64
+import threading
 
 
 class CredentialStore:
@@ -16,10 +18,22 @@ class CredentialStore:
         if self.root.resolve()!=self.root or not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or stat.S_IMODE(info.st_mode)!=0o700:
             raise ValueError('Owned private credential directory required')
         self._key=key
+        self._secrets=set();self._lock=threading.RLock()
+
+    def _remember(self,username,password):
+        basic=base64.b64encode((username+':'+password).encode()).decode()
+        with self._lock:self._secrets.update((password,basic,'Basic '+basic))
+
+    def redact(self,text):
+        with self._lock:secrets=sorted(self._secrets,key=len,reverse=True)
+        for secret in secrets:
+            if secret:text=text.replace(secret,'[redacted]')
+        return text
 
     def put(self, origin, username, password):
         if not isinstance(username,str) or not isinstance(password,str) or not username or not password or len(username.encode())>512 or len(password.encode())>4096:raise ValueError('Complete bounded credential required')
         data=json.dumps(dict(origin=origin,username=username,password=password),sort_keys=True).encode()
+        self._remember(username,password)
         ref=hmac.new(self._key,data,hashlib.sha256).hexdigest()
         path=self.root/ref
         try:
@@ -38,4 +52,5 @@ class CredentialStore:
             if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or stat.S_IMODE(info.st_mode)!=0o600 or info.st_size>16384:raise ValueError('Private credential unavailable')
             value=json.load(file)
         if value['origin']!=origin:raise ValueError('Credential belongs to another origin')
+        self._remember(value['username'],value['password'])
         return value['username'],value['password']

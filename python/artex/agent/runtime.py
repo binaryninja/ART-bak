@@ -263,7 +263,7 @@ def _result(call_id, text, error=True):
 
 
 class BoundedAgent:
-    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic, settlement=None, _terminal_dispatch=None):
+    def __init__(self, provider, *, gate=None, tools=(), limits=Limits(), clock=time.monotonic, settlement=None, _terminal_dispatch=None, tool_events=None):
         if not callable(getattr(provider, 'complete', None)):
             raise ValueError('An injected completion provider is required')
         if settlement is not None:
@@ -272,6 +272,8 @@ class BoundedAgent:
                 or settlement.max_tokens>=limits.max_tokens or settlement.max_tool_calls>=limits.max_tool_calls):
                 raise ValueError('Settlement reserves must fit strictly within total limits')
         self.settlement=settlement
+        if tool_events is not None and not callable(tool_events):raise ValueError('Explicit tool event recorder required')
+        self.tool_events=tool_events
         self.provider, self.gate, self.limits, self.clock = provider, gate, limits, clock
         self.tools = {}
         for tool in tools:
@@ -433,6 +435,12 @@ class BoundedAgent:
                     terminal = exc.reason
                 results = []
                 for use in uses:
+                    audit={'started':False,'finished':False}
+                    action=None
+                    def emit_tool(state,output=None,error=False):
+                        if self.tool_events is not None:
+                            self.tool_events(context,action,state,output,error)
+                            audit['started' if state=='started' else 'finished']=True
                     if terminal:
                         results.append(_result(use['id'], 'Not executed: run stopped (' + terminal + ').'))
                         continue
@@ -468,22 +476,31 @@ class BoundedAgent:
                             with (self._terminal_dispatch.dispatch(self,context,action,slot) if self._terminal_dispatch is not None else nullcontext()):
                                 # Last cooperative boundary before callback execution.
                                 if self._terminal_dispatch is None:context.check()
+                                emit_tool('started')
+                                context.check()
                                 tool_calls += 1
                                 try:
-                                    output = tool.callback(context, action.arguments())
+                                    context['_tool_action']=action
+                                    try:output = tool.callback(context, action.arguments())
+                                    finally:context.pop('_tool_action',None)
                                 except EffectUncertain:
+                                    emit_tool('uncertain','Effect cleanup is unconfirmed.',True)
                                     # Do not commit a normal terminal transcript or let
                                     # worker settlement release an undrained effect.
                                     raise
-                                except RunStopped:
+                                except RunStopped as exc:
+                                    emit_tool('stopped','Tool stopped: '+exc.reason,True)
                                     raise
                                 except Exception:
+                                    emit_tool('failed','Tool callback failed; effects may have occurred.',True)
                                     raise RunStopped('tool_error') from None
                                 if not isinstance(output, str):
+                                    emit_tool('failed','Invalid tool output.',True)
                                     raise RunStopped('invalid_tool_output')
                                 try:
                                     raw = output.encode('utf-8')
                                 except UnicodeError:
+                                    emit_tool('failed','Invalid tool output encoding.',True)
                                     raise RunStopped('invalid_tool_output') from None
                                 if len(raw) > limits.max_tool_output_bytes:
                                     marker = b'\n[Output truncated by runtime limit]'
@@ -491,12 +508,14 @@ class BoundedAgent:
                                         output = marker[:limits.max_tool_output_bytes].decode('ascii')
                                     else:
                                         output = raw[:limits.max_tool_output_bytes-len(marker)].decode('utf-8', errors='ignore') + marker.decode('ascii')
+                                emit_tool('completed',output or '(no output)',False)
                                 results.append(_result(use['id'], output or '(no output)', False))
                                 events.append({'type': 'tool_result', 'call_id': use['id'], 'name': tool.name, 'status': 'completed'})
                                 context.check()
                         finally:
                             self._terminal_dispatch_slot=None
                     except RunStopped as exc:
+                        if audit['started'] and not audit['finished']:emit_tool('stopped','Tool stopped: '+exc.reason,True)
                         terminal = exc.reason
                         if not any(r['tool_use_id'] == use['id'] for r in results):
                             text = ('Tool callback stopped or failed; effects may have occurred. Do not retry automatically.'

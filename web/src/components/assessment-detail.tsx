@@ -5,9 +5,10 @@ import { Markdown } from "@/components/markdown";
 import { http } from "@/lib/api";
 import type { Task } from "@/lib/types";
 
-type Evidence = { status?: number; error?: string; requested?: boolean; [key: string]: unknown };
+type Evidence = { status?: number; error?: string; requested?: boolean; record_count?: number; completeness?: string; required_capability?: string; [key: string]: unknown };
 type Detail = { id: string; origin: string; definition: string; version: number; state: string; task: Task;
   observations: Record<string, Evidence>; sources: unknown[]; retained: boolean[];
+  exploration_id?: number; tool_calls?: Record<string, number>;
   sessions?: { session_id: string; worker: string; calls: number }[];
   report?: { summary?: string; run_id?: number; capabilities?: { access_level?: string; authenticated?: boolean; roles?: string[] } } };
 
@@ -31,9 +32,9 @@ export function AssessmentDetail({ task, lineage }: { task: Task; lineage?: Reac
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {!data ? <p>Loading assessment…</p> : <>
       <section className="space-y-2 rounded-lg border p-4"><p><strong>Task {data.task.id}:</strong> {data.task.status} · {data.origin}</p><p className="text-sm text-muted-foreground">{data.definition} v{data.version} · {data.id}</p><p>Access: {data.report?.capabilities?.access_level ?? "being assessed"}</p>{data.task.completed_at && <p>Completed {data.task.completed_at}. Generation retained: {data.retained.some(Boolean) ? "yes" : "no"}.</p>}</section>
-      <section className="space-y-3 rounded-lg border p-4"><h2 className="font-semibold">Evidence</h2>{Object.entries(data.observations).map(([name, evidence]) => <details key={name}><summary className="cursor-pointer">{name}: {evidence.status ? `HTTP ${evidence.status}` : evidence.error || "not requested"}</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">{JSON.stringify(evidence, null, 2)}</pre></details>)}{!Object.keys(data.observations).length && <p className="text-sm text-muted-foreground">No observations recorded yet.</p>}</section>
+      <section className="space-y-3 rounded-lg border p-4"><h2 className="font-semibold">Evidence</h2>{Object.entries(data.observations).map(([name, evidence]) => <details key={name}><summary className="cursor-pointer">{name}: {evidence.status ? `HTTP ${evidence.status}` : evidence.error || "not requested"}{evidence.record_count != null && ` · ${evidence.record_count} records (${evidence.completeness || "collected"})`}</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">{JSON.stringify(evidence, null, 2)}</pre></details>)}{!Object.keys(data.observations).length && <p className="text-sm text-muted-foreground">No observations recorded yet.</p>}</section>
       {data.report && <section className="space-y-3 rounded-lg border p-4"><h2 className="font-semibold">Report</h2><Markdown text={data.report.summary ?? ""} /></section>}
-      <section className="space-y-2 rounded-lg border p-4"><h2 className="font-semibold">Execution sessions</h2>{data.sessions?.map(s => <p key={s.session_id} className="text-sm"><code>{s.session_id}</code> · {s.worker} · {s.calls} recorded provider calls</p>)}<Link className="text-sm underline" href={`/function/llm-records?task=${encodeURIComponent(task.id)}`}>Open provider recordings</Link></section>
+      <section className="space-y-2 rounded-lg border p-4"><h2 className="font-semibold">Execution sessions</h2>{data.exploration_id && <p><Link className="text-sm underline" href={`/function/commands?task=${data.exploration_id}`}>Open tool execution history</Link> · {Object.values(data.tool_calls ?? {}).reduce((sum, value) => sum + value, 0)} recorded calls</p>}{data.sessions?.map(s => <p key={s.session_id} className="text-sm"><code>{s.session_id}</code> · {s.worker} · {s.calls} recorded provider calls</p>)}<Link className="text-sm underline" href={`/function/llm-records?task=${encodeURIComponent(task.id)}`}>Open provider recordings</Link></section>
       {lineage && <section className="space-y-3 rounded-lg border p-4"><button className="font-semibold underline" onClick={() => setShowLineage(v => !v)}>{showLineage ? "Hide" : "Show"} exploration lineage</button>{showLineage && lineage}</section>}
       <details className="rounded-lg border p-4"><summary className="cursor-pointer font-semibold">Discovery provenance</summary><pre className="mt-3 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(data.sources, null, 2)}</pre></details>
     </>}

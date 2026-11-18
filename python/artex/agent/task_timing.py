@@ -107,4 +107,4 @@ class PreparedTaskTiming:
         if not self._bound[6]:return binding
         facade=PreparedDispatchClock(self.store,model=binding.model,role=role,timeout_seconds=self._bound[6],
             authorize=self._pins[7],binding_current=current,wall_clock=self._pins[5],monotonic_clock=self._pins[4],generation_clock=self.kernel)
-        return ChatBinding(binding.model,DeadlineProvider(binding,facade))
+        return ChatBinding(binding.model,DeadlineProvider(binding,facade),binding.tool_events)

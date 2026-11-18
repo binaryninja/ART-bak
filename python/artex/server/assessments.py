@@ -7,11 +7,33 @@ from .core import error_response,json_response
 
 def register(runtime,app):
     router=app.router
+    from contextlib import nullcontext
+    from urllib.parse import parse_qsl,urlsplit
+    from .command_history import CommandHistoryService
+    from ..db.command_history import CommandHistoryStore,CommandScope
+    class HistoryRoutes:
+        def handle(self,operation,request):
+            try:
+                pairs=parse_qsl(urlsplit(request.target).query,keep_blank_values=True,max_num_fields=4)
+                requested=dict(pairs).get('task')
+                if requested is None:scope=CommandScope('assessment-workspace')
+                else:
+                    if not requested.isascii() or not requested.isdigit() or not 0<int(requested)<2**63:raise ValueError()
+                    rows=runtime.pool.fetch_all(Query('SELECT id FROM tasks WHERE exploration_id=$1 AND deleted_at IS NULL AND archived_at IS NULL',(int(requested),)))
+                    if len(rows)!=1:return error_response(404,'Exploration history not found')
+                    scope=CommandScope('assessment-workspace',rows[0][0],int(requested))
+                store=CommandHistoryStore(runtime.pool,scope,authorize=lambda *_:True,current=lambda *_:True,lifecycle_guard=lambda *_:nullcontext(),raw_authorize=lambda *_:True)
+                return CommandHistoryService(store,authorize=lambda *_:True,redact=runtime.redact).handle(operation,request)
+            except (ValueError,TypeError):return error_response(400,'Invalid history selector')
+        def register(self,router):CommandHistoryService.register(self,router)
+    HistoryRoutes().register(router)
     def detail(record):
         if record is None:return None
         value={k:v for k,v in record.items() if k!='credential_ref'}
         value['has_credentials']=bool(record['credential_ref'])
         value['task']=runtime.manager.task(str(record['task_id']))
+        value['exploration_id']=runtime.pool.fetch_one(Query('SELECT exploration_id FROM tasks WHERE id=$1',(record['task_id'],)))[0]
+        value['tool_calls']=dict(runtime.pool.fetch_all(Query('SELECT status,count(*) FROM artex_tool_calls WHERE task_id=$1 GROUP BY status',(record['task_id'],))))
         value['observations']=runtime.store.observations(record['id'])
         value['sources']=[row[0] for row in runtime.pool.fetch_all(Query('SELECT source FROM artex_assessment_sources WHERE assessment_id=$1',(record['id'],)))]
         value['sessions']=[dict(session_id=s,worker=w,calls=n) for s,w,n in runtime.pool.fetch_all(Query('SELECT session_id,worker,count(*) FROM llm_records WHERE task_id=$1 GROUP BY session_id,worker ORDER BY session_id',(str(record['task_id']),)))]
@@ -50,7 +72,8 @@ def register(runtime,app):
                 data=request.json_object()
                 if set(data)-{'text','label'}:raise ValueError('Unexpected discovery fields')
                 results=DiscoveryDispatcher(runtime).ingest(data['text'],data.get('label','uploaded text'))
-                return json_response(200,{'results':results})
+                artifact=runtime.extensions.import_text(data['text'],redact=runtime.redact)
+                return json_response(200,{'results':results,'artifact':artifact})
         except PermissionError:return error_response(403,'Assessment target or credential is outside scope')
         except (ValueError,KeyError,TypeError):return error_response(400,'Invalid assessment input')
         except Exception:return error_response(503,'Assessment outcome unavailable; inspect existing tasks before retrying')

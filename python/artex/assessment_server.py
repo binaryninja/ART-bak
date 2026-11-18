@@ -10,9 +10,11 @@ import threading
 from wsgiref.simple_server import make_server
 from .__main__ import _configuration
 from .agent.bootstrap import DDL as JOURNAL_DDL
+from .agent.tool_ledger import DDL as TOOL_LEDGER_DDL
 from .assessments.credentials import CredentialStore
 from .assessments.store import DDL,AssessmentStore
-from .assessments.runtime import AssessmentRuntime,DOMAIN_CATALOG
+from .assessments.runtime import AssessmentRuntime,DOMAIN_CATALOG,FRAMEWORK_CATALOG
+from .assessments.extensions import ExtensionHost
 from .db.pool import ExecutorPool
 from .db.profiles import ProfileStore
 from .db.core import Query
@@ -21,14 +23,16 @@ from .server.passwords import BcryptCodec
 from .server.runtime_listener import DevListenerConfig,QuietRuntimeHandler,_BoundedServer
 from .servicenow_recon import LOCK_KEY,private_file
 
-def install(connection):
+def install(connection,extra_catalog=()):
     with connection.transaction():
         connection.execute(DDL)
+        connection.execute(TOOL_LEDGER_DDL)
         if connection.execute("SELECT to_regclass('public.artex_task_bootstrap')").fetchone()[0] is None:connection.execute(JOURNAL_DDL)
         for role in ('goals','planner','worker'):
             connection.execute('INSERT INTO agents(key,name,role,builtin,enabled) VALUES(%s,%s,%s,true,true) ON CONFLICT(key) DO NOTHING',(role,role.title(),role))
-        for tool in DOMAIN_CATALOG:
-            connection.execute("INSERT INTO tools(key,system,description,schema,agents,enabled,kind,exec,deferred) VALUES(%s,true,%s,%s::jsonb,%s::jsonb,true,'builtin','{}'::jsonb,false) ON CONFLICT(key) DO NOTHING",(tool.key,tool.description,json.dumps(tool.schema),json.dumps(tool.agents)))
+        for tool in tuple(FRAMEWORK_CATALOG)+tuple(DOMAIN_CATALOG)+tuple(extra_catalog):
+            connection.execute("INSERT INTO tools(key,system,description,schema,agents,enabled,kind,exec,deferred) VALUES(%s,true,%s,%s::jsonb,%s::jsonb,true,'builtin','{}'::jsonb,%s) ON CONFLICT(key) DO NOTHING",(tool.key,tool.description,json.dumps(tool.schema),json.dumps(tool.agents),tool.deferred))
+            connection.execute("UPDATE tools SET schema=%s::jsonb WHERE key=%s AND system AND kind='builtin' AND schema->'properties' IS DISTINCT FROM %s::jsonb->'properties'",(json.dumps(tool.schema),tool.key,json.dumps(tool.schema)))
 
 def migrate_legacy(pool):
     from .server.servicenow_recon import DESCRIPTION,GOAL
@@ -63,6 +67,7 @@ def main(argv=None):
     parser.add_argument('--api-key-env',required=True)
     parser.add_argument('--allow-origin',action='append',required=True)
     parser.add_argument('--state-root',type=Path,required=True)
+    parser.add_argument('--extensions-file',type=Path)
     parser.add_argument('--port',type=int,default=8787)
     parser.add_argument('--install-schema',action='store_true')
     parser.add_argument('--migrate-legacy',action='store_true')
@@ -76,12 +81,13 @@ def main(argv=None):
     root.mkdir(mode=0o700,parents=True,exist_ok=True)
     credentials=CredentialStore(root/'credentials',key)
     transcripts=root/'transcripts';transcripts.mkdir(mode=0o700,exist_ok=True)
+    extensions=ExtensionHost(root/'artifacts',args.allow_origin,args.extensions_file)
     stop=threading.Event()
     for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:stop.set())
     import psycopg
     with psycopg.connect(dsn,autocommit=True) as owner:
         if not owner.execute('SELECT pg_try_advisory_lock(%s)',(LOCK_KEY,)).fetchone()[0]:raise RuntimeError('Database already owned')
-        if args.install_schema:install(owner)
+        if args.install_schema:install(owner,extensions.catalog)
         pool=ExecutorPool.postgres(dsn,max_size=12)
         if args.migrate_legacy:migrate_legacy(pool)
         reconcile_before_inventory(pool,args.reconcile_no_observation_task)
@@ -94,7 +100,7 @@ def main(argv=None):
         if profile is None:raise ValueError('Stored provider profile required')
         digest=hashlib.sha256()
         for path in sorted(Path(__file__).parent.rglob('*.py')):digest.update(str(path.relative_to(Path(__file__).parent)).encode()+b'\0'+path.read_bytes())
-        runtime=AssessmentRuntime(pool,profile,os.environ[args.api_key_env],credentials,transcripts,args.allow_origin,key,BcryptCodec(),revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=digest.hexdigest())
+        runtime=AssessmentRuntime(pool,profile,os.environ[args.api_key_env],credentials,transcripts,args.allow_origin,key,BcryptCodec(),revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=digest.hexdigest(),extensions=extensions)
         app=register(runtime,runtime.bundle.app)
         config=DevListenerConfig(args.port,8,30,'http://127.0.0.1:3000');config.validate()
         server=make_server('127.0.0.1',args.port,app,server_class=_BoundedServer,handler_class=QuietRuntimeHandler)

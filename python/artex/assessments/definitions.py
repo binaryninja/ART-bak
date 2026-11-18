@@ -2,7 +2,32 @@
 from dataclasses import dataclass
 import re
 from urllib.parse import urlsplit
-from ..recon.servicenow import ALL_RESOURCES
+from ..recon.servicenow import ALL_RESOURCES,TABLES,PAGES
+
+@dataclass(frozen=True)
+class Check:
+    key:str
+    requires:str
+    description:str
+    def public(self):
+        table=TABLES.get(self.key)
+        return dict(key=self.key,requires=self.requires,description=self.description,method='GET',
+            path=PAGES.get(self.key,'/api/now/table/'+table[0] if table else ''),
+            evidence_fields=table[1].split(',') if table else ['status','body_sha256'],max_pages=5 if table and self.key!='current_user' else 1)
+
+_REQUIRES={'current_user':'credential','roles':'credential','application_scopes':'elevated',
+    'delegated_developers':'elevated','integration_metadata':'elevated',
+    'acl_definitions':'administrator','acl_roles':'administrator','role_inheritance':'administrator',
+    'api_authentication':'administrator','security_properties':'administrator'}
+SERVICENOW_CHECKS=tuple(Check(key,_REQUIRES.get(key,'public' if key in PAGES else 'authenticated'),key.replace('_',' ').capitalize()) for key in ALL_RESOURCES)
+CHECKS={check.key:check for check in SERVICENOW_CHECKS}
+
+def check_allowed(check,observed,has_credentials):
+    if check.requires=='public':return True
+    if check.requires=='credential':return bool(has_credentials)
+    if check.requires=='authenticated':return observed.get('authenticated') is True
+    if check.requires=='elevated':return observed.get('access_level') in ('elevated','administrator')
+    return observed.get('access_level')=='administrator'
 
 
 def instance_origin(value):
@@ -24,10 +49,10 @@ class Definition:
     max_intents:int=3
 
     def public(self):
-        return dict(key=self.key,version=self.version,name=self.name,operations=list(self.operations),access_levels=list(self.access_levels),max_intents=self.max_intents)
+        return dict(key=self.key,version=self.version,name=self.name,operations=list(self.operations),access_levels=list(self.access_levels),max_intents=self.max_intents,checks=[CHECKS[k].public() for k in self.operations])
 
 
-SERVICENOW=Definition('servicenow.inventory',1,'ServiceNow read-only assessment',ALL_RESOURCES,
+SERVICENOW=Definition('servicenow.inventory',2,'ServiceNow read-only assessment',ALL_RESOURCES,
     ('unauthenticated','authenticated_unknown','low_privilege','elevated','administrator'))
 DEFINITIONS={SERVICENOW.key:SERVICENOW}
 
@@ -38,7 +63,8 @@ def capabilities(observations, username=''):
     roles=sorted({r.get('role.name','') for r in observations.get('roles',{}).get('records',[]) if r.get('role.name')})
     level='unauthenticated'
     if authenticated:
-        level=('administrator' if 'admin' in roles else 'elevated' if any(r in roles for r in ('security_admin','itil_admin','app_engine_admin')) else 'low_privilege' if roles else 'authenticated_unknown')
+        level=('administrator' if 'admin' in roles else 'elevated' if any(r in roles for r in ('security_admin','itil_admin','app_engine_admin')) else 'low_privilege' if observations.get('roles',{}).get('status')==200 else 'authenticated_unknown')
     return dict(authenticated=authenticated,access_level=level,roles=roles,
                 readable=[k for k,v in observations.items() if v.get('status')==200],
-                limitations={k:v.get('error','HTTP '+str(v.get('status'))) for k,v in observations.items() if v.get('status')!=200})
+                limitations={k:v.get('error',v.get('pagination_error','bounded enumeration' if v.get('more_records_possible') else 'HTTP '+str(v.get('status')))) for k,v in observations.items() if v.get('status')!=200 or v.get('more_records_possible') or v.get('error')},
+                roles_complete=observations.get('roles',{}).get('completeness')=='complete')

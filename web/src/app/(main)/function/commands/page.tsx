@@ -55,10 +55,12 @@ export default function CommandsPage() {
   const [query, setQuery] = React.useState("");
   const [queryQ, setQueryQ] = React.useState("");
   const [taskFilter, setTaskFilter] = React.useState("");
+  React.useEffect(() => { const value = new URLSearchParams(window.location.search).get("task"); if (value && /^\d+$/.test(value)) setTaskFilter(value); }, []);
 
   const [commands, setCommands] = React.useState<CommandRecord[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
 
   // Fetch per-tool counts only when opening the dialog, avoiding an aggregate query on every page change.
   const [statsOpen, setStatsOpen] = React.useState(false);
@@ -84,6 +86,7 @@ export default function CommandsPage() {
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
+    setError("");
     api
       .commands({ task: taskFilter || undefined, q: queryQ || undefined, page, size })
       .then((r) => {
@@ -91,8 +94,9 @@ export default function CommandsPage() {
         setCommands(r.commands ?? []);
         setTotal(r.total ?? 0);
       })
-      .catch(() => {
+      .catch((e) => {
         if (!alive) return;
+        setError(e instanceof Error ? e.message : "Tool execution history is unavailable");
         setCommands([]);
         setTotal(0);
       })
@@ -147,7 +151,7 @@ export default function CommandsPage() {
           />
         </div>
         <Input
-          placeholder="Task ID"
+            placeholder="Exploration ID"
           className="h-8 w-28"
           value={taskFilter}
           onChange={(e) => setTaskFilter(e.target.value.replace(/\D/g, ""))}
@@ -199,6 +203,7 @@ export default function CommandsPage() {
       </div>
 
       {/* History table */}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex h-[calc(100vh-13rem)] min-h-0 flex-col">
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden py-0">
           <div className="min-h-0 flex-1 overflow-auto">
@@ -206,7 +211,7 @@ export default function CommandsPage() {
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead className="w-[130px]">Time</TableHead>
-                  <TableHead className="w-[60px]">Task</TableHead>
+                  <TableHead className="w-[90px]">Exploration</TableHead>
                   <TableHead className="w-[90px]">Worker</TableHead>
                   <TableHead className="w-[110px]">Tool</TableHead>
                   <TableHead>Input</TableHead>
@@ -223,7 +228,7 @@ export default function CommandsPage() {
                 ) : commands.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                      No tool execution records
+                      {error ? "Tool execution history could not be loaded" : "No tool execution records"}
                     </TableCell>
                   </TableRow>
                 ) : (

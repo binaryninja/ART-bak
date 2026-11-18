@@ -88,7 +88,7 @@ class InventoryTests(unittest.TestCase):
                 return result
             def close(self):pass
         inventory=ServiceNowInventory('admin','private-password',connection_factory=Connection)
-        inventory._interval=0
+        inventory._http.interval=0
         return inventory,calls
 
     def test_basic_rejection_uses_private_origin_bound_login_session(self):

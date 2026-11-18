@@ -61,6 +61,7 @@ class TranscriptAdapter(Protocol):
 class ChatBinding:
     model:Model
     provider:object=field(repr=False)
+    tool_events:object=field(default=None,repr=False,compare=False)
 
 
 @dataclass(frozen=True)
@@ -220,7 +221,7 @@ class ChatAgent:
         try:
             binding=self._binding(model)  # fail before user persistence when config missing
             # Validate the same immutable tool registry before admitting a user turn.
-            preflight=BoundedAgent(StreamingCompletion(binding.provider,check=lambda:None) if model.streaming else binding.provider,gate=self.gate,tools=self.tools,limits=self.limits)
+            preflight=BoundedAgent(StreamingCompletion(binding.provider,check=lambda:None) if model.streaming else binding.provider,gate=self.gate,tools=self.tools,limits=self.limits,tool_events=binding.tool_events)
             if not isinstance(self.limits,Limits) or (self.clock is not None and not callable(self.clock)):
                 raise ValueError('Invalid runtime configuration')
             context=dict(metadata or {})
@@ -247,7 +248,7 @@ class ChatAgent:
             from ..providers import Config, serialize
             try:serialize(Config('openai','history-validation'),{'messages':turn.messages})
             except Exception:raise ChatPersistenceError() from None
-            options={'gate':checked_gate,'tools':tuple(preflight.tools.values()),'limits':self.limits}
+            options={'gate':checked_gate,'tools':tuple(preflight.tools.values()),'limits':self.limits,'tool_events':binding.tool_events}
             if intercept_session is not None:options['_terminal_dispatch']=intercept_session
             if self.clock is not None:options['clock']=self.clock
             runner=BoundedAgent(_Provider(self,session_id,turn,model),**options)
