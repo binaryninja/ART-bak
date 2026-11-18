@@ -85,6 +85,28 @@ def reconcile_reported(pool,task_ids):
             tx.execute(Query("UPDATE tasks SET status='failed',paused=false,queued=false,completed_at=COALESCE(completed_at,now()) WHERE id=$1",(task_id,)))
             tx.execute(Query("UPDATE artex_assessments SET state='failed',report=report || $2::jsonb WHERE id=$1",(identifier,json.dumps({'reconciliation':{'reason':'reported_generation_abandoned','settlement_confirmed':False,'run_id':run_id}}))))
 
+def reconcile_unprobed(pool,task_ids):
+    """Retire an abandoned source-review failure under the exclusive DB lock."""
+    from .assessments.definitions import PUBLIC_REST
+    allowed={'set_goals','add_intent','run_assessment','inspect_servicenow','assessment_scope','assessment_capabilities','list_assessment_checks','read_assessment_evidence','list_goals','list_facts','SearchExtraTools'}
+    for task_id in task_ids:
+        with pool.transaction() as tx:
+            row=tx.fetch_one(Query("SELECT a.id,a.definition,a.version,a.report,t.exploration_id,t.status,b.run_id FROM artex_assessments a JOIN tasks t ON t.id=a.task_id JOIN artex_task_bootstrap b ON b.task_id=t.id WHERE t.id=$1 FOR UPDATE OF a,t",(task_id,)))
+            if row is None:raise RuntimeError('Recovery assessment not found')
+            identifier,definition,version,report,exploration_id,status,run_id=row
+            if (definition,version)!=(PUBLIC_REST.key,PUBLIC_REST.version) or status not in ('running','paused') or report is not None:raise RuntimeError('Recovery requires an abandoned unreported public REST generation')
+            rows=tx.fetch_all(Query('SELECT operation,result,run_id FROM artex_assessment_observations WHERE assessment_id=$1',(identifier,)))
+            observations={name:value for name,value,generation in rows}
+            if set(observations)!=set(PUBLIC_REST.operations) or any(generation!=run_id for _,_,generation in rows):raise RuntimeError('Incomplete observation accounting')
+            source=observations['public_rest_source'];probes=observations['public_rest_probes']
+            if source.get('status')!=0 or probes.get('error')!='verified_source_plan_unavailable' or probes.get('requests'):raise RuntimeError('Handler requests require separate reconciliation')
+            calls=tx.fetch_all(Query('SELECT tool,status,run_id FROM artex_tool_calls WHERE task_id=$1',(task_id,)))
+            if not calls or any(name not in allowed or state not in ('completed','failed') or generation!=run_id for name,state,generation in calls):raise RuntimeError('Unconfirmed tool effects require separate reconciliation')
+            report=json.dumps({'run_id':run_id,'summary':'Source review failed before handler probes. The abandoned generation was marked failed without replaying requests.','observations':observations,'reconciliation':{'reason':'unprobed_generation_abandoned','settlement_confirmed':False,'run_id':run_id}})
+            tx.execute(Query("UPDATE exploration_nodes SET state='blocked',blocked_reason='Abandoned source-review generation',content_version=content_version+1 WHERE exploration_id=$1 AND kind='intent' AND state IN ('open','running')",(exploration_id,)))
+            tx.execute(Query("UPDATE tasks SET status='failed',paused=false,queued=false,completed_at=COALESCE(completed_at,now()) WHERE id=$1",(task_id,)))
+            tx.execute(Query("UPDATE artex_assessments SET state='failed',report=$2::jsonb WHERE id=$1",(identifier,report)))
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profile-id',type=int,required=True)
@@ -100,6 +122,7 @@ def main(argv=None):
     parser.add_argument('--migrate-legacy',action='store_true')
     parser.add_argument('--reconcile-no-observation-task',type=int,action='append',default=[])
     parser.add_argument('--reconcile-reported-task',type=int,action='append',default=[])
+    parser.add_argument('--reconcile-unprobed-task',type=int,action='append',default=[])
     parser.add_argument('--denied-password-file',type=Path)
     parser.add_argument('--denied-username',default='admin')
     args=parser.parse_args(argv)
@@ -121,6 +144,7 @@ def main(argv=None):
         if args.migrate_legacy:migrate_legacy(pool)
         reconcile_before_inventory(pool,args.reconcile_no_observation_task)
         reconcile_reported(pool,args.reconcile_reported_task)
+        reconcile_unprobed(pool,args.reconcile_unprobed_task)
         if args.denied_password_file:
             if len(args.allow_origin)!=1:raise ValueError('Exact denied credential origin required')
             origin=AssessmentStore(pool,args.allow_origin).approved(args.allow_origin[0])
