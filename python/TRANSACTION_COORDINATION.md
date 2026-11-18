@@ -79,6 +79,32 @@ These methods issue no permission and do not enroll other callers. A failure
 during commit can leave the result uncertain. Neither method retries the
 mutation or records a coordinator publication status.
 
+## Existing service writers
+
+`TaskProfileService` and `ConversationService` accept the keyword-only
+constructor option `transaction_coordination=None`. Supplying a binding selects
+advisory coordination for the existing profile-chain replacement or conversation
+profile update, respectively. Both services retain the selected option by
+identity and check it across the write path. The default keeps the original
+store call. No route is added or mounted by selecting this option.
+
+The host must supply existing owner admission for the named operation. The
+task service also calls its existing host-supplied lifecycle guard. Neither
+service issues grants. Each service forwards the binding only to its existing
+store mutation. Preliminary reads and
+host decisions remain outside the advisory transaction.
+
+| Service | Checks and result |
+| --- | --- |
+| Task profile chain replacement | The opted-in service pins the original stores, executor and relevant read/write methods. Inside the supplied guard it checks existing write admission before reading the task or selected profiles and again before writing. The existing lifecycle, idle, profile and mutation checks still apply. Only the supplied coordinator's single-use, same-thread write callback forwards the option to the store. An uncertain write requires reconciliation. If persistence succeeded and later synchronization fails, the response reports the committed change. |
+| Conversation profile update | The opted-in service checks its original conversation store, executor, read/update methods and existing write admission before checking whether the conversation exists. It checks again after the read and after profile availability validation. A null profile clears the association. The original write transaction rechecks the row; a failed HTTP response alone cannot establish rollback. |
+
+Neither service retries uncertain writes. Neither option changes the original
+manager's task authority, coordinates other writers automatically or guarantees
+fresh runtime publication after commit. Tests with injected database I/O
+exercise service and store behavior on existing fixture rows. A real provider
+task and an integrated lifecycle remain unverified.
+
 ## Participants and remaining writers
 
 | Path | Exclusion boundary | What can still race |

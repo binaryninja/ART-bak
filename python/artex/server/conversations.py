@@ -8,7 +8,12 @@ Deletion/batch deletion fail503 pending complete cleanup/drain orchestration.
 import json,re
 from urllib.parse import urlsplit
 from .core import json_response,error_response
-from ..db.conversations import ConversationInvalid,ConversationMissing,ConversationUnavailable,identifier,text
+from ..db.conversations import ConversationInvalid,ConversationMissing,ConversationStore,ConversationUnavailable,identifier,text
+from ..db.configuration_ownership import require_write
+from ..db.transaction_coordination import TransactionCoordinationBinding
+
+_PROFILE_GET = ConversationStore.get
+_PROFILE_UPDATE = ConversationStore.update_profile
 
 def _pairs(items):
     result={}
@@ -18,8 +23,34 @@ def _pairs(items):
     return result
 
 class ConversationService:
-    def __init__(self,store=None,*,agent_available=None,profile_available=None,running=None):
+    def __init__(self,store=None,*,agent_available=None,profile_available=None,running=None,
+                 transaction_coordination=None):
         self.store=store;self.agent_available=agent_available;self.profile_available=profile_available;self.running=running
+        self.transaction_coordination = transaction_coordination
+        self._configured_coordination = transaction_coordination
+        self._profile_store = store if transaction_coordination is not None else None
+        self._profile_binding()
+
+    def _profile_binding(self):
+        binding = self._configured_coordination
+        if self.transaction_coordination is not binding:
+            raise ConversationUnavailable('Conversation coordination option changed')
+        if binding is not None:
+            store = self._profile_store
+            if (type(binding) is not TransactionCoordinationBinding or type(store) is not ConversationStore
+                    or self.store is not store or store.executor is not binding.executor):
+                raise ConversationUnavailable('Coordinated conversation store binding required')
+            for method, original in ((store.get, _PROFILE_GET), (store.update_profile, _PROFILE_UPDATE)):
+                if getattr(method, '__self__', None) is not store or getattr(method, '__func__', None) is not original:
+                    raise ConversationUnavailable('Original conversation profile methods required')
+        return binding
+
+    def _check_profile_writer(self):
+        binding = self._profile_binding()
+        if binding is not None:
+            require_write(binding.executor, 'conversations.update_profile')
+        return binding
+
     def register(self,router):
         for method,path,action in (
             ('GET','/api/conversations','list'),('POST','/api/conversations','create'),
@@ -53,7 +84,16 @@ class ConversationService:
                     items.append(dict(row.to_dict(),running=active))
                 return json_response(200,{'conversations':items})
             if action in ('delete','delete_batch'):raise ConversationUnavailable()
-            if key is not None and self.store.get(key) is None:raise ConversationMissing()
+            if action == 'profile':
+                binding = self._check_profile_writer()
+            if key is not None:
+                if action == 'profile' and binding is not None:
+                    row = _PROFILE_GET(self._profile_store, key)
+                else:
+                    row = self.store.get(key)
+                if action == 'profile':
+                    self._check_profile_writer()
+                if row is None:raise ConversationMissing()
             if len(request.body)>64<<10:return error_response(413,'Request body too large')
             data=json.loads(request.body,object_pairs_hook=_pairs,parse_constant=lambda _:(_ for _ in ()).throw(ConversationInvalid()))
             if not isinstance(data,dict):raise ConversationInvalid()
@@ -66,7 +106,13 @@ class ConversationService:
                 return json_response(200,self.store.create(agent,title,profile).to_dict())
             if action=='profile':
                 if set(data)!={'llm_profile_id'}:raise ConversationInvalid()
-                self._profile(data['llm_profile_id']);self.store.update_profile(key,data['llm_profile_id'])
+                profile = data['llm_profile_id']
+                self._profile(profile)
+                self._check_profile_writer()
+                if binding is None:
+                    self.store.update_profile(key, profile)
+                else:
+                    _PROFILE_UPDATE(self._profile_store, key, profile, transaction_coordination=binding)
                 return json_response(200,{'ok':True})
             result=self.store.patch(key,data)
             if result is None:raise ConversationMissing()
