@@ -36,7 +36,11 @@ CREATE TABLE IF NOT EXISTS artex_assessment_sources (
 CREATE TABLE IF NOT EXISTS artex_assessment_observations (
  assessment_id TEXT NOT NULL REFERENCES artex_assessments(id), operation TEXT NOT NULL,
  result JSONB NOT NULL, run_id BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
- PRIMARY KEY(assessment_id,operation));'''
+ PRIMARY KEY(assessment_id,operation));
+CREATE TABLE IF NOT EXISTS artex_assessment_extension_results (
+ assessment_id TEXT NOT NULL REFERENCES artex_assessments(id),tool TEXT NOT NULL,
+ arguments JSONB NOT NULL,result TEXT NOT NULL,run_id BIGINT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(assessment_id,tool));'''
 COLS='id,definition,version,origin,credential_ref,task_id,state,report'
 
 def decode(row):
@@ -93,3 +97,9 @@ class AssessmentStore:
 
     def state(self,identifier,state):
         self.executor.execute(Query('UPDATE artex_assessments SET state=$2 WHERE id=$1',(identifier,state)))
+
+    def extension_results(self,identifier):
+        return {name:dict(arguments=args,result=result,run_id=run_id) for name,args,result,run_id in self.executor.fetch_all(Query('SELECT tool,arguments,result,run_id FROM artex_assessment_extension_results WHERE assessment_id=$1 ORDER BY tool',(identifier,)))}
+
+    def observe_extension(self,identifier,name,args,result,run_id):
+        self.executor.execute(Query('INSERT INTO artex_assessment_extension_results(assessment_id,tool,arguments,result,run_id) VALUES($1,$2,$3::jsonb,$4,$5) ON CONFLICT DO NOTHING',(identifier,name,json.dumps(args),result,run_id)))

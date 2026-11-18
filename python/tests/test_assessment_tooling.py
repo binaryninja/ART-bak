@@ -96,16 +96,33 @@ class Tests(unittest.TestCase):
             manifest=root/'bad.json';manifest.write_text(json.dumps({'version':1,'tools':[{'name':'outside','kind':'http','description':'outside','schema':{'type':'object','properties':{},'additionalProperties':False},'read_only':True,'allowed_origins':['https://other.service-now.com'],'path':'/'}]}))
             with self.assertRaises(ValueError):ExtensionHost(root/'other',[ORIGIN],manifest)
 
+    def test_required_extensions_cannot_disappear_and_need_matching_evidence(self):
+        from artex.assessments.runtime import AssessmentRuntime
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);manifest=root/'extensions.json'
+            manifest.write_text(json.dumps({'version':1,'tools':[{'name':'robots','kind':'http','description':'Read robots','schema':{'type':'object','properties':{},'additionalProperties':False},'read_only':True,'allowed_origins':[ORIGIN],'path':'/robots.txt','run_for':[SERVICENOW.key],'arguments':{}}]}))
+            host=ExtensionHost(root/'artifacts',[ORIGIN],manifest)
+            self.assertEqual(host.required(SERVICENOW.key,ORIGIN,{'robots','ExecuteExtraTool'}),{'robots':{}})
+            for enabled in ({'robots'},{'ExecuteExtraTool'}):
+                with self.assertRaises(PermissionError):host.required(SERVICENOW.key,ORIGIN,enabled)
+            stored={};runtime=SimpleNamespace(required_extensions=lambda record:{'robots':{}},store=SimpleNamespace(extension_results=lambda identifier:stored))
+            self.assertFalse(AssessmentRuntime.extensions_complete(runtime,{'id':'assessment'}))
+            stored['robots']={'arguments':{'changed':True}}
+            self.assertFalse(AssessmentRuntime.extensions_complete(runtime,{'id':'assessment'}))
+            stored['robots']['arguments']={}
+            self.assertTrue(AssessmentRuntime.extensions_complete(runtime,{'id':'assessment'}))
+
     def test_mcp_bridge_validates_schema_and_injects_only_the_admitted_target(self):
         remote_schema={'type':'object','properties':{'url':{'type':'string'}},'required':['url'],'additionalProperties':False}
         spec={'kind':'mcp','name':'remote_metadata','description':'Read metadata','schema':{'type':'object','properties':{},'additionalProperties':False},'read_only':True,'allowed_origins':[ORIGIN],'server':'metadata','url':'https://mcp.example.invalid/mcp','remote_tool':'inspect','remote_schema':remote_schema,'target_parameter':'url'}
-        calls=[]
+        calls=[];cancel_after_call=False
         class Connection:
             def __init__(self,host,port,**kw):self.frame=None;self.method=None;self.host=host
             def request(self,method,path,body,headers):
                 self.method=method;self.frame=json.loads(body) if body else {};calls.append((self.host,method,path,self.frame))
             def getresponse(self):
                 f=self.frame;method=f.get('method')
+                if cancel_after_call and method=='tools/call':context.cancelled=True
                 result={'initialize':{'protocolVersion':'2025-06-18','capabilities':{},'serverInfo':{'name':'test','version':'1'}},'tools/list':{'tools':[{'name':'inspect','description':'Inspect','inputSchema':remote_schema}]},'tools/call':{'content':[{'type':'text','text':'metadata'}]}}.get(method,{})
                 body=json.dumps({'jsonrpc':'2.0','id':f.get('id'),'result':result}).encode()
                 return SimpleNamespace(status=200,read=lambda n:body[:n],getheaders=lambda:[('Content-Type','application/json'),('Mcp-Session-Id','test-session')])
@@ -119,6 +136,12 @@ class Tests(unittest.TestCase):
             request_frame=next(frame for _,_,_,frame in calls if frame.get('method')=='tools/call')
             self.assertEqual(request_frame['params'],{'name':'inspect','arguments':{'url':ORIGIN}})
             self.assertTrue(all(hostname=='mcp.example.invalid' and path=='/mcp' for hostname,_,path,_ in calls))
+            self.assertEqual(calls[-1][1],'DELETE')
+            cancel_after_call=True
+            def cancellation(c):
+                if getattr(c,'cancelled',False):raise RunStopped('cancelled')
+            with patch('artex.assessments.extensions.http.client.HTTPSConnection',Connection),self.assertRaises(RunStopped):
+                host._mcp(spec,scope,context,{'origin':ORIGIN,'host':'dev366312.service-now.com'},cancellation,nullcontext)
             self.assertEqual(calls[-1][1],'DELETE')
 
 if __name__=='__main__':unittest.main()

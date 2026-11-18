@@ -38,7 +38,7 @@ class ExtensionHost:
         self.root=Path(root);self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         if not self.root.is_absolute() or self.root.resolve()!=self.root:raise ValueError('Canonical artifact root required')
         self.allowed=frozenset(instance_origin(x) for x in allowed_origins)
-        self.specs={};self.hashes={};self.secrets=[]
+        self.specs={};self.hashes={};self.secrets=[];self._headers={}
         if manifest is not None:
             p=Path(manifest)
             if not p.is_absolute() or p.resolve()!=p or p.stat().st_size>1048576:raise ValueError('Canonical bounded extension manifest required')
@@ -60,6 +60,10 @@ class ExtensionHost:
         if schema['type']!='object' or schema.get('additionalProperties') is not False or set(schema.get('properties',{}))&{'origin','host'}:raise ValueError('Closed input schema required')
         origins=spec.get('allowed_origins')
         if not isinstance(origins,list) or not origins or not set(origins)<=self.allowed:raise ValueError('Extension target scope exceeds host scope')
+        run_for=spec.get('run_for',[])
+        from .definitions import DEFINITIONS
+        if not isinstance(run_for,list) or set(run_for)-set(DEFINITIONS):raise ValueError('Unknown automatic assessment binding')
+        if run_for:_validate(spec.get('arguments',{}),schema)
         if kind in ('command','script'):
             argv=spec.get('argv')
             if not isinstance(argv,list) or not 1<=len(argv)<=64 or any(not isinstance(x,str) or '\0' in x or len(x)>4096 for x in argv):raise ValueError('Explicit bounded argv required')
@@ -85,10 +89,16 @@ class ExtensionHost:
             for envname in spec.get('headers_env',{}).values():
                 if not isinstance(envname,str) or envname not in os.environ:raise ValueError('Missing MCP credential environment')
                 self.secrets.append(os.environ[envname])
+            self._headers[name]={header:os.environ[envname] for header,envname in spec.get('headers_env',{}).items()}
         self.specs[name]=spec
 
     def current(self):
         return all(executable(path)==digest for path,digest in self.hashes.items())
+
+    def required(self,definition,origin,enabled):
+        required={name:deepcopy(spec.get('arguments',{})) for name,spec in self.specs.items() if definition in spec.get('run_for',[]) and origin in spec['allowed_origins']}
+        if required and not (set(required)|{'ExecuteExtraTool'})<=set(enabled):raise PermissionError('Required assessment extension is disabled')
+        return required
 
     def redact(self,text):
         for value in self.secrets:
@@ -178,16 +188,18 @@ class ExtensionHost:
         def transport(request):
             # The MCP server is explicitly configured infrastructure. Its tool
             # receives the admitted target; it cannot redirect its own session.
-            check(context)
             if request.url!=endpoint or request.method not in ('POST','DELETE'):raise PermissionError('MCP endpoint changed')
-            conn=http.client.HTTPSConnection(parsed.hostname,parsed.port or 443,timeout=min(20,context.remaining_seconds()),context=ssl.create_default_context())
+            cleanup=request.method=='DELETE'
+            if not cleanup:check(context)
+            conn=http.client.HTTPSConnection(parsed.hostname,parsed.port or 443,timeout=5 if cleanup else min(20,context.remaining_seconds()),context=ssl.create_default_context())
             try:
                 conn.request(request.method,parsed.path+('?' + parsed.query if parsed.query else ''),body=request.body,headers=dict(request.headers))
                 response=conn.getresponse();body=response.read(1048577)
                 if len(body)>1048576:raise ValueError('MCP response limit')
-                check(context);return HTTPResponse(response.status,dict(response.getheaders()),body)
+                if not cleanup:check(context)
+                return HTTPResponse(response.status,dict(response.getheaders()),body)
             finally:conn.close()
-        headers={name:os.environ[envname] for name,envname in spec.get('headers_env',{}).items()}
+        headers=dict(self._headers[spec['name']])
         client=Client(spec['server'],endpoint,transport=transport,headers=headers)
         try:
             client.initialize();remote=next((t for t in client.tools() if t.name==spec['remote_tool']),None)

@@ -35,6 +35,7 @@ def register(runtime,app):
         value['exploration_id']=runtime.pool.fetch_one(Query('SELECT exploration_id FROM tasks WHERE id=$1',(record['task_id'],)))[0]
         value['tool_calls']=dict(runtime.pool.fetch_all(Query('SELECT status,count(*) FROM artex_tool_calls WHERE task_id=$1 GROUP BY status',(record['task_id'],))))
         value['observations']=runtime.store.observations(record['id'])
+        value['extensions']=runtime.store.extension_results(record['id'])
         value['sources']=[row[0] for row in runtime.pool.fetch_all(Query('SELECT source FROM artex_assessment_sources WHERE assessment_id=$1',(record['id'],)))]
         value['sessions']=[dict(session_id=s,worker=w,calls=n) for s,w,n in runtime.pool.fetch_all(Query('SELECT session_id,worker,count(*) FROM llm_records WHERE task_id=$1 GROUP BY session_id,worker ORDER BY session_id',(str(record['task_id']),)))]
         value['retained']=runtime.manager.retirement_snapshot(str(record['task_id']))[2:]

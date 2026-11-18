@@ -95,6 +95,8 @@ class AssessmentRuntime:
         graph={role:[row for row in self.catalog_snapshot if row.key in GRAPH_SCHEMAS and row.enabled and role in row.agents] for role in ('planner','worker')}
         if not all(any(row.key==name and row.enabled and role in row.agents for row in self.catalog_snapshot) for name,role in (('set_goals','goals'),('add_intent','planner'))):raise ValueError('Required framework tools are disabled')
         if not {TOOL_NAME,'run_assessment','finish_assessment'}<={row.key for row in self.catalog}:raise ValueError('Required assessment tools are disabled')
+        for definition in DEFINITIONS:
+            for origin in self.store.allowed_origins:self.extensions.required(definition,origin,{row.key for row in self.catalog})
         domain=DomainTools('assessments-v2-'+self.extensions.revision,self.catalog,self.bind_tools)
         assembly=TaskRuntimeAssembly(pool,providers=resolver,transcript=ChatTranscriptAdapter(TranscriptStore(str(transcript_root))),
             prompts=PROMPTS,policy_revision='assessments-v1',current=self.current,lifecycle_guard=self.lifecycle,
@@ -170,6 +172,13 @@ class AssessmentRuntime:
         for inventory in tuple(self._inventories.values()):value=inventory.redact(value)
         return self.extensions.redact(self.credentials.redact(value))
 
+    def required_extensions(self,record):
+        return self.extensions.required(record['definition'],record['origin'],{row.key for row in self.catalog})
+
+    def extensions_complete(self,record):
+        stored=self.store.extension_results(record['id'])
+        return all(name in stored and stored[name]['arguments']==arguments for name,arguments in self.required_extensions(record).items())
+
     def record_provider(self,scope,role,binding):
         fixed=RecordingScope(str(scope.task_id),scope.session_id,role,binding.model.model,binding.model.name,scope.exploration_id)
         inner=binding.provider
@@ -190,7 +199,7 @@ class AssessmentRuntime:
                     name='add_intent' if len(intents)<spec.max_intents and not any(n.state in ('open','running') for n in intents) and any(n.state!='met' for n in graph.list_by_kind('goal')) else None
                 else:
                     row=runtime.store.for_task(scope.task_id)
-                    name=None if row['report'] is not None else ('finish_assessment' if set(runtime.store.observations(row['id']))==set(DEFINITIONS[row['definition']].operations) else 'run_assessment')
+                    name=None if row['report'] is not None else ('finish_assessment' if set(runtime.store.observations(row['id']))==set(DEFINITIONS[row['definition']].operations) and runtime.extensions_complete(row) else 'run_assessment')
                 request['tool_choice']='required' if name else 'none'
                 if name:
                     names={name}
@@ -237,14 +246,24 @@ class AssessmentRuntime:
             for operation in definition.operations:
                 action=Action('tool',TOOL_NAME,json.dumps({'resource':operation}),parent.call_id+':'+operation)
                 ToolLedger.invoke(context,action,lambda operation=operation:inspect(context,{'resource':operation}),events)
+            for name,arguments in self.required_extensions(record).items():
+                with guard():
+                    check(context);prior=self.store.extension_results(record['id']).get(name)
+                    if prior is not None:
+                        if prior['arguments']!=arguments:raise PermissionError('Required extension arguments changed')
+                        continue
+                    result=extension_tools['ExecuteExtraTool'].callback(context,{'name':name,'arguments':arguments})
+                    check(context);self.store.observe_extension(record['id'],name,arguments,self.redact(result),scope.run_id)
             observations=self.store.observations(record['id'])
-            return json.dumps(dict(observations=model_observations(observations),capabilities=capabilities(observations,self.inventory(record).username)))
+            return json.dumps(dict(observations=model_observations(observations),capabilities=capabilities(observations,self.inventory(record).username),extensions={name:value['result'][:1000] for name,value in self.store.extension_results(record['id']).items()}))
         def finish(context,args):
             with guard():
                 check(context);observations=self.store.observations(record['id'])
                 if set(observations)!=set(definition.operations):raise ValueError('Assessment inventory incomplete')
+                extensions=self.store.extension_results(record['id'])
+                if not self.extensions_complete(record):raise ValueError('Required extension evidence incomplete')
                 report=dict(definition=definition.key,version=definition.version,origin=record['origin'],revision=self.revision,source_sha256=self.source_sha256,run_id=scope.run_id,
-                    capabilities=capabilities(observations,self.inventory(record).username),summary=self.redact(args['summary']),observations=observations)
+                    capabilities=capabilities(observations,self.inventory(record).username),summary=self.redact(args['summary']),observations=observations,extensions=extensions,extensions_revision=self.extensions.revision,required_extensions=self.required_extensions(record))
                 with self.pool.transaction() as tx:
                     row=tx.fetch_one(Query('SELECT report FROM artex_assessments WHERE id=$1 FOR UPDATE',(record['id'],)))
                     if row[0] is not None:return 'Assessment report already persisted.'
@@ -258,9 +277,10 @@ class AssessmentRuntime:
                 return 'Assessment report persisted; inventory goal proven.'
         valid_empty=lambda args:type(args) is dict and not args
         valid_finish=lambda args:type(args) is dict and set(args)=={'summary'} and isinstance(args['summary'],str) and len(args['summary'].encode())<=32768
+        extension_tools={tool.name:tool for tool in self.extensions.bind(self,scope,record,check,guard,events)}
         tools=(Tool(TOOL_NAME,'Inspect one approved ServiceNow resource.',SCHEMA,inspect,valid_input),
             Tool('run_assessment','Run all remaining approved checks for this assessment.',EMPTY,run,valid_empty),
-            Tool('finish_assessment','Persist the complete assessment report and prove its inventory goal.',FINISH,finish,valid_finish))+toolkit.bind(self,scope,record,check,guard)+self.extensions.bind(self,scope,record,check,guard,events)
+            Tool('finish_assessment','Persist the complete assessment report and prove its inventory goal.',FINISH,finish,valid_finish))+toolkit.bind(self,scope,record,check,guard)+tuple(extension_tools.values())
         return tuple(tool for tool in tools if tool.name in {row.key for row in self.catalog})
 
     def submit(self,definition,url,credential_ref='',source=None,request_id='',retry_authentication=False):

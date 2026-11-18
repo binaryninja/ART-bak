@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--instance',required=True)
     parser.add_argument('--credential-ref',default='')
     parser.add_argument('--expected-access',choices=SERVICENOW.access_levels)
+    parser.add_argument('--expected-extension',action='append',default=[])
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     if args.api_origin!='http://127.0.0.1:8787':raise ValueError('Explicit local acceptance API required')
@@ -36,6 +37,7 @@ def main():
         task=connection.execute('SELECT status,completed_at,exploration_id FROM tasks WHERE id=%s',(int(task_id),)).fetchone()
         identifier,report=connection.execute('SELECT id,report FROM artex_assessments WHERE task_id=%s',(int(task_id),)).fetchone()
         observations=dict(connection.execute('SELECT operation,result FROM artex_assessment_observations WHERE assessment_id=%s',(identifier,)).fetchall())
+        extensions={name:dict(arguments=arguments,result=result,run_id=generation) for name,arguments,result,generation in connection.execute('SELECT tool,arguments,result,run_id FROM artex_assessment_extension_results WHERE assessment_id=%s',(identifier,)).fetchall()}
         run_id,phase=connection.execute('SELECT run_id,phase FROM artex_task_bootstrap WHERE task_id=%s',(int(task_id),)).fetchone()
         records=connection.execute('SELECT id,worker,model,status,request_body,response_body FROM llm_records WHERE task_id=%s ORDER BY id',(task_id,)).fetchall()
         goals=connection.execute("SELECT state FROM exploration_nodes WHERE exploration_id=%s AND kind='goal'",(task[2],)).fetchall()
@@ -43,10 +45,14 @@ def main():
         usage=connection.execute('SELECT tool_key,count(*) FROM tool_usage WHERE task_id=%s GROUP BY tool_key',(int(task_id),)).fetchall()
     assert task[0]=='done' and task[1] is not None
     assert set(observations)==set(SERVICENOW.operations) and report['observations']==observations
+    assert report['extensions']==extensions
+    assert set(args.expected_extension)<=set(report['required_extensions'])
+    assert all(name in extensions and extensions[name]['arguments']==arguments and extensions[name]['run_id']==run_id for name,arguments in report['required_extensions'].items())
     assert run_id==report['run_id'] and phase=='prepared' and goals and all(row[0]=='met' for row in goals)
     if args.expected_access:assert report['capabilities']['access_level']==args.expected_access
     assert ledger and all(row[1]=='completed' and row[2:6]==('tool_use','tool_result',True,True) and row[6]==run_id and row[7] is not None for row in ledger)
     assert dict(usage).get('inspect_servicenow',0)>=len(SERVICENOW.operations)
+    assert all(dict(usage).get(name,0)>=1 for name in report['required_extensions'])
     history=request('/commands?task='+str(task[2])+'&size=25');stats=request('/commands/stats?task='+str(task[2]))['stats']
     assert history['total']==len(ledger) and {'set_goals','add_intent','run_assessment','finish_assessment','inspect_servicenow'}<={row['tool'] for row in stats}
     assert sum(row['total'] for row in stats)==len(ledger)
@@ -64,7 +70,7 @@ def main():
     evidence={'receipt':receipt,'revision':report['revision'],'source_sha256':report['source_sha256'],'run_id':run_id,
         'models':sorted({row[2] for row in records}),'record_ids':[row[0] for row in records],
         'task_status':task[0],'completed_at':task[1].isoformat(),'operations':{k:v.get('status') for k,v in observations.items()},
-        'capabilities':report['capabilities'],'tool_calls':len(ledger),'tool_usage':dict(usage),'settlement':settlement}
+        'capabilities':report['capabilities'],'extensions':extensions,'extensions_revision':report['extensions_revision'],'tool_calls':len(ledger),'tool_usage':dict(usage),'settlement':settlement}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print(json.dumps({'task_id':task_id,'run_id':run_id,'status':'done','evidence':str(args.output)}))
 

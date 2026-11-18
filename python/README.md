@@ -153,6 +153,13 @@ runtime; restart with the reviewed manifest and schema installation to adopt
 them. `SearchExtraTools` exposes the available schemas and `ExecuteExtraTool`
 invokes one exact registered tool.
 
+To make an extension mandatory for an assessment definition, add
+`"run_for": ["servicenow.inventory"]` and a schema-valid `"arguments": {}`
+to its entry. The shared `run_assessment` callback executes it through the
+extension gateway, records its tool activity, and persists its result. Report
+completion requires every bound extension's evidence. A disabled required
+extension or gateway prevents runtime startup.
+
 For example, after placing an authorized evidence file at
 `<state-root>/artifacts/evidence.txt`, this entry runs the installed checksum
 utility with a fixed, separately quoted argument:
@@ -179,8 +186,10 @@ path. Both files are hash-pinned. Arguments may reference schema properties or
 the host-owned `{origin}` and `{host}` values. Processes use an explicit
 environment, bounded output, deadlines, and the existing foreground process-group
 runner. Configure only trusted programs whose effects fit the declared operation.
-`http` entries use `method: "GET"` and an origin-relative `path`; placeholders
-are URL-encoded and redirects are not followed. `mcp` entries specify an HTTPS
+`http` entries use `method: "GET"` and a fixed origin-relative path; query-value
+placeholders are URL-encoded and redirects are not followed. Set
+`authentication: "assessment"` to use the admitted account's private session for
+that declared path. `mcp` entries specify an HTTPS
 `url`, `server`, `remote_tool`, exact `remote_schema`, and `target_parameter` into
 which the admitted origin is injected. Optional `headers_env` maps header names
 to credential environment-variable names. The existing MCP bridge verifies the

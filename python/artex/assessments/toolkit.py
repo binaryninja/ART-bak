@@ -41,6 +41,8 @@ def bind(runtime,scope,record,check,guard):
                 if 'records' in result:
                     offset=args.get('offset',0);limit=args.get('limit',10);rows=result['records']
                     result.update(records=rows[offset:offset+limit],stored_record_count=len(rows),offset=offset)
+                    while result['records'] and len(json.dumps(result).encode())>60000:result['records'].pop()
+                    result['next_offset']=offset+len(result['records']) if offset+len(result['records'])<len(rows) else None
             elif name=='report_finding':
                 selected=sorted(set(args['operations']))
                 if any(k not in observations or observations[k].get('status')!=200 for k in selected):raise ValueError('Successful persisted evidence required')
@@ -54,6 +56,8 @@ def bind(runtime,scope,record,check,guard):
                     check(context)
                 result={'finding_id':str(identifier),'node_id':str(node),'status':'pending'}
             else:raise ValueError('Unknown assessment tool')
+            if name=='list_assets':
+                while result['assets'] and len(json.dumps(result,default=str).encode())>60000:result['assets'].pop();result['output_limited']=True
             check(context);return runtime.redact(json.dumps(result,default=str))
     def validate(name,args):_validate(args,SCHEMAS[name]);return True
     return tuple(Tool(k,DESCRIPTIONS[k],deepcopy(s),lambda c,a,k=k:execute(k,c,a),lambda a,k=k:validate(k,a)) for k,s in SCHEMAS.items())
