@@ -75,16 +75,27 @@ the separate `qa` extra. This runs authored tests only, not a database.
 
 The assessment launcher uses the shared `TaskRuntimeAssembly`, bootstrap journal,
 `EngineRunner`, planner/worker tool registry, and `AgentHost`. The first registered
-definition is `servicenow.inventory` v2. It accepts an approved HTTPS instance URL
+definition is `servicenow.inventory` v3. It accepts an approved HTTPS instance URL
 and optional host-private credential reference. Its named GET operations discover
 identity, roles, public pages, build metadata, applications, tables, and scripted
-REST API metadata. Its 19 registered checks also cover application scopes,
+REST API metadata. Its 26 registered checks also cover application scopes,
 delegated developers, integration metadata, ACL definitions and role bindings,
 role inheritance, scripted REST authentication settings, and selected security
-properties. Checks declare their required observed capability. Table reads use
-stable ordering, at most five 100-row pages, per-page hashes, and explicit
+properties, REST API versions and full operation URIs, installed data-broker
+types, all visible data brokers, and REST/external REST/GraphQL broker metadata.
+The `api_scripts` evidence stores each accessible REST operation's full source,
+source hashes, operation ID and URI, and authentication/ACL requirements. Source
+pages adapt downward from 25 rows when necessary. The model initially receives
+source metadata; `read_assessment_evidence` can retrieve bounded source chunks.
+Checks declare their required observed capability. Table reads use stable
+ordering, 250-row pages, a default 10,000-row scan limit (50,000 for API and
+data-broker metadata), per-page hashes, and explicit
 completeness/limit evidence. Reports distinguish completed inventory from
-authenticated access and record denied or truncated reads.
+authenticated access and record denied or truncated reads. Use
+`--inventory-page-size`, `--inventory-max-records`, and
+`--inventory-large-max-records` to configure larger installations. The server's
+reported check definitions and each persisted report record the effective limits.
+Enumeration reads metadata only; it does not invoke discovered endpoints or brokers.
 
 ```sh
 PYTHONPATH=python python -m artex.assessment_server \

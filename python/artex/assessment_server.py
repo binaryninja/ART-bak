@@ -15,6 +15,7 @@ from .assessments.credentials import CredentialStore
 from .assessments.store import DDL,AssessmentStore
 from .assessments.runtime import AssessmentRuntime,DOMAIN_CATALOG,FRAMEWORK_CATALOG
 from .assessments.extensions import ExtensionHost
+from .recon.servicenow import EnumerationPolicy
 from .db.pool import ExecutorPool
 from .db.profiles import ProfileStore
 from .db.core import Query
@@ -51,7 +52,7 @@ def reconcile_before_inventory(pool,task_ids):
     """Explicit recovery under the launcher's exclusive database owner lock."""
     for task_id in task_ids:
         with pool.transaction() as tx:
-            row=tx.fetch_one(Query("SELECT a.id,t.exploration_id,t.status FROM artex_assessments a JOIN tasks t ON t.id=a.task_id WHERE t.id=$1 AND a.version IN (1,2) FOR UPDATE OF a,t",(task_id,)))
+            row=tx.fetch_one(Query("SELECT a.id,t.exploration_id,t.status FROM artex_assessments a JOIN tasks t ON t.id=a.task_id WHERE t.id=$1 AND a.version IN (1,2,3) FOR UPDATE OF a,t",(task_id,)))
             if row is None or row[2]!='running':raise RuntimeError('Recovery task is not an abandoned assessment')
             identifier,exploration_id,_=row
             if tx.fetch_all(Query('SELECT 1 FROM artex_assessment_observations WHERE assessment_id=$1 LIMIT 1',(identifier,))):raise RuntimeError('Inventory effects require separate reconciliation')
@@ -68,6 +69,9 @@ def main(argv=None):
     parser.add_argument('--allow-origin',action='append',required=True)
     parser.add_argument('--state-root',type=Path,required=True)
     parser.add_argument('--extensions-file',type=Path)
+    parser.add_argument('--inventory-page-size',type=int,default=250)
+    parser.add_argument('--inventory-max-records',type=int,default=10000)
+    parser.add_argument('--inventory-large-max-records',type=int,default=50000)
     parser.add_argument('--port',type=int,default=8787)
     parser.add_argument('--install-schema',action='store_true')
     parser.add_argument('--migrate-legacy',action='store_true')
@@ -75,6 +79,7 @@ def main(argv=None):
     parser.add_argument('--denied-password-file',type=Path)
     parser.add_argument('--denied-username',default='admin')
     args=parser.parse_args(argv)
+    enumeration=EnumerationPolicy(args.inventory_page_size,args.inventory_max_records,args.inventory_large_max_records)
     dsn,key=_configuration(os.environ)
     root=args.state_root
     if not root.is_absolute() or root.resolve()!=root:raise ValueError('Absolute canonical state root required')
@@ -100,7 +105,7 @@ def main(argv=None):
         if profile is None:raise ValueError('Stored provider profile required')
         digest=hashlib.sha256()
         for path in sorted(Path(__file__).parent.rglob('*.py')):digest.update(str(path.relative_to(Path(__file__).parent)).encode()+b'\0'+path.read_bytes())
-        runtime=AssessmentRuntime(pool,profile,os.environ[args.api_key_env],credentials,transcripts,args.allow_origin,key,BcryptCodec(),revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=digest.hexdigest(),extensions=extensions)
+        runtime=AssessmentRuntime(pool,profile,os.environ[args.api_key_env],credentials,transcripts,args.allow_origin,key,BcryptCodec(),revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=digest.hexdigest(),extensions=extensions,enumeration=enumeration)
         app=register(runtime,runtime.bundle.app)
         config=DevListenerConfig(args.port,8,30,'http://127.0.0.1:3000');config.validate()
         server=make_server('127.0.0.1',args.port,app,server_class=_BoundedServer,handler_class=QuietRuntimeHandler)

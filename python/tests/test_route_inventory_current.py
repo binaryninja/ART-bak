@@ -73,6 +73,7 @@ class CurrentCheckoutTests(unittest.TestCase):
                           ('POST', '/api/assessments'),
                           ('POST', '/api/assessments/discover'),
                           ('GET', '/api/tasks/{id}/assessment'),
+                          ('GET', '/api/tasks/{id}/assessment/evidence/{operation}'),
                           ('POST', '/api/llm/profiles/reconcile'),
                           ('GET', '/api/recon'),
                           ('POST', '/api/recon/campaigns'),

@@ -1,6 +1,7 @@
 """Generic assessment routes mounted on the existing authenticated task app."""
 from dataclasses import asdict
 from ..assessments.definitions import DEFINITIONS
+from ..assessments.runtime import model_observations
 from ..assessments.discovery import DiscoveryDispatcher
 from ..db.core import Query
 from .core import error_response,json_response
@@ -27,7 +28,7 @@ def register(runtime,app):
             except (ValueError,TypeError):return error_response(400,'Invalid history selector')
         def register(self,router):CommandHistoryService.register(self,router)
     HistoryRoutes().register(router)
-    def detail(record):
+    def detail(record,summary=False):
         if record is None:return None
         value={k:v for k,v in record.items() if k!='credential_ref'}
         value['has_credentials']=bool(record['credential_ref'])
@@ -35,6 +36,9 @@ def register(runtime,app):
         value['exploration_id']=runtime.pool.fetch_one(Query('SELECT exploration_id FROM tasks WHERE id=$1',(record['task_id'],)))[0]
         value['tool_calls']=dict(runtime.pool.fetch_all(Query('SELECT status,count(*) FROM artex_tool_calls WHERE task_id=$1 GROUP BY status',(record['task_id'],))))
         value['observations']=runtime.store.observations(record['id'])
+        if summary:
+            value['observations']=model_observations(value['observations'])
+            if value.get('report'):value['report']={k:v for k,v in value['report'].items() if k!='observations'}
         value['extensions']=runtime.store.extension_results(record['id'])
         value['sources']=[row[0] for row in runtime.pool.fetch_all(Query('SELECT source FROM artex_assessment_sources WHERE assessment_id=$1',(record['id'],)))]
         value['sessions']=[dict(session_id=s,worker=w,calls=n) for s,w,n in runtime.pool.fetch_all(Query('SELECT session_id,worker,count(*) FROM llm_records WHERE task_id=$1 GROUP BY session_id,worker ORDER BY session_id',(str(record['task_id']),)))]
@@ -60,15 +64,19 @@ def register(runtime,app):
     def handle(action,request,params):
         try:
             if action=='runtime':return json_response(200,dict(settlement=asdict(runtime.host.poll()),dispatcher_error=runtime.error,pump_error=runtime.bundle.pump.failure))
-            if action=='definitions':return json_response(200,{'definitions':[d.public() for d in DEFINITIONS.values()],'authorized_origins':sorted(runtime.store.allowed_origins)})
-            if action=='list':return json_response(200,{'assessments':[detail(r) for r in runtime.store.list()],'dispatcher_error':runtime.error,'pump_error':runtime.bundle.pump.failure,'pump_detail':runtime.bundle.pump.failure_detail})
+            if action=='definitions':return json_response(200,{'definitions':[d.public(runtime.enumeration) for d in DEFINITIONS.values()],'authorized_origins':sorted(runtime.store.allowed_origins)})
+            if action=='list':return json_response(200,{'assessments':[detail(r,True) for r in runtime.store.list()],'dispatcher_error':runtime.error,'pump_error':runtime.bundle.pump.failure,'pump_detail':runtime.bundle.pump.failure_detail})
             if action=='create':
                 definition,origin,ref,request_id,retry_authentication=request_data(request)
                 record=runtime.submit(definition,origin,ref,request_id=request_id,retry_authentication=retry_authentication)
                 return json_response(201,{'task_id':str(record['task_id']),'assessment_id':record['id']})
             if action=='detail':
-                result=detail(runtime.store.for_task(params['id']))
+                result=detail(runtime.store.for_task(params['id']),dict(parse_qsl(urlsplit(request.target).query)).get('summary')=='1')
                 return json_response(200,result) if result else error_response(404,'Assessment not found')
+            if action=='evidence':
+                record=runtime.store.for_task(params['id'])
+                result=runtime.store.observations(record['id']).get(params['operation']) if record else None
+                return json_response(200,result) if result is not None else error_response(404,'Assessment evidence not found')
             if action=='discover':
                 data=request.json_object()
                 if set(data)-{'text','label'}:raise ValueError('Unexpected discovery fields')
@@ -78,7 +86,7 @@ def register(runtime,app):
         except PermissionError:return error_response(403,'Assessment target or credential is outside scope')
         except (ValueError,KeyError,TypeError):return error_response(400,'Invalid assessment input')
         except Exception:return error_response(503,'Assessment outcome unavailable; inspect existing tasks before retrying')
-    for method,path,action in [('GET','/api/assessments/runtime','runtime'),('GET','/api/assessment-definitions','definitions'),('GET','/api/assessments','list'),('POST','/api/assessments','create'),('POST','/api/assessments/discover','discover'),('GET','/api/tasks/{id}/assessment','detail')]:
+    for method,path,action in [('GET','/api/assessments/runtime','runtime'),('GET','/api/assessment-definitions','definitions'),('GET','/api/assessments','list'),('POST','/api/assessments','create'),('POST','/api/assessments/discover','discover'),('GET','/api/tasks/{id}/assessment','detail'),('GET','/api/tasks/{id}/assessment/evidence/{operation}','evidence')]:
         router.add(method,path,lambda request,params,action=action:handle(action,request,params))
     from .tool_catalog import ToolCatalogService
     from ..db.tool_catalog import ToolCatalogStore

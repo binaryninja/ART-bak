@@ -26,7 +26,7 @@ from ..db.tool_catalog import CatalogTool,ToolCatalogStore
 from ..llmrec.postgres import PostgresRecorder,RecordingScope
 from ..providers.factory import ProfileFactory
 from ..providers.http import HTTPTransport
-from ..recon.servicenow import ServiceNowInventory,SCHEMA,TOOL_NAME,valid_input
+from ..recon.servicenow import ServiceNowInventory,SCHEMA,TOOL_NAME,valid_input,DEFAULT_ENUMERATION
 from ..server.task_runtime_setup import build_task_runtime_application
 from ..tools.graph import SCHEMAS as GRAPH_SCHEMAS
 from .definitions import DEFINITIONS,SERVICENOW,CHECKS,check_allowed,capabilities
@@ -58,9 +58,14 @@ def model_observations(observations):
     """Bound model context while retaining complete collected rows in the store."""
     result=deepcopy(observations)
     for value in result.values():
+        if len(value.get('pages',[]))>2:
+            pages=value['pages'];value['stored_page_count']=len(pages)
+            value['pages_sha256']=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest()
+            value['pages']=[pages[0],pages[-1]];value['page_sample']=True
         if isinstance(value.get('records'),list):
             value['stored_record_count']=len(value['records'])
             value['records']=value['records'][:5]
+            for row in value['records']:row.pop('operation_script',None)
             value['record_sample']=True
     while len(json.dumps(result).encode())>45000:
         candidates=[value for value in result.values() if value.get('records')]
@@ -69,9 +74,10 @@ def model_observations(observations):
     return result
 
 class AssessmentRuntime:
-    def __init__(self,pool,profile,provider_key,credentials,transcript_root,allowed_origins,signing_key,password_codec,*,revision,source_sha256="",application_options=None,extensions=None):
+    def __init__(self,pool,profile,provider_key,credentials,transcript_root,allowed_origins,signing_key,password_codec,*,revision,source_sha256="",application_options=None,extensions=None,enumeration=DEFAULT_ENUMERATION):
         self.pool,self.profile,self.credentials=pool,deepcopy(profile),credentials
         self.store=AssessmentStore(pool,allowed_origins)
+        self.enumeration=enumeration
         from pathlib import Path
         self.extensions=extensions or ExtensionHost(Path(transcript_root).parent/'artifacts',allowed_origins)
         if type(self.extensions) is not ExtensionHost or self.extensions.allowed!=self.store.allowed_origins:raise ValueError('Exact extension host scope required')
@@ -97,13 +103,14 @@ class AssessmentRuntime:
         if not {TOOL_NAME,'run_assessment','finish_assessment'}<={row.key for row in self.catalog}:raise ValueError('Required assessment tools are disabled')
         for definition in DEFINITIONS:
             for origin in self.store.allowed_origins:self.extensions.required(definition,origin,{row.key for row in self.catalog})
-        domain=DomainTools('assessments-v2-'+self.extensions.revision,self.catalog,self.bind_tools)
+        policy_digest=hashlib.sha256(json.dumps(asdict(enumeration),sort_keys=True).encode()).hexdigest()[:16]
+        domain=DomainTools('assessments-v3-'+self.extensions.revision+'-'+policy_digest,self.catalog,self.bind_tools)
         assembly=TaskRuntimeAssembly(pool,providers=resolver,transcript=ChatTranscriptAdapter(TranscriptStore(str(transcript_root))),
             prompts=PROMPTS,policy_revision='assessments-v1',current=self.current,lifecycle_guard=self.lifecycle,
             authorize=self.authorize,asset_authorize=lambda scope,ids,summary=None:Grant(not ids,not ids,not ids),
             validate_input=lambda scope,goal,description:self.current(scope.task_id,scope.exploration_id,'assessments-v1'),
             graph_catalog=graph,domain_tools=domain,provider_decorator=self.record_provider,
-            limits=Limits(max_turns=8,max_tokens=96000,max_seconds=600,max_tool_calls=40,max_tool_output_bytes=65536,max_request_bytes=524288),
+            limits=Limits(max_turns=8,max_tokens=96000,max_seconds=3600,max_tool_calls=40,max_tool_output_bytes=65536,max_request_bytes=524288),
             activity_authorize=lambda proposal:Grant(True,True,True))
         from ..db.asset_store import AssetStore
         from ..db.findings import FindingStore
@@ -159,7 +166,7 @@ class AssessmentRuntime:
             if record['id'] not in self._inventories:
                 user,password=self.credentials.get(record['credential_ref'],record['origin']) if record['credential_ref'] else ('','')
                 paths=tuple(urlsplit(s['path']).path for s in self.extensions.specs.values() if s['kind']=='http' and s.get('authentication')=='assessment' and record['origin'] in s['allowed_origins'] and s['name'] in {r.key for r in self.catalog})
-                item=ServiceNowInventory(user,password,origin=record['origin'],authorized_origins=self.store.allowed_origins,extra_read_paths=paths)
+                item=ServiceNowInventory(user,password,origin=record['origin'],authorized_origins=self.store.allowed_origins,extra_read_paths=paths,enumeration=self.enumeration)
                 if record['credential_ref']:
                     denials={row[0] for row in self.pool.fetch_all(Query('SELECT authentication_method FROM artex_assessment_denials WHERE credential_ref=$1',(record['credential_ref'],)))}
                     item._basic_denied='basic' in denials
@@ -224,7 +231,7 @@ class AssessmentRuntime:
                 check(context);resource=args['resource']
                 if resource not in definition.operations:raise PermissionError('Operation outside assessment definition')
                 existing=self.store.observations(record['id'])
-                if resource in existing:return json.dumps(existing[resource])
+                if resource in existing:return json.dumps(model_observations({resource:existing[resource]})[resource] if resource=='api_scripts' else existing[resource])
                 spec=CHECKS[resource]
                 if not check_allowed(spec,capabilities(existing,self.inventory(record).username),bool(record['credential_ref'])):
                     result={'resource':resource,'status':0,'requested':False,'error':'required_capability_unavailable','required_capability':spec.requires}
@@ -239,7 +246,7 @@ class AssessmentRuntime:
                     item=self.inventory(record)
                     for method,denied in (('basic',item._basic_denied),('session',item._authentication_denied)):
                         if denied:self.pool.execute(Query('INSERT INTO artex_assessment_denials(credential_ref,authentication_method) VALUES($1,$2) ON CONFLICT DO NOTHING',(record['credential_ref'],method)))
-                return json.dumps(result)
+                return json.dumps(model_observations({resource:result})[resource] if resource=='api_scripts' else result)
         def run(context,args):
             parent=context.get('_tool_action')
             if not isinstance(parent,Action):raise PermissionError('Owned tool invocation required')
@@ -263,7 +270,7 @@ class AssessmentRuntime:
                 extensions=self.store.extension_results(record['id'])
                 if not self.extensions_complete(record):raise ValueError('Required extension evidence incomplete')
                 report=dict(definition=definition.key,version=definition.version,origin=record['origin'],revision=self.revision,source_sha256=self.source_sha256,run_id=scope.run_id,
-                    capabilities=capabilities(observations,self.inventory(record).username),summary=self.redact(args['summary']),observations=observations,extensions=extensions,extensions_revision=self.extensions.revision,required_extensions=self.required_extensions(record))
+                    capabilities=capabilities(observations,self.inventory(record).username),summary=self.redact(args['summary']),observations=observations,enumeration_policy=asdict(self.enumeration),extensions=extensions,extensions_revision=self.extensions.revision,required_extensions=self.required_extensions(record))
                 with self.pool.transaction() as tx:
                     row=tx.fetch_one(Query('SELECT report FROM artex_assessments WHERE id=$1 FOR UPDATE',(record['id'],)))
                     if row[0] is not None:return 'Assessment report already persisted.'

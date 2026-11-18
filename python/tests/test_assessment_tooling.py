@@ -52,10 +52,10 @@ class Tests(unittest.TestCase):
         self.assertFalse(check_allowed(CHECKS['acl_definitions'],{'access_level':'unauthenticated'},True))
         self.assertFalse(check_allowed(CHECKS['integration_metadata'],{'access_level':'low_privilege'},True))
         self.assertTrue(check_allowed(CHECKS['acl_definitions'],{'access_level':'administrator'},True))
-        self.assertEqual(len(SERVICENOW.operations),19)
+        self.assertEqual(len(SERVICENOW.operations),26)
 
     def test_table_pagination_preserves_evidence_and_reports_completion(self):
-        paths=[];bodies=[{'result':[{'name':str(i)} for i in range(100)]},{'result':[{'name':'last'}]}]
+        paths=[];bodies=[{'result':[{'name':str(i)} for i in range(250)]},{'result':[{'name':'last'}]}]
         class Connection:
             def __init__(self,*a,**kw):pass
             def request(self,method,path,headers):paths.append(path)
@@ -65,8 +65,8 @@ class Tests(unittest.TestCase):
             def close(self):pass
         item=ServiceNowInventory('reader','private',connection_factory=Connection);item._http.interval=0
         result=json.loads(item.inspect(Context(),{'resource':'tables'}))
-        self.assertEqual(result['record_count'],101);self.assertEqual(result['completeness'],'complete')
-        self.assertEqual(len(result['pages']),2);self.assertIn('sysparm_offset=100',paths[1])
+        self.assertEqual(result['record_count'],251);self.assertEqual(result['completeness'],'complete')
+        self.assertEqual(len(result['pages']),2);self.assertIn('sysparm_offset=250',paths[1])
         self.assertTrue(all(p.startswith('/api/now/table/sys_db_object?') for p in paths))
 
     def test_named_script_executes_real_process_and_is_pinned(self):

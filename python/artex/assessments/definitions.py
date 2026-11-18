@@ -2,18 +2,18 @@
 from dataclasses import dataclass
 import re
 from urllib.parse import urlsplit
-from ..recon.servicenow import ALL_RESOURCES,TABLES,PAGES
+from ..recon.servicenow import ALL_RESOURCES,TABLES,PAGES,DEFAULT_ENUMERATION
 
 @dataclass(frozen=True)
 class Check:
     key:str
     requires:str
     description:str
-    def public(self):
+    def public(self,enumeration=DEFAULT_ENUMERATION):
         table=TABLES.get(self.key)
         return dict(key=self.key,requires=self.requires,description=self.description,method='GET',
             path=PAGES.get(self.key,'/api/now/table/'+table[0] if table else ''),
-            evidence_fields=table[1].split(',') if table else ['status','body_sha256'],max_pages=5 if table and self.key!='current_user' else 1)
+            evidence_fields=table[1].split(',') if table else ['status','body_sha256'],**(enumeration.public(self.key) if table else {'max_pages':1}))
 
 _REQUIRES={'current_user':'credential','roles':'credential','application_scopes':'elevated',
     'delegated_developers':'elevated','integration_metadata':'elevated',
@@ -48,11 +48,11 @@ class Definition:
     access_levels:tuple
     max_intents:int=3
 
-    def public(self):
-        return dict(key=self.key,version=self.version,name=self.name,operations=list(self.operations),access_levels=list(self.access_levels),max_intents=self.max_intents,checks=[CHECKS[k].public() for k in self.operations])
+    def public(self,enumeration=DEFAULT_ENUMERATION):
+        return dict(key=self.key,version=self.version,name=self.name,operations=list(self.operations),access_levels=list(self.access_levels),max_intents=self.max_intents,checks=[CHECKS[k].public(enumeration) for k in self.operations])
 
 
-SERVICENOW=Definition('servicenow.inventory',2,'ServiceNow read-only assessment',ALL_RESOURCES,
+SERVICENOW=Definition('servicenow.inventory',3,'ServiceNow read-only assessment',ALL_RESOURCES,
     ('unauthenticated','authenticated_unknown','low_privilege','elevated','administrator'))
 DEFINITIONS={SERVICENOW.key:SERVICENOW}
 
@@ -66,5 +66,5 @@ def capabilities(observations, username=''):
         level=('administrator' if 'admin' in roles else 'elevated' if any(r in roles for r in ('security_admin','itil_admin','app_engine_admin')) else 'low_privilege' if observations.get('roles',{}).get('status')==200 else 'authenticated_unknown')
     return dict(authenticated=authenticated,access_level=level,roles=roles,
                 readable=[k for k,v in observations.items() if v.get('status')==200],
-                limitations={k:v.get('error',v.get('pagination_error','bounded enumeration' if v.get('more_records_possible') else 'HTTP '+str(v.get('status')))) for k,v in observations.items() if v.get('status')!=200 or v.get('more_records_possible') or v.get('error')},
+                limitations={k:v.get('error',v.get('pagination_error','fields truncated' if v.get('fields_truncated') else 'bounded enumeration' if v.get('more_records_possible') else 'HTTP '+str(v.get('status')))) for k,v in observations.items() if v.get('status')!=200 or v.get('more_records_possible') or v.get('error') or v.get('fields_truncated')},
                 roles_complete=observations.get('roles',{}).get('completeness')=='complete')

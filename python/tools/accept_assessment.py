@@ -16,6 +16,8 @@ def main():
     parser.add_argument('--credential-ref',default='')
     parser.add_argument('--expected-access',choices=SERVICENOW.access_levels)
     parser.add_argument('--expected-extension',action='append',default=[])
+    parser.add_argument('--expected-complete',action='append',default=[])
+    parser.add_argument('--require-rest-source',action='store_true')
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     if args.api_origin!='http://127.0.0.1:8787':raise ValueError('Explicit local acceptance API required')
@@ -25,13 +27,13 @@ def main():
         with urlopen(req,timeout=30) as response:return json.load(response)
     receipt=request('/assessments',{'definition':SERVICENOW.key,'url':args.instance,'credential_ref':args.credential_ref,'request_id':str(uuid.uuid4())})
     task_id=receipt['task_id']
-    deadline=time.monotonic()+900
+    deadline=time.monotonic()+4500
     while time.monotonic()<deadline:
-        value=request('/tasks/'+task_id+'/assessment')
-        if value['task']['status'] in ('done','failed','timeout'):break
+        value=request('/tasks/'+task_id)
+        if value['status'] in ('done','failed','timeout'):break
         time.sleep(1)
     else:raise RuntimeError('Assessment did not settle')
-    if value['task']['status']!='done':raise RuntimeError('Assessment failed')
+    if value['status']!='done':raise RuntimeError('Assessment failed')
     import psycopg
     with psycopg.connect(os.environ['ARTEX_PG_DSN']) as connection:
         task=connection.execute('SELECT status,completed_at,exploration_id FROM tasks WHERE id=%s',(int(task_id),)).fetchone()
@@ -45,6 +47,13 @@ def main():
         usage=connection.execute('SELECT tool_key,count(*) FROM tool_usage WHERE task_id=%s GROUP BY tool_key',(int(task_id),)).fetchall()
     assert task[0]=='done' and task[1] is not None
     assert set(observations)==set(SERVICENOW.operations) and report['observations']==observations
+    for operation in args.expected_complete:assert observations[operation].get('completeness')=='complete',operation
+    if args.require_rest_source:
+        import hashlib
+        operations={row['sys_id'] for row in observations['api_resources']['records']}
+        sources={row['sys_id']:row for row in observations['api_scripts']['records']}
+        assert operations==set(sources) and sources
+        assert all(row['operation_script_available'] and hashlib.sha256(row['operation_script'].encode()).hexdigest()==row['stored_script_sha256'] for row in sources.values())
     assert report['extensions']==extensions
     assert set(args.expected_extension)<=set(report['required_extensions'])
     assert all(name in extensions and extensions[name]['arguments']==arguments and extensions[name]['run_id']==run_id for name,arguments in report['required_extensions'].items())
@@ -64,12 +73,12 @@ def main():
     assert any(observations['home']['body_sha256'] in row[4] for row in records if row[1]=='worker')
     while time.monotonic()<deadline:
         settlement=request('/assessments/runtime')['settlement']
-        if not any(request('/tasks/'+task_id+'/assessment')['retained']) and not settlement['busy'] and all(settlement[key]==0 for key in ('running','pending','deadline_owners','deadline_pending','continuation_owners','manager_only')):break
+        if not any(request('/tasks/'+task_id+'/assessment?summary=1')['retained']) and not settlement['busy'] and all(settlement[key]==0 for key in ('running','pending','deadline_owners','deadline_pending','continuation_owners','manager_only')):break
         time.sleep(1)
     else:raise RuntimeError('Assessment ownership remains')
     evidence={'receipt':receipt,'revision':report['revision'],'source_sha256':report['source_sha256'],'run_id':run_id,
         'models':sorted({row[2] for row in records}),'record_ids':[row[0] for row in records],
-        'task_status':task[0],'completed_at':task[1].isoformat(),'operations':{k:v.get('status') for k,v in observations.items()},
+        'task_status':task[0],'completed_at':task[1].isoformat(),'operations':{k:v.get('status') for k,v in observations.items()},'enumeration':{k:{field:v.get(field) for field in ('record_count','completeness','max_records','pagination_error','total_records_reported')} for k,v in observations.items() if 'record_count' in v},
         'capabilities':report['capabilities'],'extensions':extensions,'extensions_revision':report['extensions_revision'],'tool_calls':len(ledger),'tool_usage':dict(usage),'settlement':settlement}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print(json.dumps({'task_id':task_id,'run_id':run_id,'status':'done','evidence':str(args.output)}))
