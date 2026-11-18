@@ -63,30 +63,69 @@ export async function run(args) {
   }
   const fallback = app.getRequestHandler();
   const bridge = createSseBridge(config);
+  const log = (event, detail = "") => {
+    const stamp = new Date().toISOString();
+    console.error(`[preview ${stamp}] ${event}${detail ? ` ${detail}` : ""}`);
+  };
+  const requestPath = (req) => String(req.url ?? "").split("?", 1)[0] || "/";
+  // Trace every non-asset response, including SSE bridge rejections, without
+  // ever logging query strings or headers (they can carry session tokens).
+  const traceRequest = (req, res, startedAt) => {
+    res.on("finish", () => {
+      const path = requestPath(req);
+      if (path.startsWith("/_next/static/") || path.startsWith("/_next/image")) return;
+      log(`${req.method} ${path} -> ${res.statusCode} (${Date.now() - startedAt}ms)`);
+    });
+  };
+  const logHandlerError = (req, res, error) => {
+    log(
+      `handler error ${req.method} ${requestPath(req)}`,
+      `${error?.name ?? "Error"}: ${error?.message ?? "unknown"}\n${error?.stack ?? ""}`,
+    );
+    // Aborted or already-answered requests cannot receive a meaningful 503;
+    // destroying them would truncate an in-flight response.
+    if (req.destroyed || res.writableEnded || res.headersSent) return;
+    rejectRequest(res, 503);
+  };
   const server = createServer(
-    { maxHeaderSize: 16384, headersTimeout: 5000, requestTimeout: 10000, keepAliveTimeout: 1000 },
+    // keepAliveTimeout must outlive the browser's pooled-socket idle window.
+    // Closing sockets too eagerly races Chrome's connection reuse: a request
+    // written to a closing socket never fully arrives, requestTimeout fires,
+    // and the client sees a dead connection mid-navigation.
+    { maxHeaderSize: 16384, headersTimeout: 5000, requestTimeout: 10000, keepAliveTimeout: 5000 },
     (req, res) => {
+      const startedAt = Date.now();
+      traceRequest(req, res, startedAt);
       const status = frontendRequestStatus(req, config.frontendPort);
       if (status) {
+        log(`gate rejected ${req.method} ${requestPath(req)} -> ${status}`);
         rejectRequest(res, status);
         return;
       }
       if (bridge.handle(req, res)) return;
       try {
-        Promise.resolve(fallback(req, res)).catch(() => rejectRequest(res, 503));
-      } catch {
-        rejectRequest(res, 503);
+        Promise.resolve(fallback(req, res)).catch((error) => logHandlerError(req, res, error));
+      } catch (error) {
+        logHandlerError(req, res, error);
       }
     },
   );
   server.maxConnections = 32;
-  server.maxRequestsPerSocket = 1;
+  // Deliberately no maxRequestsPerSocket: one-request-per-socket closes forced
+  // a close/reuse race on every single request. Concurrency stays bounded by
+  // maxConnections, headersTimeout, requestTimeout, and keepAliveTimeout.
   server.on("checkContinue", (_req, res) => rejectRequest(res, 417));
   server.on("checkExpectation", (_req, res) => rejectRequest(res, 417));
   // No upgrade tunnelling, arbitrary TCP forwarding or claimed HMR support.
   server.on("upgrade", (_req, socket) => socket.destroy());
   server.on("connect", (_req, socket) => socket.destroy());
-  server.on("clientError", (_error, socket) => socket.destroy());
+  server.on("clientError", (error, socket) => {
+    log(`client error ${error?.code ?? error?.name ?? "unknown"}`);
+    // Send a real HTTP response instead of destroying the socket, so a browser
+    // mid-navigation receives a refreshable status rather than a dead socket.
+    const status = error?.code === "ERR_HTTP_REQUEST_TIMEOUT" ? "408 Request Timeout" : "400 Bad Request";
+    socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  });
   const { stop } = createDevelopmentShutdown({
     bridge,
     server,
