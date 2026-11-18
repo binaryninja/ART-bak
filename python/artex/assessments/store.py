@@ -67,6 +67,11 @@ class AssessmentStore:
         rows=self.executor.fetch_all(Query('SELECT '+COLS+' FROM artex_assessments WHERE task_id=$1',(int(task_id),)))
         return decode(rows[0]) if rows else None
 
+    def identity_for_task(self,task_id):
+        columns='id,definition,version,origin,credential_ref,task_id,state'
+        rows=self.executor.fetch_all(Query('SELECT '+columns+',report IS NOT NULL FROM artex_assessments WHERE task_id=$1',(int(task_id),)))
+        return dict(zip(columns.split(',')+['report_exists'],rows[0])) if rows else None
+
     def list(self):
         return [decode(row) for row in self.executor.fetch_all(Query('SELECT '+COLS+' FROM artex_assessments ORDER BY created_at DESC LIMIT 200'))]
 

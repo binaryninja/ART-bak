@@ -126,19 +126,19 @@ class AssessmentRuntime:
             capacity=1,max_pending=1,single_process=True,pump_interval=.2,application_options=options)
         self.manager,self.host,self.runner,self.facade=self.bundle.manager,self.bundle.host,self.bundle.runner,self.bundle.facade
         def metadata(task):
-            record=self.store.for_task(task['id'])
+            record=self.store.identity_for_task(task['id'])
             return dict(runtime_kind='assessment',assessment_type=record['definition'],assessment_version=record['version'],runtime_capabilities=['assessment','overview','lineage','report']) if record else {}
         self.manager.runtime_metadata=metadata
 
     def exploration(self,task_id):
-        if self.store.for_task(task_id) is None:return None
+        if self.store.identity_for_task(task_id) is None:return None
         row=TaskStore(self.pool).get(int(task_id))
         return ExplorationStore(self.pool,row.exploration_id) if row else None
 
     def configuration_current(self,snapshot):
         if snapshot.get('provisional'):return False
         try:
-            record=self.store.for_task(snapshot.get('task_id',snapshot.get('id')))
+            record=self.store.identity_for_task(snapshot.get('task_id',snapshot.get('id')))
             return bool(record and record['version']==DEFINITIONS[record['definition']].version and record['origin'] in self.store.allowed_origins and self.extensions.current() and ProfileStore(self.pool).get(self.profile.id)==self.profile and tuple(ToolCatalogStore(self.pool).get(row.key) for row in self.catalog_snapshot)==self.catalog_snapshot)
         except (ValueError,TypeError,KeyError):return False
 
@@ -202,11 +202,11 @@ class AssessmentRuntime:
                 if role=='goals':name='set_goals' if not graph.list_by_kind('goal') else None
                 elif role=='planner':
                     intents=graph.list_by_kind('intent')
-                    spec=DEFINITIONS[runtime.store.for_task(scope.task_id)['definition']]
+                    spec=DEFINITIONS[runtime.store.identity_for_task(scope.task_id)['definition']]
                     name='add_intent' if len(intents)<spec.max_intents and not any(n.state in ('open','running') for n in intents) and any(n.state!='met' for n in graph.list_by_kind('goal')) else None
                 else:
-                    row=runtime.store.for_task(scope.task_id)
-                    name=None if row['report'] is not None else ('finish_assessment' if set(runtime.store.observations(row['id']))==set(DEFINITIONS[row['definition']].operations) and runtime.extensions_complete(row) else 'run_assessment')
+                    row=runtime.store.identity_for_task(scope.task_id)
+                    name=None if row['report_exists'] else ('finish_assessment' if set(runtime.store.observations(row['id']))==set(DEFINITIONS[row['definition']].operations) and runtime.extensions_complete(row) else 'run_assessment')
                 request['tool_choice']='required' if name else 'none'
                 if name:
                     names={name}
@@ -218,13 +218,13 @@ class AssessmentRuntime:
         return ChatBinding(binding.model,Recorded(),self.tool_ledger.bind(scope,role,current=inner.current,guard=inner.guard))
 
     def bind_tools(self,scope,current,guard):
-        record=self.store.for_task(scope.task_id)
+        record=self.store.identity_for_task(scope.task_id)
         if record is None:raise PermissionError('Assessment task required')
         definition=DEFINITIONS[record['definition']]
         events=self.tool_ledger.bind(scope,'worker',current=lambda _:current(),guard=lambda _:guard())
         def check(context):
             context.check()
-            fresh=self.store.for_task(scope.task_id)
+            fresh=self.store.identity_for_task(scope.task_id)
             if current() is not True or fresh is None or any(fresh[k]!=record[k] for k in ('id','definition','version','origin','credential_ref','task_id')):raise PermissionError('Assessment ownership changed')
         def inspect(context,args):
             with guard():
