@@ -34,9 +34,11 @@ from dataclasses import dataclass, fields
 from threading import Lock
 
 from .factory import ApplyPending, ProfileFactory, public_snapshot
+from ..db.configuration_ownership import assert_bound
 from ..db.core import int64
 from ..db.pool import ExecutorPool
 from ..db.postgres import PostgresExecutor
+from ..db.transaction_coordination import TransactionCoordinationBinding, coordinated_transaction
 from ..db.profiles import (
     LLMProfile, ProfileInvalid, ProfileNotFound, ProfileStorageError,
     ProfileStore, RetryOverride, _validate,
@@ -81,7 +83,8 @@ class _Publication:
 
 
 class CommittedProfileCoordinator:
-    def __init__(self, store, factory, *, pending_error=CommittedProfileApplyPending):
+    def __init__(self, store, factory, *, pending_error=CommittedProfileApplyPending,
+                 transaction_coordination=None):
         if type(store) is not ProfileStore or type(factory) is not ProfileFactory:
             raise ProfileInvalid('original profile store and factory required')
         executor = store.executor
@@ -95,6 +98,9 @@ class CommittedProfileCoordinator:
         if not isinstance(pending_error, type) or not issubclass(pending_error, RuntimeError):
             raise ProfileInvalid('pending error must be a RuntimeError class')
         self._store, self._factory, self._executor = store, factory, executor
+        self._transaction_coordination = transaction_coordination
+        self._original_transaction_coordination = transaction_coordination
+        self._bindings()
         self._pending_error = pending_error
         self._operation_gate, self._publication_lock = Lock(), Lock()
         self._publication = _Publication(None, public_snapshot(),
@@ -116,6 +122,24 @@ class CommittedProfileCoordinator:
     def _bindings(self):
         if self._store.executor is not self._executor:
             raise ProfileInvalid('profile executor binding changed')
+        binding = self._coordination_binding()
+        if binding is not None:
+            if type(binding) is not TransactionCoordinationBinding or binding.executor is not self._executor:
+                raise ProfileInvalid('coordination binding must match the original profile executor')
+            assert_bound(self._executor, binding.owner)
+            assert_bound(self._factory, binding.owner)
+
+    def _coordination_binding(self):
+        binding = self._original_transaction_coordination
+        if self._transaction_coordination is not binding:
+            raise ProfileInvalid('profile transaction coordination binding changed')
+        return binding
+
+    def _transaction(self, operation, mode):
+        binding = self._coordination_binding()
+        if binding is None:
+            return self._executor.committed_transaction()
+        return coordinated_transaction(binding, operation=operation, mode=mode)
 
     def _phase(self, phase, *, profile_id=None, committed=False):
         publication = _Publication(None, public_snapshot(), ProfilePublicationStatus(
@@ -177,7 +201,7 @@ class CommittedProfileCoordinator:
     def reload(self):
         """Explicit reconciliation; no profile mutation or automatic replay."""
         with self._operation('reload'):
-            with self._executor.committed_transaction():
+            with self._transaction('profile.reconcile', 'read'):
                 active, profiles = self._capture()
             self._publish(active, profiles, committed=False)
 
@@ -211,7 +235,7 @@ class CommittedProfileCoordinator:
             candidate = deepcopy(requested)
             # Owned read preflight also refuses caller-owned transactions before
             # transport construction, including an otherwise read-free create.
-            with self._executor.committed_transaction():
+            with self._transaction('profile.save', 'write'):
                 previous = self._store.get(requested.id) if requested.id else None
                 self._bindings()
                 if requested.id and previous is None:
@@ -220,7 +244,7 @@ class CommittedProfileCoordinator:
                     candidate.api_key = previous.api_key
             self._factory.prepare(candidate)
             self._bindings()
-            with self._executor.committed_transaction():
+            with self._transaction('profile.save', 'write'):
                 self._bindings()
                 if requested.id and self._store.get(requested.id) != previous:
                     raise ProfileInvalid('profile changed during preparation')
@@ -240,14 +264,14 @@ class CommittedProfileCoordinator:
             identifier = int64(identifier, 'profile id')
             if identifier <= 0:
                 raise ProfileInvalid('profile id must be positive')
-            with self._executor.committed_transaction():
+            with self._transaction('profile.set_active', 'write'):
                 previous = self._store.get(identifier)
                 self._bindings()
                 if previous is None:
                     raise ProfileNotFound('profile not found')
             self._factory.prepare(previous)
             self._bindings()
-            with self._executor.committed_transaction():
+            with self._transaction('profile.set_active', 'write'):
                 self._bindings()
                 if self._store.get(identifier) != previous:
                     raise ProfileInvalid('profile changed during preparation')

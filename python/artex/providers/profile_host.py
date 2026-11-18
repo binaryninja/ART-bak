@@ -150,7 +150,7 @@ class ProfileHost:
                              policy.resources)
         self._coordinator_pins = (coordinator, self._store, self._factory, self._executor,
                                  coordinator._pending_error, coordinator._operation_gate,
-                                 coordinator._publication_lock)
+                                 coordinator._publication_lock, coordinator._coordination_binding())
         self._factory_names = ('_transport_factory', 'health', '_clock', '_sleep',
                                '_retry_max_attempts', '_retry_max_seconds', '_lock')
         self._factory_pins = tuple(getattr(self._factory, name) for name in self._factory_names)
@@ -185,7 +185,8 @@ class ProfileHost:
                     (p.resources.executor is not self._executor or p.resources.factory is not self._factory))
                 or any(a is not b for a, b in zip(
                     (c, c._store, c._factory, c._executor, c._pending_error,
-                     c._operation_gate, c._publication_lock), self._coordinator_pins))
+                     c._operation_gate, c._publication_lock, c._transaction_coordination),
+                    self._coordinator_pins))
                 or any(a is not b for a, b in zip(
                     (self._store, self._factory, self._executor), self._coordinator_pins[1:4]))
                 or self._store.executor is not self._executor
