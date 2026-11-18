@@ -53,3 +53,29 @@ must inspect it rather than interpret the original reason as successful cleanup.
 Frozen checkpoint: 1,915 authored tests pass; 385 captured SQL statements parse.
 Static method/path registration coverage is 140/261 (121 unregistered), including
 optional/unavailable contracts, not a count of complete features.
+
+## Original host and generation bindings
+
+These two process-local checks extend the ownership checks at baseline
+`4426a2b2bd39ad0c65a0a60823127b15bfafffe1`.
+
+- During work-slot validation, `AgentHost._identity` verifies that the manager
+  and runner are the original objects and that the manager still references
+  that runner. It checks the pair before resolving the optional runner claim,
+  after resolving it and after calling it. A changed pair raises
+  `RuntimeUnavailable`. If an inert work callback already ran, a later identity
+  failure can reject its result but cannot undo its effects.
+- `BootstrapHandle` requires the original `TaskManager.owns_generation` method
+  at construction and when checking its bindings. An inherited original
+  method is supported. An instance replacement or a changed class descriptor
+  causes refusal. Ownership checks call the original predicate on the pinned
+  manager with the existing task ID, token, handle and cancellation flag.
+  The original manager still decides whether that generation is installed.
+
+The focused tests use empty managers, inert callbacks and handles without an
+installed generation. They check refusal after substitution, rejection of an
+uninstalled handle and release of a host work slot after an exception. The
+Stage 49 results above describe earlier, separately scoped acceptance. These
+binding tests establish neither a positive installed-generation lifetime nor
+exclusion across processes. Task startup, durable leases and live-provider
+execution remain outside their evidence.

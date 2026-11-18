@@ -164,16 +164,23 @@ class AgentHost:
                     and self._settling and self._settlement_thread == get_ident())
 
     def _identity(self):
+        manager, runner = self._original_manager, self._original_runner
+
+        def check_pair():
+            if self.manager is not manager or self.runner is not runner or manager.runner is not runner:
+                raise RuntimeUnavailable('Hosted lifecycle runner identity changed')
+
         with self._condition:
             if self._lifetime_closed:raise RuntimeUnavailable('Host execution lifetime is closed')
-        if self.manager.runner is not self.runner:
-            raise RuntimeUnavailable('Hosted lifecycle runner identity changed')
-        if any(not callable(getattr(self.runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
+        check_pair()
+        if any(not callable(getattr(runner,n,None)) for n in ('validate_create','ready','start','handles','settle_completed')):
             raise RuntimeUnavailable('Runner lifecycle protocol changed')
-        claim=getattr(self.runner,'claim_host',None)
+        claim=getattr(runner,'claim_host',None)
         if claim is not None:
             if not callable(claim):raise RuntimeUnavailable('Invalid runner host-claim capability')
+            check_pair()
             claim(self)
+        check_pair()
 
     def _handles(self):
         # Validate each inventory before using wait; never silently treat a bad
