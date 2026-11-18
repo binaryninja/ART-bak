@@ -1,5 +1,6 @@
 """Source-pinned anonymous REST assessment. No discovered URL grants authority."""
 import hashlib
+import http.client
 import json
 from pathlib import Path
 import re
@@ -32,7 +33,13 @@ def read_rows(inventory,context,table,fields,query,*,max_records=10000,page_size
     for offset in range(0,max_records,page_size):
         limit=min(page_size,max_records-offset)
         path='/api/now/table/'+table+'?'+urlencode(dict(sysparm_query=query+'^ORDERBYsys_id',sysparm_fields=fields,sysparm_limit=limit,sysparm_offset=offset,sysparm_exclude_reference_link='true'))
-        response=json.loads(inventory.read_registered(context,path,max_body_bytes=1048576));pages.append(dict(path=path,**{k:response.get(k) for k in ('status','body_sha256','truncated')}))
+        for attempt in range(2):
+            try:
+                response=json.loads(inventory.read_registered(context,path,max_body_bytes=1048576))
+                pages.append(dict(path=path,attempt=attempt+1,**{k:response.get(k) for k in ('status','body_sha256','truncated')}));break
+            except (OSError,http.client.HTTPException) as error:
+                context.check();pages.append(dict(path=path,attempt=attempt+1,status=0,error=type(error).__name__))
+        else:return dict(records=records,pages=pages,complete=False,limitation='metadata transport unavailable')
         if response.get('status')!=200 or response.get('truncated'):return dict(records=records,pages=pages,complete=False,limitation='metadata unavailable or bounded')
         value=json.loads(response['body']).get('result')
         if not isinstance(value,list):raise ValueError('Unexpected metadata response')
@@ -76,6 +83,7 @@ def response_outcome(case,status,text):
     try:data=json.loads(text)
     except ValueError:data={}
     if status==403 and 'Failed API level ACL Validation' in text:return 'api_acl_denied'
+    if status==0:return 'transport_unavailable'
     expected=case.get('expected',{})
     if status in expected.get('status',[]) and (not expected.get('text') or expected['text'].lower() in text.lower()):
         if status==200 and isinstance(data,dict) and ('error' in data or isinstance(data.get('result'),dict) and data['result'].get('success') is False) and not expected.get('text'):return 'handler_rejected'
@@ -142,11 +150,15 @@ def probes(runtime,record,context,observations):
                         if not inventory._session.login(context):
                             skipped.append(dict(case_id=case['case_id'],authentication=mode,reason='Credentialed control session unavailable'));continue
                         headers=inventory._session.headers(path,headers)
-                    response=transport.request(context,method,path,headers,body=None if body is None else json.dumps(body,separators=(',',':')).encode())
+                    transport_error=None
+                    try:response=transport.request(context,method,path,headers,body=None if body is None else json.dumps(body,separators=(',',':')).encode())
+                    except (OSError,http.client.HTTPException) as error:
+                        context.check();transport_error=type(error).__name__
+                        response=dict(status=0,headers=[],body=b'',body_sha256=None)
                     if mode=='guest_session':receive(response['headers'])
                     elif mode=='assessment_session':inventory._session.receive(path,response['headers'])
                     raw=response['body'];text=runtime.redact(raw[:16384].decode('utf-8','replace'))
                     selected_headers={k.lower():v for k,v in response['headers'] if k.lower() in ('content-type','allow','www-authenticate','cache-control','x-content-type-options')}
-                    results.append(dict(operation_id=row['sys_id'],case_id=case['case_id'],label=case['label'],purpose=case['description'],source_sha256=plan.get('source_sha256'),source_evidence=case['source_evidence'],safety=case['safety'],fixture_refs=case.get('fixture_refs',[]),method=method,path=path,body=body,authentication=mode,request_header_names=sorted(headers),status=response['status'],headers=selected_headers,body_sha256=response['body_sha256'],body_sample=text,body_truncated=len(raw)>16384,expected=case['expected'],outcome=response_outcome(case,response['status'],text),limitations=plan['limitations']))
+                    results.append(dict(operation_id=row['sys_id'],case_id=case['case_id'],label=case['label'],purpose=case['description'],source_sha256=plan.get('source_sha256'),source_evidence=case['source_evidence'],safety=case['safety'],fixture_refs=case.get('fixture_refs',[]),method=method,path=path,body=body,authentication=mode,request_header_names=sorted(headers),status=response['status'],transport_error=transport_error,headers=selected_headers,body_sha256=response['body_sha256'],body_sample=text,body_truncated=len(raw)>16384,expected=case['expected'],outcome=response_outcome(case,response['status'],text),limitations=plan['limitations']))
     public=[{k:v for k,v in row.items() if k not in ('operation_script','reviewed')} for row in rows]
     return dict(resource='public_rest_probes',status=200,records=public,record_count=len(public),selected_ids=[r['sys_id'] for r in selected],requests=results,skipped=skipped,source_plan_signature=analysis['plan_signature'],guest_bootstrap={'status':guest['status'],'body_sha256':guest['body_sha256']},coverage='Source-derived cases with anonymous/guest requests and scoped administrator controls',limitations=['Effectful success paths remain outside the read-only definition','Native/protected source and missing fixtures are recorded per operation','API ACL denial does not establish handler-level authorization'])

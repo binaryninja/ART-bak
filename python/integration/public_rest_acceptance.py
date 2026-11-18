@@ -51,7 +51,7 @@ def main():
         for request in result['requests']:
             require(request['operation_id'] in operations and request['authentication'] in ('none','guest_session','assessment_session'),'Request attribution mismatch')
             require('authorization' not in [n.lower() for n in request['request_header_names']],'Unexpected endpoint credential')
-            require(len(request['body_sha256'])==64,'Response hash missing')
+            require((request['status']==0 and request.get('transport_error') and request['body_sha256'] is None) or (isinstance(request['body_sha256'],str) and len(request['body_sha256'])==64),'Response hash or transport failure missing')
             operation=operations[request['operation_id']]
             if request['method']=='OPTIONS':
                 require(request['case_id']==request['operation_id']+':metadata' and request['authentication']!='assessment_session' and request['body'] is None,'Invalid metadata-only request')
@@ -65,6 +65,14 @@ def main():
                 require(case['allow_control'] and request['path']==concrete_path(routes[0],'unused',case['path_params'],case['query']),'Unapproved authenticated control')
             require(request['outcome']==response_outcome(case,request['status'],request['body_sample']),'Observed result classification mismatch')
         require(set(cases)<=executed|skipped,'Compiled case was neither executed nor explicitly skipped')
+        for case_id,(row,case) in cases.items():
+            if case_id in skipped:continue
+            operation=operations[row['operation_id']]
+            routes=list(dict.fromkeys((operation.get('default_operation_uri') or operation['operation_uri'],operation['operation_uri'])))
+            wanted={(concrete_path(route,'unused',case['path_params'],case['query']),mode) for route in routes for mode in ('none','guest_session')}
+            if case['allow_control']:wanted.add((concrete_path(routes[0],'unused',case['path_params'],case['query']),'assessment_session'))
+            actual={(r['path'],r['authentication']) for r in result['requests'] if r['case_id']==case_id}
+            require(actual==wanted,'Case route/authentication coverage incomplete')
         calls=fresh.execute('SELECT tool,status,run_id FROM artex_tool_calls WHERE task_id=%s',(args.task_id,)).fetchall()
         require(calls and all(state=='completed' and run==generation for _,state,run in calls),'Tool lifecycle incomplete')
         require({'run_assessment','finish_assessment'}<={name for name,_,_ in calls},'Assessment tools missing')

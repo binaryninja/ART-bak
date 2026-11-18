@@ -72,6 +72,18 @@ class PublicRestTests(unittest.TestCase):
         self.assertEqual(public.response_outcome(case,403,'Failed API level ACL Validation'),'api_acl_denied')
         self.assertEqual(public.response_outcome(case,401,'{"error":"Invalid JWT"}'),'expected_handler_result')
         self.assertEqual(public.response_outcome(case,200,'{}'),'unexpected_response')
+    def test_metadata_transport_failure_retains_exact_path_and_retries(self):
+        calls=[]
+        def read(context,path,**options):
+            calls.append(path)
+            if len(calls)==1:raise TimeoutError('private transport detail')
+            return json.dumps({'status':200,'body':json.dumps({'result':[{'sys_id':'one'}]}),'body_sha256':'a'*64,'truncated':False})
+        result=public.read_rows(SimpleNamespace(read_registered=read),Context(),'sys_script_include','sys_id','api_name=example',max_records=2,page_size=2)
+        self.assertTrue(result['complete'])
+        self.assertEqual(result['pages'][0]['error'],'TimeoutError')
+        self.assertEqual(calls[0],calls[1])
+        self.assertNotIn('private transport detail',json.dumps(result))
+
     def test_route_cannot_change_origin_or_escape_api_namespace(self):
         for route in ('https://evil.test/api/x','//evil.test/api/x','/login.do','/api/../x','/api/x?redirect=elsewhere','/api/x\\y'):
             with self.subTest(route=route),self.assertRaises(ValueError):public.concrete_path(route,'nonce')
