@@ -7,6 +7,9 @@ from ..db.tasks import TaskStore,TaskCreateOptions
 from .definitions import DEFINITIONS,instance_origin
 
 DDL='''CREATE TABLE IF NOT EXISTS artex_assessment_denials (credential_ref TEXT PRIMARY KEY);
+ALTER TABLE artex_assessment_denials ADD COLUMN IF NOT EXISTS authentication_method TEXT NOT NULL DEFAULT 'basic';
+ALTER TABLE artex_assessment_denials DROP CONSTRAINT IF EXISTS artex_assessment_denials_pkey;
+ALTER TABLE artex_assessment_denials ADD PRIMARY KEY(credential_ref,authentication_method);
 CREATE TABLE IF NOT EXISTS artex_asset_discovery_events (
  id BIGSERIAL PRIMARY KEY,asset_id BIGINT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
  source_version TIMESTAMPTZ NOT NULL);

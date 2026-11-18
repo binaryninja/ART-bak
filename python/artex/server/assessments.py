@@ -33,15 +33,15 @@ def register(runtime,app):
             ref=runtime.credentials.put(origin,username,password)
         request_id=data.get("request_id","")
         if not isinstance(request_id,str) or len(request_id)>128:raise ValueError("Invalid request ID")
-        return definition,origin,ref,request_id
+        return definition,origin,ref,request_id,bool(username and password)
     def handle(action,request,params):
         try:
             if action=='runtime':return json_response(200,dict(settlement=asdict(runtime.host.poll()),dispatcher_error=runtime.error,pump_error=runtime.bundle.pump.failure))
             if action=='definitions':return json_response(200,{'definitions':[d.public() for d in DEFINITIONS.values()],'authorized_origins':sorted(runtime.store.allowed_origins)})
             if action=='list':return json_response(200,{'assessments':[detail(r) for r in runtime.store.list()],'dispatcher_error':runtime.error,'pump_error':runtime.bundle.pump.failure,'pump_detail':runtime.bundle.pump.failure_detail})
             if action=='create':
-                definition,origin,ref,request_id=request_data(request)
-                record=runtime.submit(definition,origin,ref,request_id=request_id)
+                definition,origin,ref,request_id,retry_authentication=request_data(request)
+                record=runtime.submit(definition,origin,ref,request_id=request_id,retry_authentication=retry_authentication)
                 return json_response(201,{'task_id':str(record['task_id']),'assessment_id':record['id']})
             if action=='detail':
                 result=detail(runtime.store.for_task(params['id']))

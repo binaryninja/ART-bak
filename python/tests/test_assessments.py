@@ -8,9 +8,17 @@ from artex.assessments.discovery import discover,source_metadata
 from artex.assessments.store import AssessmentStore
 from artex.agent.domain_tools import DomainTools
 from artex.agent.runtime import Tool
-from artex.assessments.runtime import catalog
+from artex.assessments.runtime import catalog,model_observations
 
 class AssessmentTests(unittest.TestCase):
+    def test_model_inventory_is_bounded_without_discarding_durable_rows(self):
+        source={'tables':{'status':200,'records':[{'name':str(i)} for i in range(100)],'more_records_possible':True}}
+        result=model_observations(source)
+        self.assertEqual(len(source['tables']['records']),100)
+        self.assertEqual(len(result['tables']['records']),5)
+        self.assertEqual(result['tables']['stored_record_count'],100)
+        self.assertTrue(result['tables']['more_records_possible'])
+
     def test_credentials_are_origin_bound_private_and_deduplicated(self):
         with tempfile.TemporaryDirectory() as directory:
             store=CredentialStore(Path(directory)/'credentials',b'k'*32)

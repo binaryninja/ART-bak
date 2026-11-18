@@ -71,13 +71,56 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(len([c for c in calls if c[0] == 'connect']), 1)
         self.assertNotIn('Authorization', calls[1][3])
 
-    def test_authentication_failure_stops_further_credential_requests(self):
-        inventory, calls = self.make(b'{}', 401)
+    def session_inventory(self, final_status=200, redirect='/login_redirect.do'):
+        calls=[]
+        responses=[(401,{},b'{}'),
+            (200,{'Set-Cookie':'JSESSIONID=initial-secret; Path=/; Secure'},b'<form action="login.do" method="post"><input type="hidden" name="sysparm_ck" value="csrf-initial"></form>'),
+            (302,{'Location':redirect,'Set-Cookie':'JSESSIONID=session-secret; Path=/; Secure'},b''),
+            (200,{},b"<script>var g_ck='csrf-secret';</script>"),
+            (final_status,{'Content-Type':'application/json'},b'{"result":[{"user_name":"admin"}]}'),
+            (200,{'Content-Type':'application/json'},b'{"result":[]}')]
+        class Connection:
+            def __init__(self,host,port,**kwargs):self.host=host
+            def request(self,method,path,headers,body=None):calls.append((self.host,method,path,headers,body))
+            def getresponse(self):
+                status,headers,body=responses.pop(0)
+                result=Response(body);result.status=status;result.getheaders=lambda:list(headers.items())
+                return result
+            def close(self):pass
+        inventory=ServiceNowInventory('admin','private-password',connection_factory=Connection)
+        inventory._interval=0
+        return inventory,calls
+
+    def test_basic_rejection_uses_private_origin_bound_login_session(self):
+        inventory,calls=self.session_inventory()
+        result=json.loads(inventory.inspect(Context(),{'resource':'current_user'}))
+        self.assertEqual(result['records'],[{'sys_id':'','user_name':'admin','active':''}])
+        self.assertEqual(result['authentication_method'],'session')
+        self.assertEqual([c[1] for c in calls],['GET','GET','POST','GET','GET'])
+        self.assertTrue(all(c[0]==HOST for c in calls))
+        self.assertIn(b'user_password=private-password',calls[2][4])
+        self.assertIn('session-secret',calls[4][3]['Cookie'])
+        self.assertEqual(calls[4][3]['X-usertoken'],'csrf-secret')
+        self.assertNotIn('Authorization',calls[4][3])
+        inventory.inspect(Context(),{'resource':'roles'})
+        self.assertEqual(len(calls),6)
+        self.assertEqual(inventory.redact('private-password session-secret csrf-secret'),'[redacted] [redacted] [redacted]')
+
+    def test_session_identity_failure_stops_further_credential_requests(self):
+        inventory, calls = self.session_inventory(final_status=401)
         inventory.inspect(Context(), {'resource': 'current_user'})
         denied = json.loads(inventory.inspect(Context(), {'resource': 'tables'}))
         self.assertEqual(denied['status'], 0)
         self.assertFalse(denied['requested'])
-        self.assertEqual(len([c for c in calls if c[0] == 'connect']), 1)
+        self.assertEqual(len(calls),5)
+
+    def test_login_redirect_cannot_expand_target_or_operation_scope(self):
+        for redirect in ('https://other.example/login.do','/sys.scripts.do'):
+            inventory,calls=self.session_inventory(redirect=redirect)
+            result=json.loads(inventory.inspect(Context(),{'resource':'current_user'}))
+            self.assertEqual(result['error'],'session_authentication_unavailable')
+            inventory.inspect(Context(),{'resource':'tables'})
+            self.assertEqual(len(calls),3)
 
     def test_large_body_stops_and_connection_closes(self):
         inventory, calls = self.make(b'x' * 262145)

@@ -101,8 +101,10 @@ Use `/function/assessments` in the Python preview, or authenticated
 `GET /api/tasks/{id}/assessment`. Creation accepts `definition`, `url`, optional
 `username`/`password` or `credential_ref`, and an optional idempotent `request_id`
 for an explicit new run. Passwords are placed in private, origin-bound mode0600
-files; only references enter assessment records. Rejected credentials remain
-suppressed across runs and restarts.
+files; only references enter assessment records. Basic-auth rejection triggers
+one origin-bound login-form session; cookies and CSRF tokens stay private.
+Basic and session rejections are recorded separately across runs and restarts.
+Explicitly supplying credentials again permits a fresh session-authentication attempt.
 
 `POST /api/assessments/discover` accepts bounded `text` and an optional `label`.
 A discovered URL and unambiguously associated credentials use the same admission

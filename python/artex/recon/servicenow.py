@@ -9,6 +9,7 @@ import ssl
 import threading
 import time
 from urllib.parse import urlencode, urlsplit
+from .servicenow_session import LoginSession
 
 HOST = 'dev366312.service-now.com'
 ORIGIN = 'https://' + HOST
@@ -45,11 +46,37 @@ class ServiceNowInventory:
             raise ValueError('At most one target request per second')
         self.username = username
         self._auth = ('Basic ' + base64.b64encode((username + ':' + password).encode()).decode()) if username else ''
-        self._secrets = tuple(x for x in (password, self._auth, self._auth[6:]) if x)
+        self._secrets = [x for x in (password, self._auth, self._auth[6:]) if x]
         self._interval, self._connection = interval, connection_factory
         self._lock, self._last = threading.Lock(), 0.0
         self._authentication_denied = False
+        self._basic_denied = False
         self._tls = ssl.create_default_context()
+        self._session = LoginSession(origin,username,password,self._request,self._remember)
+
+    def _remember(self, secret):
+        if secret and secret not in self._secrets:self._secrets.append(secret)
+
+    def _request(self, context, method, path, headers, *, body=None, session=False):
+        context.check()
+        remaining = self._last + self._interval - time.monotonic()
+        while remaining > 0:
+            time.sleep(min(remaining, 0.05));context.check()
+            remaining = self._last + self._interval - time.monotonic()
+        self._last = time.monotonic()
+        if session:headers=self._session.headers(path,headers)
+        conn=self._connection(self.host,443,timeout=min(20,context.remaining_seconds()),context=self._tls)
+        try:
+            context.check()
+            if body is None:conn.request(method,path,headers=headers)
+            else:conn.request(method,path,body=body,headers=headers)
+            response=conn.getresponse()
+            names=('Content-Type','Strict-Transport-Security','X-Content-Type-Options','X-Frame-Options')
+            response_headers=response.getheaders() if hasattr(response,'getheaders') else [(k,response.getheader(k)) for k in names if response.getheader(k)]
+            if session:self._session.receive(path,response_headers)
+            data=response.read(262145);context.check()
+            return dict(status=response.status,headers=response_headers,body=data)
+        finally:conn.close()
 
     def redact(self, value):
         for secret in self._secrets:
@@ -79,54 +106,48 @@ class ServiceNowInventory:
             if authenticated and (self._authentication_denied or not self._auth):
                 return json.dumps({'resource': resource, 'path': path, 'status': 0,
                                    'requested': False, 'error': 'authentication_denied_before_request' if self._authentication_denied else 'credentials_not_supplied'})
-            remaining = self._last + self._interval - time.monotonic()
-            while remaining > 0:
-                time.sleep(min(remaining, 0.05))
-                context.check()
-                remaining = self._last + self._interval - time.monotonic()
-            self._last = time.monotonic()
             headers = {'Accept': 'application/json' if resource in TABLES else 'text/html,text/plain',
                        'Accept-Encoding': 'identity', 'User-Agent': 'ARTEX-scoped-recon/1.0'}
-            if authenticated:
-                headers['Authorization'] = self._auth
-            conn = self._connection(self.host, 443, timeout=min(20, context.remaining_seconds()), context=self._tls)
-            try:
-                context.check()
-                conn.request('GET', path, headers=headers)
-                response = conn.getresponse()
-                if authenticated and response.status == 401:
-                    self._authentication_denied = True
-                body = response.read(262145)
-                context.check()
-                if len(body) > 262144:
-                    return json.dumps({'resource': resource, 'status': response.status, 'error': 'response_limit'})
-                result = {'resource': resource, 'path': path, 'status': response.status,
-                          'body_sha256': hashlib.sha256(body).hexdigest(),
-                          'content_type': response.getheader('Content-Type', '').split(';')[0],
-                          'security_headers': {name: response.getheader(name) for name in
-                              ('Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options')
-                              if response.getheader(name)}}
-                # No redirects, cookies, arbitrary headers, scripts, or raw HTML.
-                if resource in TABLES and response.status == 200:
-                    data = json.loads(body)
-                    rows = data.get('result')
-                    if not isinstance(rows, list) or len(rows) > 100:
-                        raise ValueError('Unexpected inventory result')
-                    fields = TABLES[resource][1].split(',')
-                    result['records'] = [{k: str(row.get(k, ''))[:512] for k in fields} for row in rows if isinstance(row, dict)]
-                    result['limit'] = 1 if resource == 'current_user' else 100
-                    result['more_records_possible'] = resource != 'current_user' and len(rows) == result['limit']
-                elif resource in PAGES and response.status == 200:
-                    text = body.decode('utf-8', 'replace')
-                    title = re.search(r'<title\b[^>]*>(.*?)</title>', text, re.I | re.S)
-                    if title:
-                        result['title'] = html.unescape(re.sub('<[^>]+>', '', title.group(1)))[:256]
-                    if resource == 'robots':
-                        result['directives'] = [line[:256] for line in text.splitlines()
-                                                if re.match(r'(?i)^(user-agent|allow|disallow|sitemap):', line)][:80]
-                    if resource == 'stats':
-                        plain = html.unescape(re.sub('<[^>]+>', ' ', text))
-                        result['build_metadata'] = re.findall(r'(?i)(?:Build (?:name|date|tag)|Version)\s*[:=]\s*[^\r\n<]{1,160}', plain)[:8]
-                return self.redact(json.dumps(result, sort_keys=True))
-            finally:
-                conn.close()
+            if authenticated and not self._basic_denied:
+                response=self._request(context,'GET',path,dict(headers,Authorization=self._auth))
+                if response['status']==401:self._basic_denied=True
+            elif not authenticated:response=self._request(context,'GET',path,headers)
+            if authenticated and self._basic_denied:
+                if not self._session.login(context):
+                    return json.dumps(dict(resource=resource,path=path,status=0,requested=False,error='session_authentication_unavailable',basic_authentication_denied=True))
+                response=self._request(context,'GET',path,headers,session=True)
+                if resource=='current_user' and response['status']==401:self._authentication_denied=True
+            status=response['status'];body=response['body']
+            response_headers={k.lower():v for k,v in response['headers']}
+            def header(name,default=None):return response_headers.get(name.lower(),default)
+            if len(body) > 262144:
+                return json.dumps({'resource': resource, 'status': status, 'error': 'response_limit'})
+            result = {'resource': resource, 'path': path, 'status': status,
+                      'body_sha256': hashlib.sha256(body).hexdigest(),
+                      'content_type': header('Content-Type', '').split(';')[0],
+                      'security_headers': {name: header(name) for name in
+                          ('Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options')
+                          if header(name)}}
+            if authenticated:result['authentication_method']='session' if self._basic_denied else 'basic'
+            # Inventory responses never expose redirects, cookies, or raw HTML.
+            if resource in TABLES and status == 200:
+                data = json.loads(body)
+                rows = data.get('result')
+                if not isinstance(rows, list) or len(rows) > 100:
+                    raise ValueError('Unexpected inventory result')
+                fields = TABLES[resource][1].split(',')
+                result['records'] = [{k: str(row.get(k, ''))[:512] for k in fields} for row in rows if isinstance(row, dict)]
+                result['limit'] = 1 if resource == 'current_user' else 100
+                result['more_records_possible'] = resource != 'current_user' and len(rows) == result['limit']
+            elif resource in PAGES and status == 200:
+                text = body.decode('utf-8', 'replace')
+                title = re.search(r'<title\b[^>]*>(.*?)</title>', text, re.I | re.S)
+                if title:
+                    result['title'] = html.unescape(re.sub('<[^>]+>', '', title.group(1)))[:256]
+                if resource == 'robots':
+                    result['directives'] = [line[:256] for line in text.splitlines()
+                                            if re.match(r'(?i)^(user-agent|allow|disallow|sitemap):', line)][:80]
+                if resource == 'stats':
+                    plain = html.unescape(re.sub('<[^>]+>', ' ', text))
+                    result['build_metadata'] = re.findall(r'(?i)(?:Build (?:name|date|tag)|Version)\s*[:=]\s*[^\r\n<]{1,160}', plain)[:8]
+            return self.redact(json.dumps(result, sort_keys=True))
