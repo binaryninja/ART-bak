@@ -4,6 +4,26 @@ import * as React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+// Treat model and target content as untrusted. Only text-formatting elements
+// are admitted; raw HTML, images, embedded content, and controls are omitted.
+const allowedElements = [
+  "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
+  "strong", "em", "del", "ul", "ol", "li", "pre", "code", "a",
+  "table", "thead", "tbody", "tr", "th", "td", "sup", "section",
+];
+
+function safeLinkUrl(value: string): string {
+  if (/[\u0000-\u0020\u007f\\]/.test(value)) return "";
+  if (/^(?:#|\/(?!\/)|\.\.?\/)/.test(value)) return value;
+  if (!/^(?:https?:\/\/|mailto:)/i.test(value)) return "";
+  try {
+    const url = new URL(value);
+    return ["http:", "https:", "mailto:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 // Tailwind-styled element overrides (no typography plugin in this project, so we
 // style each element). `node` is stripped — it's not a valid DOM attribute.
 const components: Components = {
@@ -15,9 +35,9 @@ const components: Components = {
   ul: ({ node, ...p }) => <ul className="my-1 list-disc space-y-0.5 pl-5" {...p} />,
   ol: ({ node, ...p }) => <ol className="my-1 list-decimal space-y-0.5 pl-5" {...p} />,
   strong: ({ node, ...p }) => <strong className="font-semibold" {...p} />,
-  a: ({ node, ...p }) => (
-    <a className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer" {...p} />
-  ),
+  a: ({ children, href, title }) => href ? (
+    <a className="text-primary underline underline-offset-2" href={href} title={title} target="_blank" rel="noopener noreferrer">{children}</a>
+  ) : <span>{children}</span>,
   hr: () => <hr className="my-2 border-border" />,
   blockquote: ({ node, ...p }) => (
     <blockquote className="my-1 border-l-2 border-border pl-2.5 text-muted-foreground" {...p} />
@@ -51,7 +71,7 @@ const components: Components = {
 export function Markdown({ text }: { text: string }) {
   return (
     <div className="min-w-0 space-y-1.5 text-sm [&>*:first-child]:mt-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown skipHtml allowedElements={allowedElements} urlTransform={safeLinkUrl} remarkPlugins={[remarkGfm]} components={components}>
         {text}
       </ReactMarkdown>
     </div>
