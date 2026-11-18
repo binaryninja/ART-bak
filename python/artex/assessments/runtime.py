@@ -33,6 +33,10 @@ from .definitions import DEFINITIONS,SERVICENOW,CHECKS,check_allowed,capabilitie
 from .store import AssessmentStore
 from . import toolkit
 from .extensions import ExtensionHost
+from . import public_rest
+SCHEMA=deepcopy(SCHEMA)
+SCHEMA['properties']['resource']['enum']+=['public_rest_authorization','public_rest_probes']
+def assessment_input(value):return type(value) is dict and set(value)=={'resource'} and value['resource'] in SCHEMA['properties']['resource']['enum']
 
 EMPTY={'type':'object','properties':{},'additionalProperties':False}
 FINISH={'type':'object','properties':{'summary':{'type':'string'}},'required':['summary'],'additionalProperties':False}
@@ -58,6 +62,8 @@ def model_observations(observations):
     """Bound model context while retaining complete collected rows in the store."""
     result=deepcopy(observations)
     for value in result.values():
+        for request in value.get('requests',[]):
+            request.pop('body_sample',None)
         if len(value.get('pages',[]))>2:
             pages=value['pages'];value['stored_page_count']=len(pages)
             value['pages_sha256']=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest()
@@ -83,7 +89,7 @@ class AssessmentRuntime:
         if type(self.extensions) is not ExtensionHost or self.extensions.allowed!=self.store.allowed_origins:raise ValueError('Exact extension host scope required')
         self.tool_ledger=ToolLedger(pool,redact=self.redact,configuration_current=self.configuration_current)
         self.revision=revision;self.source_sha256=source_sha256;self._key=provider_key
-        self._lock=threading.RLock();self._stop=threading.Event();self._thread=None;self._inventories={};self.error=None
+        self._lock=threading.RLock();self._stop=threading.Event();self._thread=None;self._inventories={};self._followed=set();self.error=None
         parsed=urlsplit(profile.base_url)
         if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:raise ValueError('Explicit HTTPS provider required')
         factory=ProfileFactory(lambda config:HTTPTransport(['https://'+parsed.netloc],timeout=30,total_timeout=120),retry_max_attempts=2,retry_max_seconds=125,
@@ -104,7 +110,7 @@ class AssessmentRuntime:
         for definition in DEFINITIONS:
             for origin in self.store.allowed_origins:self.extensions.required(definition,origin,{row.key for row in self.catalog})
         policy_digest=hashlib.sha256(json.dumps(asdict(enumeration),sort_keys=True).encode()).hexdigest()[:16]
-        domain=DomainTools('assessments-v3-'+self.extensions.revision+'-'+policy_digest,self.catalog,self.bind_tools)
+        domain=DomainTools('assessments-v3-'+self.extensions.revision+'-'+policy_digest+'-'+public_rest.POLICY_DIGEST,self.catalog,self.bind_tools)
         assembly=TaskRuntimeAssembly(pool,providers=resolver,transcript=ChatTranscriptAdapter(TranscriptStore(str(transcript_root))),
             prompts=PROMPTS,policy_revision='assessments-v1',current=self.current,lifecycle_guard=self.lifecycle,
             authorize=self.authorize,asset_authorize=lambda scope,ids,summary=None:Grant(not ids,not ids,not ids),
@@ -119,6 +125,9 @@ class AssessmentRuntime:
         from ..db.task_templates import TaskTemplateStore
         options=dict(asset_store=AssetStore(pool),finding_store=FindingStore(pool),company_store=CompanyStore(pool),
             conversation_store=ConversationStore(pool),template_store=TaskTemplateStore(pool),profile_store=ProfileStore(pool),
+            conversation_agent_available=lambda key:self.assistants.ready(key),
+            conversation_profile_available=lambda identifier:self.assistants.profile_available(identifier),
+            conversation_running=lambda identifier:self.assistants.dispatcher.running(identifier),
             exploration_store_resolver=self.exploration,version='python-assessments')
         options.update(application_options or {})
         self.bundle=build_task_runtime_application(assembly,signing_key,password_codec,live_last_activity=lambda *_:0,
@@ -129,6 +138,11 @@ class AssessmentRuntime:
             record=self.store.identity_for_task(task['id'])
             return dict(runtime_kind='assessment',assessment_type=record['definition'],assessment_version=record['version'],runtime_capabilities=['assessment','overview','lineage','report']) if record else {}
         self.manager.runtime_metadata=metadata
+        from ..server.assistant_host import AssistantHost
+        self.assistants=AssistantHost(self,factory,transcript_root)
+        self.assistants.register(self.bundle.app.router)
+        from ..server.agent_events import AgentEvents
+        self.agent_events=AgentEvents(self.assistants)
 
     def exploration(self,task_id):
         if self.store.identity_for_task(task_id) is None:return None
@@ -165,7 +179,7 @@ class AssessmentRuntime:
         with self._lock:
             if record['id'] not in self._inventories:
                 user,password=self.credentials.get(record['credential_ref'],record['origin']) if record['credential_ref'] else ('','')
-                paths=tuple(urlsplit(s['path']).path for s in self.extensions.specs.values() if s['kind']=='http' and s.get('authentication')=='assessment' and record['origin'] in s['allowed_origins'] and s['name'] in {r.key for r in self.catalog})
+                paths=tuple(urlsplit(s['path']).path for s in self.extensions.specs.values() if s['kind']=='http' and s.get('authentication')=='assessment' and record['origin'] in s['allowed_origins'] and s['name'] in {r.key for r in self.catalog})+(public_rest.READ_PATHS if record['definition']=='servicenow.public_rest' else ())
                 item=ServiceNowInventory(user,password,origin=record['origin'],authorized_origins=self.store.allowed_origins,extra_read_paths=paths,enumeration=self.enumeration)
                 if record['credential_ref']:
                     denials={row[0] for row in self.pool.fetch_all(Query('SELECT authentication_method FROM artex_assessment_denials WHERE credential_ref=$1',(record['credential_ref'],)))}
@@ -236,7 +250,12 @@ class AssessmentRuntime:
                 if not check_allowed(spec,capabilities(existing,self.inventory(record).username),bool(record['credential_ref'])):
                     result={'resource':resource,'status':0,'requested':False,'error':'required_capability_unavailable','required_capability':spec.requires}
                 else:
-                    try:result=json.loads(self.inventory(record).inspect(context,args))
+                    try:
+                        if resource=='public_rest_authorization':result=public_rest.authorization(self.inventory(record),context)
+                        elif resource=='public_rest_probes':result=public_rest.probes(self,record,context,existing)
+                        else:
+                            result=public_rest.inherited(self,record,resource) if record['definition']=='servicenow.public_rest' else None
+                            if result is None:result=json.loads(self.inventory(record).inspect(context,args))
                     except (OSError,http.client.HTTPException):result={'resource':resource,'status':0,'requested':True,'error':'transport_unavailable'}
                     except (ValueError,UnicodeError):result={'resource':resource,'status':0,'requested':True,'error':'invalid_response'}
                 result['required_capability']=spec.requires
@@ -285,7 +304,7 @@ class AssessmentRuntime:
         valid_empty=lambda args:type(args) is dict and not args
         valid_finish=lambda args:type(args) is dict and set(args)=={'summary'} and isinstance(args['summary'],str) and len(args['summary'].encode())<=32768
         extension_tools={tool.name:tool for tool in self.extensions.bind(self,scope,record,check,guard,events)}
-        tools=(Tool(TOOL_NAME,'Inspect one approved ServiceNow resource.',SCHEMA,inspect,valid_input),
+        tools=(Tool(TOOL_NAME,'Inspect one approved ServiceNow resource.',SCHEMA,inspect,assessment_input),
             Tool('run_assessment','Run all remaining approved checks for this assessment.',EMPTY,run,valid_empty),
             Tool('finish_assessment','Persist the complete assessment report and prove its inventory goal.',FINISH,finish,valid_finish))+toolkit.bind(self,scope,record,check,guard)+tuple(extension_tools.values())
         return tuple(tool for tool in tools if tool.name in {row.key for row in self.catalog})
@@ -308,12 +327,17 @@ class AssessmentRuntime:
             while not self._stop.wait(.3):
                 try:
                     if time.monotonic()>=next_scan:
-                        discovery.scan_assets();next_scan=time.monotonic()+5
+                        discovery.scan_assets();self.agent_events.tick();next_scan=time.monotonic()+5
                     with self._lock:
                         records=self.store.list_identities()
                         for record in records:
                             task=self.manager.task(str(record['task_id']))
                             if record['state']=='admitted' and task['status'] in ('done','failed','timeout'):self.store.state(record['id'],task['status'])
+                            if record['id'] not in self._followed and record['definition']=='servicenow.inventory' and record['version']==SERVICENOW.version and task['status']=='done' and record['report_exists']:
+                                observations=self.store.observations(record['id'])
+                                if public_rest.candidates(observations):
+                                    self.submit('servicenow.public_rest',record['origin'],record['credential_ref'],source={'kind':'assessment_completed','assessment_id':record['id'],'task_id':record['task_id']},request_id='inventory:'+record['id'])
+                                self._followed.add(record['id'])
                         if self.runner.handles() or self.bundle.pump.failure:continue
                         pending=next((r for r in reversed(records) if r['state']=='pending'),None)
                         if pending:
@@ -333,4 +357,4 @@ class AssessmentRuntime:
         if not self.bundle.stop_pump(30):raise RuntimeError('Assessment pump remains active')
         drained=self.host.drain(30)
         if not drained.all_settled or not self.host.close_lifetime(drained):raise RuntimeError('Assessment ownership remains')
-        return asdict(drained)
+        return dict(asdict(drained),assistants=self.assistants.close())

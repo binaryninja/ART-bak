@@ -30,8 +30,9 @@ def _pairs(items):
 
 
 class AgentService:
-    def __init__(self,store=None,*,readiness=None,detail_defaults=None):
+    def __init__(self,store=None,*,readiness=None,detail_defaults=None,management=None):
         self.store,self.readiness,self.detail_defaults=store,readiness,detail_defaults
+        self.management=management
     def execution_ready(self,identifier):
         if self.store is None or not callable(self.readiness):return False
         agent=self.store.get(key(identifier))
@@ -45,7 +46,8 @@ class AgentService:
             ('POST','wrapup/reset'),('PUT','wrapup/task-timeout'),('POST','wrapup/task-timeout/reset'),
             ('GET','triggers'),('POST','triggers'),('GET','prompts'),('GET','variables'),
             ('POST','prompt/preview'),('GET','visibility'),('PUT','visibility')]:
-            router.add(method,'/api/agents/{key}/'+suffix,lambda req,params:self.handle('unavailable',req,params))
+            router.add(method,'/api/agents/{key}/'+suffix,lambda req,params,a=method+' '+suffix:self.handle(a,req,params))
+        if self.management is not None:self.management.register(router)
     def _defaults(self,agent):
         if callable(self.detail_defaults):value=self.detail_defaults(deepcopy(agent))
         elif agent.key in ('worker','planner','mainagent'):raise AgentUnavailable('Code defaults resolver required')
@@ -58,12 +60,13 @@ class AgentService:
         return deepcopy(value)
     def handle(self,action,request,params):
         try:
+            if self.management is not None and (action=='unavailable' or ' ' in action):return self.management.handle(action,request,params)
             if urlsplit(request.target).query:raise AgentInvalid('Unexpected query')
             identifier=key(params['key']) if 'key' in params else None
-            if self.store is None or action=='unavailable':raise AgentUnavailable()
+            if self.store is None or action=='unavailable' or ' ' in action:raise AgentUnavailable()
             if action=='list':
                 agents=self.store.list();mcp,skills,tools=self.store.binding_counts()
-                return json_response(200,{'agents':[a.to_dict(mcp_count=mcp.get(a.id,0),skill_count=skills.get(a.id,0),tool_count=tools.get(a.key,0)) for a in agents]})
+                return json_response(200,{'agents':[dict(a.to_dict(mcp_count=mcp.get(a.id,0),skill_count=skills.get(a.id,0),tool_count=tools.get(a.key,0)),**({'execution_ready':self.execution_ready(a.key)} if self.management is not None else {})) for a in agents]})
             agent=self.store.get(identifier) if identifier else None
             if identifier and agent is None:raise AgentMissing()
             if action=='get':

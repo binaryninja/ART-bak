@@ -24,12 +24,12 @@ use a different placeholder spelling for an existing Go URL shape.
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **218**.
-- python route declarations: **247**.
+- python offline contract routes: **221**.
+- python route declarations: **250**.
 - python alternative route groups: **22**.
-- python optional service routes: **213**.
-- matched offline contract routes: **206**.
-- go routes without python registration: **55**.
+- python optional service routes: **216**.
+- matched offline contract routes: **209**.
+- go routes without python registration: **52**.
 
 The earlier 252-route figure counted literals and simple concatenations but
 missed nine registrations from the side-question nested loop: three parent
@@ -48,25 +48,25 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | Method | Path | Go registration | Python status |
 | --- | --- | --- | --- |
 | POST | `/api/active` | `server/server.go:735` | Not registered |
-| GET | `/api/agents` | `server/server.go:835` | Optional registration; adapters required: `python/artex/server/agents.py:43` |
-| POST | `/api/agents` | `server/server.go:836` | Optional registration; adapters required: `python/artex/server/agents.py:43` |
-| DELETE | `/api/agents/{key}` | `server/server.go:839` | Optional registration; adapters required: `python/artex/server/agents.py:43` |
-| GET | `/api/agents/{key}` | `server/server.go:837` | Optional registration; adapters required: `python/artex/server/agents.py:43` |
-| PATCH | `/api/agents/{key}` | `server/server.go:838` | Optional registration; adapters required: `python/artex/server/agents.py:43` |
-| PUT | `/api/agents/{key}/config` | `server/server.go:840` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| PUT | `/api/agents/{key}/prompt` | `server/server.go:841` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| POST | `/api/agents/{key}/prompt/preview` | `server/server.go:853` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| POST | `/api/agents/{key}/prompt/reset` | `server/server.go:842` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| GET | `/api/agents/{key}/prompts` | `server/server.go:851` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| GET | `/api/agents/{key}/triggers` | `server/server.go:847` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| POST | `/api/agents/{key}/triggers` | `server/server.go:848` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| GET | `/api/agents/{key}/variables` | `server/server.go:852` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| GET | `/api/agents/{key}/visibility` | `server/server.go:854` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| PUT | `/api/agents/{key}/visibility` | `server/server.go:855` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| PUT | `/api/agents/{key}/wrapup` | `server/server.go:843` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| POST | `/api/agents/{key}/wrapup/reset` | `server/server.go:844` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| PUT | `/api/agents/{key}/wrapup/task-timeout` | `server/server.go:845` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
-| POST | `/api/agents/{key}/wrapup/task-timeout/reset` | `server/server.go:846` | Optional registration; adapters required: `python/artex/server/agents.py:48` |
+| GET | `/api/agents` | `server/server.go:835` | Optional registration; adapters required: `python/artex/server/agents.py:44` |
+| POST | `/api/agents` | `server/server.go:836` | Optional registration; adapters required: `python/artex/server/agents.py:44` |
+| DELETE | `/api/agents/{key}` | `server/server.go:839` | Optional registration; adapters required: `python/artex/server/agents.py:44` |
+| GET | `/api/agents/{key}` | `server/server.go:837` | Optional registration; adapters required: `python/artex/server/agents.py:44` |
+| PATCH | `/api/agents/{key}` | `server/server.go:838` | Optional registration; adapters required: `python/artex/server/agents.py:44` |
+| PUT | `/api/agents/{key}/config` | `server/server.go:840` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| PUT | `/api/agents/{key}/prompt` | `server/server.go:841` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| POST | `/api/agents/{key}/prompt/preview` | `server/server.go:853` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| POST | `/api/agents/{key}/prompt/reset` | `server/server.go:842` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| GET | `/api/agents/{key}/prompts` | `server/server.go:851` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| GET | `/api/agents/{key}/triggers` | `server/server.go:847` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| POST | `/api/agents/{key}/triggers` | `server/server.go:848` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| GET | `/api/agents/{key}/variables` | `server/server.go:852` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| GET | `/api/agents/{key}/visibility` | `server/server.go:854` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| PUT | `/api/agents/{key}/visibility` | `server/server.go:855` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| PUT | `/api/agents/{key}/wrapup` | `server/server.go:843` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| POST | `/api/agents/{key}/wrapup/reset` | `server/server.go:844` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| PUT | `/api/agents/{key}/wrapup/task-timeout` | `server/server.go:845` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
+| POST | `/api/agents/{key}/wrapup/task-timeout/reset` | `server/server.go:846` | Optional registration; adapters required: `python/artex/server/agents.py:49` |
 | GET | `/api/asset-intercept/rules` | `server/server.go:916` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
 | POST | `/api/asset-intercept/rules` | `server/server.go:917` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
 | DELETE | `/api/asset-intercept/rules/{id}` | `server/server.go:919` | Optional registration; adapters required: `python/artex/server/intercept_rules.py:78` |
@@ -195,7 +195,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/settings/web-search/test` | `server/server.go:812` | Not registered |
 | POST | `/api/side-questions/{requestID}/cancel` | `server/side_questions.go:285` | Optional registration; adapters required: `python/artex/server/sidequestions.py:61` |
 | GET | `/api/side-questions/{requestID}/events` | `server/side_questions.go:284` | Optional registration; adapters required: `python/artex/server/sidequestions.py:60` |
-| GET | `/api/skills` | `server/server.go:878` | Not registered |
+| GET | `/api/skills` | `server/server.go:878` | Optional registration; adapters required: `python/artex/server/assistant_host.py:128` |
 | POST | `/api/skills` | `server/server.go:879` | Optional registration; adapters required: `python/artex/server/skill_create.py:342` |
 | GET | `/api/skills/missing` | `server/server.go:882` | Optional registration; adapters required: `python/artex/server/missing_skill_setup.py:71` |
 | POST | `/api/skills/upload` | `server/server.go:880` | Optional registration; adapters required: `python/artex/server/skill_archive_import.py:320` |
@@ -291,8 +291,8 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | GET | `/api/traffic/exchange` | `server/server.go:791` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
 | DELETE | `/api/traffic/hosts` | `server/server.go:789` | Not registered |
 | GET | `/api/traffic/hosts` | `server/server.go:787` | Optional registration; adapters required: `python/artex/server/traffic_read.py:36` |
-| DELETE | `/api/triggers/{id}` | `server/server.go:850` | Not registered |
-| PATCH | `/api/triggers/{id}` | `server/server.go:849` | Not registered |
+| DELETE | `/api/triggers/{id}` | `server/server.go:850` | Optional registration; adapters required: `python/artex/server/agent_management.py:17` |
+| PATCH | `/api/triggers/{id}` | `server/server.go:849` | Optional registration; adapters required: `python/artex/server/agent_management.py:17` |
 | POST | `/api/update/apply` | `server/server.go:669` | Not registered |
 | GET | `/api/update/check` | `server/server.go:668` | Not registered |
 | POST | `/api/update/rollback` | `server/server.go:670` | Not registered |
@@ -311,25 +311,27 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python registration prerequisites
 
-- `GET /api/agents` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PATCH /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `DELETE /api/agents/{key}` at `python/artex/server/agents.py:43` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/config` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/prompt` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/prompt/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/wrapup` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/wrapup/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/wrapup/task-timeout` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/wrapup/task-timeout/reset` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/triggers` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/triggers` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/prompts` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/variables` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/agents/{key}/prompt/preview` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/agents/{key}/visibility` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `PUT /api/agents/{key}/visibility` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/triggers/{id}` at `python/artex/server/agent_management.py:17` (AgentManagement.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/triggers/{id}` at `python/artex/server/agent_management.py:17` (AgentManagement.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents` at `python/artex/server/agents.py:44` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents` at `python/artex/server/agents.py:44` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}` at `python/artex/server/agents.py:44` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PATCH /api/agents/{key}` at `python/artex/server/agents.py:44` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `DELETE /api/agents/{key}` at `python/artex/server/agents.py:44` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/config` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/prompt` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/prompt/reset` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/wrapup` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/wrapup/reset` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/wrapup/task-timeout` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/wrapup/task-timeout/reset` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/triggers` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/triggers` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/prompts` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/variables` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/agents/{key}/prompt/preview` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/agents/{key}/visibility` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `PUT /api/agents/{key}/visibility` at `python/artex/server/agents.py:49` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-archives` at `python/artex/server/archive_catalog.py:90` (build_archive_catalog_application): Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation.
 - `GET /api/task-archives/{id}` at `python/artex/server/archive_catalog.py:91` (build_archive_catalog_application): Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation.
 - `GET /api/assessments/runtime` at `python/artex/server/assessments.py:90` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
@@ -343,6 +345,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/assets/counts` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `POST /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `DELETE /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
+- `GET /api/skills` at `python/artex/server/assistant_host.py:128` (AssistantHost.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/audit` at `python/artex/server/audit.py:41` (AuditService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/health` at `python/artex/server/auth.py:105` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/auth/status` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.

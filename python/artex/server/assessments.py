@@ -93,9 +93,18 @@ def register(runtime,app):
     from ..db.tool_catalog import ToolUnavailable
     class ReadCatalog:
         def list(self):return ToolCatalogStore(runtime.pool).list()
+        def get(self,key):return ToolCatalogStore(runtime.pool).get(key)
         def usage_counts(self):return ToolCatalogStore(runtime.pool).usage_counts()
         def unavailable(self,*args,**kwargs):raise ToolUnavailable('Catalog changes require runtime reconfiguration')
-        create=update=delete=unavailable
+        def update(self,tool,*,custom=True):
+            from .assistant_host import SCHEMAS
+            from ..db.tool_catalog import ToolInvalid
+            from ..db.agents import AgentStore
+            if custom or tool.key not in SCHEMAS:raise ToolUnavailable('Task tool changes require runtime reconfiguration')
+            with runtime.assistants.lock:
+                if tool.schema!=SCHEMAS[tool.key] or any((agent:=AgentStore(runtime.pool).get(name)) is None or agent.role!='assistant' for name in tool.agents):raise ToolInvalid('Unsupported assistant binding')
+                return ToolCatalogStore(runtime.pool).update(tool,custom=False)
+        create=delete=unavailable
     ToolCatalogService(ReadCatalog()).register(router)
     from .llm_records import LLMRecordService
     from ..db.llm_records import LLMRecordStore

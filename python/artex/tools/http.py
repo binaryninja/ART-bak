@@ -12,7 +12,7 @@ class ScopedHTTP:
         parsed=urlsplit(origin)
         if origin not in authorized_origins or parsed.scheme!='https' or parsed.netloc!=parsed.hostname or parsed.path or parsed.query or parsed.fragment:
             raise ValueError('Explicit canonical HTTPS origin required')
-        if not methods or set(methods)-{'GET','HEAD','POST'} or interval<1 or not 1<=max_bytes<=1048576:raise ValueError('Bounded HTTP policy required')
+        if not methods or set(methods)-{'GET','HEAD','POST','OPTIONS'} or interval<1 or not 1<=max_bytes<=1048576:raise ValueError('Bounded HTTP policy required')
         self.origin,self.host=origin,parsed.hostname
         self.methods,self.allow_path=tuple(methods),allow_path
         self.interval,self.max_bytes,self.connection=interval,max_bytes,connection_factory

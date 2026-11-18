@@ -1,5 +1,27 @@
 # Optional local PostgreSQL acceptance
 
+`assistant_assessment_acceptance.py` creates and removes its own disposable
+database on the PostgreSQL server named by `ARTEX_ACCEPTANCE_SOURCE_DSN`. It
+copies the selected provider profile without its credential, configures a new
+assistant through the authenticated HTTP router, runs a real tool-assisted
+conversation, verifies its result through a fresh database connection, and
+checks durable event delivery and shutdown. Supply `LITELLM_API_KEY` separately.
+
+```sh
+PYTHONPATH=python python python/integration/assistant_assessment_acceptance.py \
+  --source-profile-id 2 --receipt /absolute/private/path/assistant-receipt.json
+```
+
+The assessment launcher exposes custom assistants through `/api/agents` and
+`/api/conversations`. `servicenow_analyst` is a seeded coordinator using the
+same generic interfaces. Its tools submit and read registered assessments;
+the existing goals/planner/worker engine owns assessment execution. Completed
+ServiceNow inventory automatically admits `servicenow.public_rest` when public
+operations exist. Probe recipes are pinned to method, route, and reviewed
+source hash; changed or protected handlers receive metadata-only requests.
+Trigger deliveries that were in flight when a host stopped remain `uncertain`
+and are not automatically replayed.
+
 The separate `provider_fixture_acceptance.py` launcher runs one real provider
 conversation with only `read_acceptance_fixture`. It requires the same empty,
 disposable local database and explicit identity checks described below. Supply

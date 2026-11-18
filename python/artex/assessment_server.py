@@ -28,6 +28,10 @@ def install(connection,extra_catalog=()):
     with connection.transaction():
         connection.execute(DDL)
         connection.execute(TOOL_LEDGER_DDL)
+        from .server.assistant_host import install as install_assistants
+        install_assistants(connection)
+        from .server.agent_events import DDL as AGENT_EVENTS_DDL
+        connection.execute(AGENT_EVENTS_DDL)
         if connection.execute("SELECT to_regclass('public.artex_task_bootstrap')").fetchone()[0] is None:connection.execute(JOURNAL_DDL)
         for role in ('goals','planner','worker'):
             connection.execute('INSERT INTO agents(key,name,role,builtin,enabled) VALUES(%s,%s,%s,true,true) ON CONFLICT(key) DO NOTHING',(role,role.title(),role))
@@ -126,6 +130,8 @@ def main(argv=None):
         if profile is None:raise ValueError('Stored provider profile required')
         digest=hashlib.sha256()
         for path in sorted(Path(__file__).parent.rglob('*.py')):digest.update(str(path.relative_to(Path(__file__).parent)).encode()+b'\0'+path.read_bytes())
+        for path in (Path(__file__).parent/'assessments'/'servicenow_reviewed_probes.json',Path(__file__).resolve().parents[2]/'skills'/'servicenow-public-rest'/'SKILL.md'):
+            digest.update(path.name.encode()+b'\0'+path.read_bytes())
         runtime=AssessmentRuntime(pool,profile,os.environ[args.api_key_env],credentials,transcripts,args.allow_origin,key,BcryptCodec(),revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=digest.hexdigest(),extensions=extensions,enumeration=enumeration)
         app=register(runtime,runtime.bundle.app)
         config=DevListenerConfig(args.port,8,30,'http://127.0.0.1:3000');config.validate()

@@ -82,6 +82,9 @@ function AgentGridCard({
               Disabled
             </Badge>
           )}
+          {agent.execution_ready === true && (
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Ready</Badge>
+          )}
         </div>
         <p className="text-muted-foreground line-clamp-2 min-h-8 text-xs">
           {agent.description || "(No description)"}

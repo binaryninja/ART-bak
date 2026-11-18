@@ -152,7 +152,7 @@ def _csv_safe(value):
 
 def findings_csv(findings):
     out = io.StringIO(newline='')
-    writer = csv.writer(out, lineterminator='\n')
+    writer = csv.writer(out, lineterminator='\r\n')
     writer.writerow(['ID', 'Name', 'Class', 'Severity', 'Status', 'Task', 'Discovered', 'Summary', 'Traffic evidence count', 'Traffic evidence IDs'])
     for f in _ordered(findings):
         writer.writerow([f.id, *map(_csv_safe, [_title(f), f.vulnclass, _nz(f.severity, 'info'),

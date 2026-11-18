@@ -1122,6 +1122,7 @@ export interface Agent {
   role: string;
   builtin: boolean;
   enabled: boolean;
+  execution_ready?: boolean;
   llm_profile_id?: number | null; // Bound LLM profile; null/absent follows task/conversation/global
   max_turns?: number; // 0 = unlimited
   run_seconds?: number; // Worker wall-clock limit per run in seconds; 0 = unlimited

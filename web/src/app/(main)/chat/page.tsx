@@ -1200,7 +1200,7 @@ export default function ChatPage() {
   // conversation agents: custom agents + conversational built-ins (role=assistant,
   // e.g. Auto / Penetration testing). The orchestration built-ins (goals/planner/mainagent/worker)
   // are task-specific and stay hidden from the chat page.
-  const chatAgents = React.useMemo(() => agents.filter((a) => !a.builtin || a.role === "assistant"), [agents]);
+  const chatAgents = React.useMemo(() => agents.filter((a) => a.enabled && a.execution_ready !== false && (!a.builtin || a.role === "assistant")), [agents]);
   const agentFilterOptions = React.useMemo(() => {
     const counts = new Map<string, number>();
     for (const conversation of convs) {

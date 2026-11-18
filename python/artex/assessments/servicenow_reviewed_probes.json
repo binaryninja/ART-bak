@@ -1,0 +1,71 @@
+[
+  {
+    "route": "/api/now/v1/knowledge/search/facets",
+    "method": "POST",
+    "body": {},
+    "source_sha256": "038bf2a4cc9d00b6a339a984b21f5b70eb6f6dc9bb7977f2c806fbe4d5c066d6",
+    "name": "getAllFacets"
+  },
+  {
+    "route": "/api/sn_sc/v1/servicecatalog/cart/delivery_address/{user_id}",
+    "method": "GET",
+    "body": null,
+    "source_sha256": "f3c89069293a1e3826def6e69924dbc5885393c35dbe0b3eef3b98c5b6624336",
+    "name": "Get Shipping Address"
+  },
+  {
+    "route": "/api/sn_sc/v1/servicecatalog/items/{sys_id}/submit_producer",
+    "method": "POST",
+    "body": {
+      "variables": {},
+      "sysparm_also_request_for": "artex-rejection"
+    },
+    "source_sha256": "0007a574f0579ec3ae4fd3e6ed559bc490e12426233b907d01f1e92a4e895be1",
+    "name": "Submit a Record Producer"
+  },
+  {
+    "route": "/api/sn_sc/v1/servicecatalog/items/{sys_id}/order_now",
+    "method": "POST",
+    "body": {
+      "sysparm_quantity": "-1",
+      "variables": {}
+    },
+    "source_sha256": "369e165bede24ef62dc345852f3ac6e6b2ad31941ce7500540f6421a32838b35",
+    "name": "Buy Item"
+  },
+  {
+    "route": "/api/now/v1/documents/permalinks/{linkId}",
+    "method": "GET",
+    "body": null,
+    "source_sha256": "ac27c11cf077019e6405cbf122775e293e18902a1723964e05224277d8ff7f8a",
+    "name": "permalinks"
+  },
+  {
+    "route": "/api/now/v1/documents/permalinkinfo/{linkId}",
+    "method": "GET",
+    "body": null,
+    "source_sha256": "5d212e90449f1848b37e7d2adffaed0eb880377c28ddfe25e2ae7275a92261a8",
+    "name": "permalinkinfo"
+  },
+  {
+    "route": "/api/now/v1/oneextend/scripted/reseed/{sys_id}",
+    "method": "POST",
+    "body": {},
+    "source_sha256": "05f31478048c30e9fdb8ae5395ff694dd63857b2c2385373ee5ceadd8f1707e2",
+    "name": "Reseed"
+  },
+  {
+    "route": "/api/now/ml_instance_validation/validateToken/{token}",
+    "method": "GET",
+    "body": null,
+    "source_sha256": "4c5108ee009422f7151c39b9742eafe7da10029c92a4d3ebbe5a97a0282a8d8d",
+    "name": "Validate Token"
+  },
+  {
+    "route": "/api/sn_sc/v1/servicecatalog/variables/{sys_id}/dynamic_value",
+    "method": "POST",
+    "body": {},
+    "source_sha256": "d1bbf768c6b89e9b6e8a0f5783fc5dbc132b31e0184698c8b7ce5a03401ded8d",
+    "name": "Get Dynamic Value"
+  }
+]
