@@ -62,6 +62,25 @@ def reconcile_before_inventory(pool,task_ids):
             tx.execute(Query("UPDATE tasks SET status='failed',paused=false,queued=false,completed_at=COALESCE(completed_at,now()) WHERE id=$1 AND status='running'",(task_id,)))
             tx.execute(Query("UPDATE artex_assessments SET state='failed',report=$2::jsonb WHERE id=$1",(identifier,report)))
 
+def reconcile_reported(pool,task_ids):
+    """Fail an abandoned reported run without replaying or claiming settlement."""
+    from .assessments.definitions import DEFINITIONS
+    for task_id in task_ids:
+        with pool.transaction() as tx:
+            row=tx.fetch_one(Query("SELECT a.id,a.definition,a.version,a.report,t.exploration_id,t.status,b.run_id FROM artex_assessments a JOIN tasks t ON t.id=a.task_id JOIN artex_task_bootstrap b ON b.task_id=t.id WHERE t.id=$1 FOR UPDATE OF a,t",(task_id,)))
+            if row is None:raise RuntimeError('Recovery assessment not found')
+            identifier,definition,version,report,exploration_id,status,run_id=row
+            if status not in ('running','paused') or definition not in DEFINITIONS or version!=DEFINITIONS[definition].version or not isinstance(report,dict) or report.get('run_id')!=run_id:raise RuntimeError('Recovery requires an abandoned reported generation')
+            operations={r[0] for r in tx.fetch_all(Query('SELECT operation FROM artex_assessment_observations WHERE assessment_id=$1 AND run_id=$2',(identifier,run_id)))}
+            if operations!=set(DEFINITIONS[definition].operations):raise RuntimeError('Incomplete reported inventory')
+            calls=tx.fetch_all(Query('SELECT tool,status,run_id FROM artex_tool_calls WHERE task_id=$1',(task_id,)))
+            if not calls or any(state!='completed' or generation!=run_id for _,state,generation in calls) or not {'run_assessment','finish_assessment'}<={name for name,_,_ in calls}:raise RuntimeError('Unconfirmed tool effects require separate reconciliation')
+            goals=tx.fetch_all(Query("SELECT state FROM exploration_nodes WHERE exploration_id=$1 AND kind='goal'",(exploration_id,)))
+            if not goals or any(state!='met' for state, in goals):raise RuntimeError('Reported goals are not met')
+            tx.execute(Query("UPDATE exploration_nodes SET state='blocked',blocked_reason='Abandoned generation; transcript settlement unconfirmed',content_version=content_version+1 WHERE exploration_id=$1 AND kind='intent' AND state IN ('open','running')",(exploration_id,)))
+            tx.execute(Query("UPDATE tasks SET status='failed',paused=false,queued=false,completed_at=COALESCE(completed_at,now()) WHERE id=$1",(task_id,)))
+            tx.execute(Query("UPDATE artex_assessments SET state='failed',report=report || $2::jsonb WHERE id=$1",(identifier,json.dumps({'reconciliation':{'reason':'reported_generation_abandoned','settlement_confirmed':False,'run_id':run_id}}))))
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profile-id',type=int,required=True)
@@ -76,6 +95,7 @@ def main(argv=None):
     parser.add_argument('--install-schema',action='store_true')
     parser.add_argument('--migrate-legacy',action='store_true')
     parser.add_argument('--reconcile-no-observation-task',type=int,action='append',default=[])
+    parser.add_argument('--reconcile-reported-task',type=int,action='append',default=[])
     parser.add_argument('--denied-password-file',type=Path)
     parser.add_argument('--denied-username',default='admin')
     args=parser.parse_args(argv)
@@ -96,6 +116,7 @@ def main(argv=None):
         pool=ExecutorPool.postgres(dsn,max_size=12)
         if args.migrate_legacy:migrate_legacy(pool)
         reconcile_before_inventory(pool,args.reconcile_no_observation_task)
+        reconcile_reported(pool,args.reconcile_reported_task)
         if args.denied_password_file:
             if len(args.allow_origin)!=1:raise ValueError('Exact denied credential origin required')
             origin=AssessmentStore(pool,args.allow_origin).approved(args.allow_origin[0])
