@@ -310,7 +310,7 @@ class AssessmentRuntime:
                     if time.monotonic()>=next_scan:
                         discovery.scan_assets();next_scan=time.monotonic()+5
                     with self._lock:
-                        records=self.store.list()
+                        records=self.store.list_identities()
                         for record in records:
                             task=self.manager.task(str(record['task_id']))
                             if record['state']=='admitted' and task['status'] in ('done','failed','timeout'):self.store.state(record['id'],task['status'])

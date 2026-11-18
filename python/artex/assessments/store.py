@@ -75,6 +75,10 @@ class AssessmentStore:
     def list(self):
         return [decode(row) for row in self.executor.fetch_all(Query('SELECT '+COLS+' FROM artex_assessments ORDER BY created_at DESC LIMIT 200'))]
 
+    def list_identities(self):
+        columns='id,definition,version,origin,credential_ref,task_id,state'
+        return [dict(zip(columns.split(',')+['report_exists'],row)) for row in self.executor.fetch_all(Query('SELECT '+columns+',report IS NOT NULL FROM artex_assessments ORDER BY created_at DESC LIMIT 200'))]
+
     def submit(self,definition,url,credential_ref,source,profile_id,request_id=""):
         spec=DEFINITIONS[definition];origin=self.approved(url)
         key=hashlib.sha256(json.dumps([definition,spec.version,origin,credential_ref,request_id],separators=(',',':')).encode()).hexdigest()
