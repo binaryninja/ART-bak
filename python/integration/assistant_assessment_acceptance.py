@@ -65,13 +65,13 @@ def main():
         transcript=list((root/'transcripts').rglob('*.jsonl'))
         require(any('list_assessments' in p.read_text() and 'tool_use' in p.read_text() for p in transcript),'Durable tool exchange missing')
         trigger=call('POST','/agents/acceptance_reader/triggers',{'enabled':True,'on_task_create':True,'task_create_message':'List the registered assessments.'})
-        pool.execute(Query("INSERT INTO artex_agent_events(event_key,kind,payload) VALUES($1,'task_create','{}'::jsonb)",('acceptance:'+uuid.uuid4().hex,)))
+        admitted=runtime.submit('servicenow.inventory','https://dev366312.service-now.com',source={'kind':'assistant-acceptance'},request_id=uuid.uuid4().hex)
         runtime.agent_events.tick()
         delivery=pool.fetch_one(Query('SELECT conversation_id,state FROM artex_agent_deliveries WHERE trigger_id=$1',(trigger['id'],)))
         require(delivery and delivery[1]=='running','Trigger did not admit');wait_conversation(delivery[0]);runtime.agent_events.tick()
         require(pool.fetch_one(Query('SELECT state FROM artex_agent_deliveries WHERE trigger_id=$1',(trigger['id'],)))[0]=='done','Trigger not settled')
         drain=runtime.close();runtime=None
-        receipt=dict(database=database,model=profile.model,conversation_id=identifier,trigger_id=trigger['id'],trigger_conversation_id=delivery[0],transcripts=str(root/'transcripts'),drain=drain,verified=True)
+        receipt=dict(database=database,model=profile.model,conversation_id=identifier,trigger_source_task_id=admitted['task_id'],trigger_id=trigger['id'],trigger_conversation_id=delivery[0],transcripts=str(root/'transcripts'),drain=drain,verified=True)
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))
     finally:
         if runtime is not None:runtime.close()

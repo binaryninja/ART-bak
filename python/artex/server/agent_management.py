@@ -75,6 +75,8 @@ class AgentManagement:
                 data=request.json_object();self.validate_trigger(data)
                 self.pool.execute(Query('UPDATE agent_triggers SET '+','.join(k+'=$'+str(i+2) for i,k in enumerate(data))+' WHERE id=$1',(identifier,*data.values())))
                 return json_response(200,{'ok':True})
+        except AgentMissing:return error_response(404,'Agent not found')
+        except AgentUnavailable:return error_response(503,'Agent capability unavailable')
         except (ValueError,TypeError):return error_response(400,'Invalid trigger')
     def handle(self,action,request,params):
         with self.lock:

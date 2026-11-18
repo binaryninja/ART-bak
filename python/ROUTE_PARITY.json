@@ -18,7 +18,7 @@
     "server/side_questions.go": "5144bdb8b3fddc1d9a9f8fc0fcaea8c5bb81a518dafd6b8b548ff5d2a548e2f0",
     "python/artex/server/__init__.py": "9e710d3c8480bf87d9cdd6a6dc04c6d3b899e7eeef3be96f5b0ea8d23f0ab2ea",
     "python/artex/server/agent_events.py": "458650f4d0fdeba037a93a0a20b61f7b1ae081bc71374ec4e18580d21551e578",
-    "python/artex/server/agent_management.py": "39a4301d1c4a87b1dda37325e6a7a032609f8aabb00eb3b4ee95d8f784e9ee5e",
+    "python/artex/server/agent_management.py": "150902b0c9bad1a730accdb432af08053c2dfca50b705d6bb0542946e5321dca",
     "python/artex/server/agents.py": "006ffe48d3ddec7cf96c77fce89165bcc8f353f5b635cc267571be26ac36be91",
     "python/artex/server/application.py": "cd6adfeea8c0bcb1a047f39dacf6f17d158ee83f9460f901e4d7565c2798e9f5",
     "python/artex/server/archive_catalog.py": "8cc73d3a76186aaa51c43bd5f502fd3bb732c527218a115d5eac72d72d97ae75",
