@@ -92,7 +92,8 @@ class DispatchDeadlineTests(unittest.TestCase):
         self.assertTrue(self.helper.unresolved)
     def test_no_nested_lifetime_guard(self):
         from contextlib import contextmanager
-        from artex.db.task_deadline import TaskDeadlineStore
+        from unittest.mock import patch
+        import test_bootstrap_handle as bootstrap
         held=False
         @contextmanager
         def guard(*a):
@@ -101,6 +102,12 @@ class DispatchDeadlineTests(unittest.TestCase):
             held=True
             try:yield
             finally:held=False
-        self.f.handle.coordinator.guard=guard
-        self.f.store=TaskDeadlineStore(self.f.db,manager=self.f.f.f.manager,handle=self.f.handle,receipt=self.f.receipt,lifecycle_guard=guard,authorize=lambda *a:True)
-        self.helper=self.make();self.call();self.call()
+        original = bootstrap.BootstrapCoordinator
+        def construct(*args, **kwargs):
+            kwargs['lifecycle_guard'] = guard
+            return original(*args, **kwargs)
+        other = DispatchDeadlineTests()
+        self.addCleanup(other.doCleanups)
+        with patch.object(bootstrap, 'BootstrapCoordinator', side_effect=construct):
+            other.setUp()
+        other.call();other.call()

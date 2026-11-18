@@ -145,7 +145,7 @@ class BootstrapHandleTests(unittest.TestCase):
                 yield
             finally:
                 depth -= 1
-                if depth == 0:
+                if depth == 0 and self.runner.items and self.runner.items[0].phase == 'engine':
                     at_exit.set()
                     self.assertTrue(release.wait(3))
         self.coordinator.guard = guard

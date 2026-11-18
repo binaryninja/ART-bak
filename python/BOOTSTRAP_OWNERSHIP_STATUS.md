@@ -82,10 +82,13 @@ execution remain outside their evidence.
 
 ## Ownership during a hosted step
 
-An installed bootstrap handle enters the manager's generation guard and the
-original coordinator's lifecycle guard around each `advance`. The guards span
-bootstrap, child construction, and child advancement, including the original
-lifecycle guard's exit callback. Pause can signal cancellation immediately.
+An installed bootstrap handle enters the manager's generation guard around
+each `advance`. It spans bootstrap, child construction, and child advancement,
+including every original lifecycle guard's exit callback. The coordinator and
+engine acquire that lifecycle guard at their persistence boundaries; a final
+guarded ownership check completes the step. The lifecycle guard is released
+during provider work so an independent deadline observer can freeze the run.
+Pause can signal cancellation immediately.
 The manager retains the original token and handle while guarded work unwinds.
 An exception that escapes the generation guard leaves the run uncertain.
 The registry mutex is released before invoking the lifecycle guard or work.

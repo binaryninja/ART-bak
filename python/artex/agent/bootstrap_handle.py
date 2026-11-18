@@ -172,15 +172,20 @@ class BootstrapHandle:
     def _advance_guarded(self, now, initial):
         progress = None
         try:
+            self._owned()
+            if initial:
+                with self._condition:
+                    self._phase = 'initializing'
+            # Coordinator/engine operations acquire their original lifecycle
+            # guard at each persistence boundary. Holding it across provider
+            # work would block the independent deadline observer and nest
+            # non-reentrant host guards. The manager generation guard spans
+            # this entire method, including every lifecycle-guard exit.
+            progress = self._advance_owned(now, initial)
             with self._owner_guard(int(self.task_id), self.exploration_id):
-                self._owned()
-                if initial:
-                    with self._condition:
-                        self._phase = 'initializing'
-                progress = self._advance_owned(now, initial)
-            if progress is None or self.unresolved:
-                raise BootstrapUnresolved('Guarded work did not settle')
-            self._owned(allow_cancelled=True)
+                if progress is None or self.unresolved:
+                    raise BootstrapUnresolved('Guarded work did not settle')
+                self._owned(allow_cancelled=True)
             return progress
         except BaseException:
             if initial and self._continuation_pin is not None:
