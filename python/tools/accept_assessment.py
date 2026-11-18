@@ -53,7 +53,9 @@ def main():
         operations={row['sys_id'] for row in observations['api_resources']['records']}
         sources={row['sys_id']:row for row in observations['api_scripts']['records']}
         assert operations==set(sources) and sources
-        assert all(row['operation_script_available'] and hashlib.sha256(row['operation_script'].encode()).hexdigest()==row['stored_script_sha256'] for row in sources.values())
+        for row in sources.values():
+            if row['operation_script_available']:assert hashlib.sha256(row['operation_script'].encode()).hexdigest()==row['stored_script_sha256']
+            else:assert row['operation_script_unavailable_reason'] in ('protected','field_not_returned') and row['operation_script']=='' and row['stored_script_sha256'] is None
     assert report['extensions']==extensions
     assert set(args.expected_extension)<=set(report['required_extensions'])
     assert all(name in extensions and extensions[name]['arguments']==arguments and extensions[name]['run_id']==run_id for name,arguments in report['required_extensions'].items())
@@ -78,7 +80,7 @@ def main():
     else:raise RuntimeError('Assessment ownership remains')
     evidence={'receipt':receipt,'revision':report['revision'],'source_sha256':report['source_sha256'],'run_id':run_id,
         'models':sorted({row[2] for row in records}),'record_ids':[row[0] for row in records],
-        'task_status':task[0],'completed_at':task[1].isoformat(),'operations':{k:v.get('status') for k,v in observations.items()},'enumeration':{k:{field:v.get(field) for field in ('record_count','completeness','max_records','pagination_error','total_records_reported')} for k,v in observations.items() if 'record_count' in v},
+        'task_status':task[0],'completed_at':task[1].isoformat(),'operations':{k:v.get('status') for k,v in observations.items()},'enumeration':{k:{field:v.get(field) for field in ('record_count','completeness','max_records','pagination_error','total_records_reported','source_available_count','source_unavailable_count','source_bytes')} for k,v in observations.items() if 'record_count' in v},
         'capabilities':report['capabilities'],'extensions':extensions,'extensions_revision':report['extensions_revision'],'tool_calls':len(ledger),'tool_usage':dict(usage),'settlement':settlement}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print(json.dumps({'task_id':task_id,'run_id':run_id,'status':'done','evidence':str(args.output)}))

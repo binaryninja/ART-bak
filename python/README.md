@@ -87,6 +87,8 @@ The `api_scripts` evidence stores each accessible REST operation's full source,
 source hashes, operation ID and URI, and authentication/ACL requirements. Source
 pages adapt downward from 25 rows when necessary. The model initially receives
 source metadata; `read_assessment_evidence` can retrieve bounded source chunks.
+Protected or unreadable script fields remain explicit per-operation limitations,
+with the observed protection policy and source-availability counts.
 Checks declare their required observed capability. Table reads use stable
 ordering, 250-row pages, a default 10,000-row scan limit (50,000 for API and
 data-broker metadata), per-page hashes, and explicit

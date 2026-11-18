@@ -189,7 +189,7 @@ class InventoryTests(unittest.TestCase):
     def test_rest_source_is_complete_hashed_and_credential_redacted(self):
         import hashlib
         source='// private-password\n'+'return 42;\n'*2000
-        body=json.dumps({'result':[{'sys_id':'one','operation_script':source,'requires_authentication':'false','requires_acl_authorization':'true','enforce_acl':'acl-id'},{'sys_id':'two'}]}).encode()
+        body=json.dumps({'result':[{'sys_id':'one','operation_script':source,'requires_authentication':'false','requires_acl_authorization':'true','enforce_acl':'acl-id'},{'sys_id':'two','sys_policy':'protected'}]}).encode()
         inventory,_=self.make(body)
         result=json.loads(inventory.inspect(Context(),{'resource':'api_scripts'}))
         first,second=result['records']
@@ -200,6 +200,8 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(first['enforce_acl'],'acl-id')
         self.assertTrue(first['operation_script_available']);self.assertTrue(first['operation_script_redacted'])
         self.assertFalse(second['operation_script_available'])
+        self.assertEqual(second['operation_script_unavailable_reason'],'protected')
+        self.assertEqual((result['source_available_count'],result['source_unavailable_count']),(1,1))
         from artex.assessments.runtime import model_observations
         sample=model_observations({'api_scripts':result})['api_scripts']['records'][0]
         self.assertNotIn('operation_script',sample)

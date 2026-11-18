@@ -35,7 +35,7 @@ TABLES.update({
     'api_authentication':('sys_ws_operation','sys_id,name,http_method,operation_uri,relative_path,web_service_definition,web_service_version,requires_authentication,requires_acl_authorization,requires_snc_internal_role,enforce_acl',''),
     'security_properties':('sys_properties','name,value','nameINglide.security.strict_update_check,glide.security.use_csrf_token,glide.security.csrf.strict.validation.mode,glide.ui.escape_all_script,glide.security.url.whitelist,glide.authenticate.multifactor'),
     'api_versions':('sys_ws_version','sys_id,web_service_definition,version,version_id,active,is_default,deprecated',''),
-    'api_scripts':('sys_ws_operation','sys_id,name,http_method,operation_uri,web_service_definition,web_service_version,requires_authentication,requires_acl_authorization,requires_snc_internal_role,enforce_acl,operation_script',''),
+    'api_scripts':('sys_ws_operation','sys_id,name,http_method,operation_uri,web_service_definition,web_service_version,sys_scope,sys_policy,requires_authentication,requires_acl_authorization,requires_snc_internal_role,enforce_acl,operation_script',''),
     'data_broker_types':('sys_db_object','sys_id,name,label,super_class','nameSTARTSWITHsys_ux_data_broker'),
     'data_brokers':('sys_ux_data_broker','sys_id,name,api_name,sys_class_name,sys_scope,private,schema_version',''),
     'data_broker_rest':('sys_ux_data_broker_rest','sys_id,name,api_name,sys_scope,private,mutates_server_data,http_method,api_url',''),
@@ -179,6 +179,11 @@ class ServiceNowInventory:
             result['records'].extend(page['records']);result['more_records_possible']=page['more_records_possible'];offset+=page['limit']
             if page.get('fields_truncated'):result['fields_truncated']=True
         result['record_count']=len(result['records']);result.update(self.enumeration.public(resource))
+        if resource=='api_scripts':
+            result['source_available_count']=sum(row['operation_script_available'] for row in result['records'])
+            result['source_unavailable_count']=len(result['records'])-result['source_available_count']
+            result['source_bytes']=sum(row['operation_script_bytes'] for row in result['records'])
+            result['source_redacted_count']=sum(row['operation_script_redacted'] for row in result['records'])
         if result.get('more_records_possible') and 'pagination_error' not in result:result['pagination_error']='record_limit'
         result['completeness']='bounded' if result.get('more_records_possible') else 'complete'
         return self.redact(json.dumps(result,sort_keys=True))
@@ -233,6 +238,7 @@ class ServiceNowInventory:
                         available=isinstance(raw.get('operation_script'),str)
                         source=raw.get('operation_script','') if available else ''
                         stored.update(operation_script_available=available,operation_script_bytes=len(source.encode()),operation_script_sha256=hashlib.sha256(source.encode()).hexdigest() if available else None,stored_script_sha256=hashlib.sha256(stored['operation_script'].encode()).hexdigest() if available else None,operation_script_redacted=source!=stored['operation_script'])
+                        if not available:stored['operation_script_unavailable_reason']='protected' if raw.get('sys_policy')=='protected' else 'field_not_returned'
                 result['limit']=limit
                 total=header('X-Total-Count','')
                 total=int(total) if total.isascii() and total.isdigit() and len(total)<=10 else None
