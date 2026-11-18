@@ -1,8 +1,9 @@
+import sys
 import unittest
 from threading import Event,Thread
 from unittest.mock import patch
 from artex.agent.task_continuation import ContinuationUnavailable
-from artex.manager import RuntimeUnavailable
+from artex.manager import RuntimeUnavailable, TaskManager
 import test_task_continuation as continuation
 import test_runtime_listener as listener
 from artex.agent.task_continuation import TaskContinuationOwner
@@ -95,13 +96,28 @@ class Tests(unittest.TestCase):
     def test_quarantine_at_final_activation_observation_stays_retained(self):
         f=self.fixture();f.app.host.resume_suspended('5');new=f.app.runner.handles()[0]
         cap=next(cap for cap,rec in f.owner._records.items() if rec['new'] is new)
-        original=f.app.manager.owns_generation;calls=[0]
-        def quarantine(*a):
-            result=original(*a);calls[0]+=1
-            if calls[0]==2:f.owner.quarantine(cap)
-            return result
-        with patch.object(f.app.manager,'owns_generation',side_effect=quarantine):
-            with self.assertRaises(ContinuationUnavailable):f.owner.activate(cap,new)
+        # Quarantine after the final genuine ownership observation, before
+        # activation's record check. Neither observation supplies authority.
+        observations = []
+        previous = sys.getprofile()
+        def observe(frame, event, result):
+            if previous is not None:
+                previous(frame, event, result)
+            if (event == 'return' and frame.f_code is TaskManager.owns_generation.__code__
+                    and frame.f_back.f_code is TaskContinuationOwner.activate.__code__
+                    and frame.f_locals['self'] is f.app.manager
+                    and frame.f_locals['token'] is new.token
+                    and frame.f_locals['handle'] is new):
+                observations.append(result)
+                if len(observations) == 2 and result is True:
+                    f.owner.quarantine(cap)
+        try:
+            sys.setprofile(observe)
+            with self.assertRaisesRegex(ContinuationUnavailable, 'Activation record changed'):
+                f.owner.activate(cap,new)
+        finally:
+            sys.setprofile(previous)
+        self.assertEqual(observations, [True, True])
         self.assertEqual(f.owner._records[cap]['state'],'quarantined')
         self.assertTrue(f.owner._records[cap]['failed'])
         self.assertTrue(f.owner.retained(f.handle));self.assertTrue(f.owner.retained(new))
