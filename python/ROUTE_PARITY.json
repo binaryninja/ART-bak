@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 207,
-    "python_route_declarations": 236,
+    "python_offline_contract_routes": 208,
+    "python_route_declarations": 237,
     "python_alternative_route_groups": 22,
-    "python_optional_service_routes": 202,
+    "python_optional_service_routes": 203,
     "matched_offline_contract_routes": 206,
     "go_routes_without_python_registration": 55
   },
@@ -65,10 +65,11 @@
     "python/artex/server/notification_metadata_setup.py": "9441a9bfd8a6e22de70d4de7aa722f678a0976d53ffbafd7ad5e698a668e2368",
     "python/artex/server/passwords.py": "7a434d3af91fa49504eb1a663ca803d156f78449f7cd5d9bbcb7906a526d13da",
     "python/artex/server/pool_health.py": "fee471d74dd3c09c9cf4b52f7a13327ab88ab58eb2a320f8964f4a0a8865ee94",
+    "python/artex/server/profile_reconciliation.py": "ae08a23a0470ee03e1ce150000688a88982738056ce2a7790279dfdb1d33159a",
     "python/artex/server/profiles.py": "67639707f4b35b69d879cc24328312c799c43da263a8a1c97d45ff3dc2449c0d",
     "python/artex/server/runtime_listener.py": "4da4fc81a5c434e6f7a10a6158858375ea7be3238b9bdf0548ccd46e18d64cd3",
     "python/artex/server/runtime_session.py": "19f65db0c7d1b49c65bcbc6cd8db810fcee8c8c647c104f30fcf595cbfa0ed24",
-    "python/artex/server/runtime_setup.py": "1cd2dc501a7eda1c93ff319ba49a8b7ae8667c9ec712c918cf758c12b4b3b19f",
+    "python/artex/server/runtime_setup.py": "1d5fa75d551af92acdb933b33ebe99773f2a873b987db889056ae030a5771783",
     "python/artex/server/runtime_signals.py": "5acf0ac91498cad6606cc2344fbe5452f224ce0bf5297b3a9ebba82ec3d8078a",
     "python/artex/server/sidequestions.py": "29ce6975dee1354b5ae589c216cf5a25a8dfa62149ba7100b495c0741e426110",
     "python/artex/server/skill_archive_import.py": "1d68809539f2708cbeae7bba05975bd6306c37a8f3b6ad8c8a8865198cb74cdc",
@@ -113,7 +114,7 @@
     "python/artex/server/task_resolution_read.py": "c10991cdfde6e859b42b777752a61070b8eed862c9584ca0779fdb8e473e62b9",
     "python/artex/server/task_runtime_read_router.py": "d14280c4137827e5909ba817683ae0710183df56a26b8444a61738a81a7f1b60",
     "python/artex/server/task_runtime_reads.py": "fff6be9738c005d567e34c1e292b804aed572649fb533903ba70a46f91bc63ce",
-    "python/artex/server/task_runtime_setup.py": "50589dc0a21fbc4d608a48070d8185e2d0fdba24bcf3c6c42a7dd6c90fdbe38b",
+    "python/artex/server/task_runtime_setup.py": "8c44de1cca4d3c1b27869c7aa436ec454f1ef6a0c59d39c148bdaba0a0f1667e",
     "python/artex/server/task_scope.py": "f84169cb61132b26b4b25f0eb17780b59b4bf1ac823bc744f8984eb6d7b0618d",
     "python/artex/server/task_scope_read.py": "3d93e07093949dad88bd23d07555f34a665a9e487e69401e5a809c5a96edc879",
     "python/artex/server/task_templates.py": "b5e8f9345a9e68bcb729b800a661bbda70cffa18c3e63f3c82e16f60cd284f47",
@@ -11793,6 +11794,32 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/llm/profiles/reconcile",
+      "source": "python/artex/server/profile_reconciliation.py",
+      "line": 94,
+      "function": "ProfileReconciliationService.register",
+      "handler": "lambda request, params: self._handle(request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/llm/profiles/reconcile",
+          "source": "python/artex/server/profile_reconciliation.py",
+          "line": 94,
+          "function": "ProfileReconciliationService.register",
+          "handler": "lambda request, params: self._handle(request)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/llm/profiles",
       "source": "python/artex/server/profiles.py",
@@ -15923,6 +15950,18 @@
       "status": "optional offline contract; injected repository/live manager required"
     },
     {
+      "method": "POST",
+      "path": "/api/llm/profiles/reconcile",
+      "source": "python/artex/server/profile_reconciliation.py",
+      "line": 94,
+      "function": "ProfileReconciliationService.register",
+      "handler": "lambda request, params: self._handle(request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
       "method": "GET",
       "path": "/api/llm/profiles",
       "source": "python/artex/server/profiles.py",
@@ -17436,6 +17475,32 @@
     }
   ],
   "python_only": [
+    {
+      "method": "POST",
+      "path": "/api/llm/profiles/reconcile",
+      "source": "python/artex/server/profile_reconciliation.py",
+      "line": 94,
+      "function": "ProfileReconciliationService.register",
+      "handler": "lambda request, params: self._handle(request)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/llm/profiles/reconcile",
+          "source": "python/artex/server/profile_reconciliation.py",
+          "line": 94,
+          "function": "ProfileReconciliationService.register",
+          "handler": "lambda request, params: self._handle(request)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
     {
       "method": "GET",
       "path": "/api/intercept/task/{id}",

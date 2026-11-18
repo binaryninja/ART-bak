@@ -67,7 +67,8 @@ class CurrentCheckoutTests(unittest.TestCase):
 
     def test_placeholder_spelling_is_preserved_instead_of_inventing_an_alias(self):
         self.assertEqual([(r['method'], r['path']) for r in self.data['python_only']],
-                         [('GET', '/api/intercept/task/{id}')])
+                         [('POST', '/api/llm/profiles/reconcile'),
+                          ('GET', '/api/intercept/task/{id}')])
         matches = [r for r in self.data['go_routes'] if r['path'] == '/api/intercept/task/{taskID}']
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0]['python']['source'], 'python/artex/server/intercept_read_setup.py')

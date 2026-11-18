@@ -24,10 +24,10 @@ use a different placeholder spelling for an existing Go URL shape.
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **207**.
-- python route declarations: **236**.
+- python offline contract routes: **208**.
+- python route declarations: **237**.
 - python alternative route groups: **22**.
-- python optional service routes: **202**.
+- python optional service routes: **203**.
 - matched offline contract routes: **206**.
 - go routes without python registration: **55**.
 
@@ -429,6 +429,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/llm/pool/reset` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/retry-policy` at `python/artex/server/pool_health.py:130` (PoolHealthService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/llm/profiles/reconcile` at `python/artex/server/profile_reconciliation.py:94` (ProfileReconciliationService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/profiles` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/llm/profiles` at `python/artex/server/task_runtime_read_router.py:62` (TaskRuntimeReadRouter.bind): Explicit same-executor task read builder, original authenticated application and per-request selector/lifetime grants; independent source/global permissions; no active-task fallback, mutations or default activation.
 - `GET /api/llm/profiles` at `python/artex/server/task_runtime_reads.py:103` (TaskRuntimeReads.bind): Explicit fixed task/exploration scope, executor, runtime snapshot and request/lifetime grants; original authenticated application and independent global permissions; findings require an explicitly supplied service; no mutations or default activation.
@@ -555,4 +556,5 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python-only registrations
 
+- `POST /api/llm/profiles/reconcile`
 - `GET /api/intercept/task/{id}`
