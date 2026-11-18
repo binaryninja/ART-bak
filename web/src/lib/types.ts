@@ -6,6 +6,7 @@ export type EngineMode = "exploring" | "paused" | "stalled" | "idle";
 
 export interface Task {
   id: string;
+  runtime_kind?: "servicenow-recon";
   name?: string; // Optional task name; empty/absent is unnamed and displays the description instead
   category_id?: number;
   category_name?: string;

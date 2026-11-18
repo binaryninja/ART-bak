@@ -38,6 +38,23 @@ SYSTEM = ('You are conducting the fixed read-only inventory specified by the ope
           'Cite the resource names and HTTP statuses. Do not claim vulnerabilities from metadata alone.')
 
 
+def recon_task_view(task):
+    if task is not None and task.get('description') == DESCRIPTION and task.get('goal') == GOAL:
+        return {**task, 'runtime_kind': 'servicenow-recon'}
+    return task
+
+
+class _ReconTaskFacade(TaskHTTPManagerFacade):
+    def task(self, task_id):
+        return recon_task_view(super().task(task_id))
+
+    def list_tasks(self):
+        return [recon_task_view(task) for task in super().list_tasks()]
+
+    def create_task(self, *args, **kwargs):
+        return recon_task_view(super().create_task(*args, **kwargs))
+
+
 class _OwnedAgent(BoundedAgent):
     def __init__(self, runtime, *args, **kwargs):
         self.owner = runtime
@@ -117,7 +134,7 @@ class ReconRuntime:
         self.manager = TaskManager(TaskStore(pool), categories, self.runner,
             dto_enricher=TaskMetricsEnricher(TaskMetricsStore(pool)), profile_available=self.profile_available)
         self.host = AgentHost(self.manager, self.runner)
-        self.facade = TaskHTTPManagerFacade(self.host, admission_guard=self.admission)
+        self.facade = _ReconTaskFacade(self.host, admission_guard=self.admission)
         self.manager.load_existing()
 
     def redact(self, value):
@@ -292,7 +309,7 @@ class ReconRuntime:
             if kind == 'recon_manifest': manifest = value
             elif kind == 'recon_report': report = value
             else: observations.append(value)
-        return dict(task=self.manager.task(task_id), manifest=manifest, report=report, observations=observations,
+        return dict(task=self.facade.task(task_id), manifest=manifest, report=report, observations=observations,
                     retained=self.manager.retirement_snapshot(task_id)[2:], poll_error=self.poll_error)
 
     def application(self, signing_key, password_codec):

@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { ApiError, mutationMustWait } from "@/lib/mutation-contract.mjs";
+import { taskDetailHref } from "@/lib/task-detail-route.mjs";
 import type { LLMProfile, Task } from "@/lib/types";
 
 import { AssetsTab } from "./_tabs/assets-tab";
@@ -277,6 +278,7 @@ function TaskDetailInner() {
       .then(([task, s]) => {
         if (!viewActive.current || currentTaskID.current !== id || taskLoadInFlight.current !== request) return;
         const base = { ...task };
+        if (base.runtime_kind === "servicenow-recon") router.replace(taskDetailHref(base));
         const at = s?.active_task;
         if (at) {
           base.in_flight = at.in_flight;
@@ -304,7 +306,7 @@ function TaskDetailInner() {
           taskLoadInFlight.current = null;
         }
       });
-  }, [id]);
+  }, [id, router]);
   React.useEffect(() => {
     load();
     const timer = setInterval(load, 5000);
@@ -397,6 +399,13 @@ function TaskDetailInner() {
         )}
       </div>
     );
+  }
+
+  if (task.runtime_kind === "servicenow-recon") {
+    return <div className="flex flex-1 flex-col items-center justify-center gap-3 p-10">
+      <p>Opening campaign report…</p>
+      <Link className="underline" href={taskDetailHref(task)}>Open task {task.id} report</Link>
+    </div>;
   }
 
   const completed = task.status === "done";

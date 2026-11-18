@@ -17,6 +17,14 @@ class Response:
 
 
 class InventoryTests(unittest.TestCase):
+    def test_only_canonical_campaigns_get_the_runtime_marker(self):
+        from artex.server.servicenow_recon import DESCRIPTION, GOAL, recon_task_view
+        row = dict(id='4', description=DESCRIPTION, goal=GOAL, status='failed')
+        self.assertEqual(recon_task_view(row)['runtime_kind'], 'servicenow-recon')
+        self.assertNotIn('runtime_kind', row)
+        self.assertNotIn('runtime_kind', recon_task_view({**row, 'goal': 'another task'}))
+        self.assertIsNone(recon_task_view(None))
+
     def test_fixed_plan_uses_actual_provider_protocol(self):
         from artex.providers import Config, serialize
         from artex.server.servicenow_recon import ReconRuntime

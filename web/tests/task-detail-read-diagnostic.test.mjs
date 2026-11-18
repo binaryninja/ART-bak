@@ -1,6 +1,7 @@
 import ts from "typescript";
 
 import { ApiError, mutationMustWait } from "../src/lib/mutation-contract.mjs";
+import { taskDetailHref } from "../src/lib/task-detail-route.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -47,7 +48,9 @@ function harness(initialID = "17") {
     stats = [],
     calls = [],
     writes = [],
+    navigations = [],
     timers = new Map();
+  const router = { push: () => assert.fail("No push navigation effect"), replace: (href) => navigations.push(href) };
   const same = (a, b) => a && b && a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
   const hooks = {
     useState(initial) {
@@ -138,7 +141,7 @@ function harness(initialID = "17") {
       if (name === "next/link") return { default: "Link" };
       if (name === "next/navigation")
         return {
-          useRouter: () => ({ push: () => assert.fail("No navigation effect") }),
+          useRouter: () => router,
           useSearchParams: () => ({
             get: (key) => {
               assert.equal(key, "id");
@@ -148,6 +151,7 @@ function harness(initialID = "17") {
         };
       if (name === "@/lib/api") return { api };
       if (name === "@/lib/mutation-contract.mjs") return { ApiError, mutationMustWait };
+      if (name === "@/lib/task-detail-route.mjs") return { taskDetailHref };
       if (name === "sonner") return { toast: new Proxy({}, { get: () => () => assert.fail("No mutation toast") }) };
       assert.ok(name.startsWith("@/components/") || name.startsWith("./_tabs/") || name === "lucide-react", name);
       return new Proxy({}, { get: (_target, key) => String(key) });
@@ -182,6 +186,7 @@ function harness(initialID = "17") {
     stats,
     calls,
     writes,
+    navigations,
     render,
     settle,
     words: () =>
@@ -273,6 +278,16 @@ test("optional stats failure does not turn a successful task read into an error"
   await h.settle();
   assert.ok(h.nodes().some((node) => node.type === "Tabs"));
   assert.equal(h.retry(), undefined);
+});
+
+test("a recon task redirects to its exact report without mounting interactive sessions", async () => {
+  const h = harness("4");
+  h.reads[0].resolve(task("4", { runtime_kind: "servicenow-recon", status: "failed" }));
+  h.stats[0].resolve(null);
+  await h.settle();
+  assert.deepEqual(h.navigations, ["/function/recon?id=4"]);
+  assert.equal(h.nodes().some(node => node.type === "SessionsTab" || node.type === "Tabs"), false);
+  assert.ok(h.nodes().some(node => node.type === "Link" && node.props.href === "/function/recon?id=4"));
 });
 
 test("poll failure retains the last confirmed current task and existing control display", async () => {
