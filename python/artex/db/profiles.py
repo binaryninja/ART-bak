@@ -22,6 +22,7 @@ import math
 import re
 from urllib.parse import urlsplit,urlunsplit,unquote
 from .core import Query,int64
+from .configuration_ownership import require_write
 
 
 class ProfileInvalid(ValueError):pass
@@ -198,6 +199,7 @@ class ProfileStore:
         return factory()
 
     def save(self,profile):
+        require_write(self.executor, 'profile.save')
         retries=_validate(profile)
         # Only trusted constants become identifiers. Values remain bound.
         columns=['name','format','base_url','proxy','model']
@@ -214,6 +216,7 @@ class ProfileStore:
             return f"NULLIF({key},'')" if column in ('base_url','proxy') or profile.id==0 and column in ('api_key','api_key_hint') else key
         with _safe_storage():
             with self._transaction() as tx:
+                require_write(self.executor, 'profile.save')
                 if profile.id==0:
                     sql='INSERT INTO llm_profiles('+','.join(columns)+') VALUES ('+','.join(bind(i,col) for i,col in enumerate(columns,1))+') RETURNING id'
                     id=tx.fetch_one(Query(sql,tuple(values)))[0]
@@ -225,10 +228,12 @@ class ProfileStore:
         return id
 
     def set_active(self,id):
+        require_write(self.executor, 'profile.set_active')
         id=int64(id,'profile id')
         if id<=0:raise ProfileInvalid('profile id must be positive')
         with _safe_storage():
             with self._transaction() as tx:
+                require_write(self.executor, 'profile.set_active')
                 # Source's two-update transaction; row uniqueness remains schema-owned.
                 tx.execute(Query('UPDATE llm_profiles SET is_default=false WHERE is_default'))
                 if tx.execute(Query('UPDATE llm_profiles SET is_default=true WHERE id=$1',(id,)))!=1:

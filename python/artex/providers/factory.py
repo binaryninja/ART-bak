@@ -10,6 +10,14 @@ Each logical profile call has an aggregate attempt/time budget. Global retry
 settings are not read: callers must resolve overrides before assembly.
 Proxy, rate limits and session headers are rejected. Context windows feed pool admission, not compaction.
 Profile streaming=False forbids stream() rather than inventing SSE events.
+prepare()/prepare_pool() construct independent providers without consulting or
+publishing into the factory cache. They do not certify a database commit or grant
+publication authority. The caller owns the resulting references and must arrange
+any resource disposal; the transport contract provides no automatic close hook.
+Existing build()/pool() caching and coordinator wiring remain unchanged.
+Enrolled factories require already-held configuration ownership; preparation is
+read access and explicit invalidation is write access. The legacy coordinator
+refuses enrolled resources; use the opt-in committed host instead.
 Coordinator mutations are serialized only within this instance; external writers
 require external synchronization. Inject server.ProfileApplyPending as
 pending_error to integrate ProfileService without importing server modules.
@@ -22,6 +30,8 @@ import time
 from . import Config, Provider
 from .retry import Policy, RetryProvider, RetryTransport
 from ..db.profiles import LLMProfile, ProfileInvalid, ProfileNotFound, _validate, _public_url
+from ..configuration_owner import ConfigurationUnavailable
+from ..db.configuration_ownership import is_bound, require_read, require_write
 from ..health import Registry
 from ..llmpool import Member, Pool, RANK_ACTIVE
 
@@ -102,30 +112,56 @@ class ProfileFactory:
         return config
 
     def build(self, profile):
+        require_read(self, 'factory.build')
         profile = deepcopy(profile)
         config = self.validate(profile)
         # Private cache values include credentials, never exposed in repr/DTO.
         fingerprint = tuple(getattr(profile, f.name) for f in fields(profile))
         with self._lock:
+            require_read(self, 'factory.build')
             cached = self._cache.get(profile.id)
             if cached is not None and cached[0] == fingerprint:
+                require_read(self, 'factory.build')
                 return cached[1]
-            try:
-                transport = self._transport_factory(config)
-            except Exception:
-                raise ProfileInvalid('transport construction failed') from None
-            if not callable(transport):
-                raise ProfileInvalid('transport factory must return a callable')
-            policy = Policy(profile.retry, self._retry_max_attempts, self._retry_max_seconds)
-            transport = RetryTransport(transport, policy, clock=self._clock, sleep=self._sleep)
-            retrying = RetryProvider(Provider(config, transport), policy, format=profile.format,
-                                     clock=self._clock, sleep=self._sleep)
-            provider = ConfiguredProvider(retrying, profile)
+            provider = self._construct(profile, config)
+            require_read(self, 'factory.build')
             self._cache[profile.id] = (fingerprint, provider)
             return provider
 
-    def invalidate(self, identifier=None):
+    def prepare(self, profile):
+        """Construct a fresh provider without reading or changing the cache.
+
+        This performs the same validation and construction as a cache miss in
+        build(), including error redaction. It invokes the supplied inert
+        transport factory, never the resulting transport. It is not a commit,
+        publication or revocation operation, and does not install the provider.
+        """
+        require_read(self, 'factory.prepare')
+        profile = deepcopy(profile)
+        config = self.validate(profile)
         with self._lock:
+            require_read(self, 'factory.prepare')
+            provider = self._construct(profile, config)
+            require_read(self, 'factory.prepare')
+            return provider
+
+    def _construct(self, profile, config):
+        try:
+            transport = self._transport_factory(config)
+        except Exception:
+            raise ProfileInvalid('transport construction failed') from None
+        if not callable(transport):
+            raise ProfileInvalid('transport factory must return a callable')
+        policy = Policy(profile.retry, self._retry_max_attempts, self._retry_max_seconds)
+        transport = RetryTransport(transport, policy, clock=self._clock, sleep=self._sleep)
+        retrying = RetryProvider(Provider(config, transport), policy, format=profile.format,
+                                 clock=self._clock, sleep=self._sleep)
+        return ConfiguredProvider(retrying, profile)
+
+    def invalidate(self, identifier=None):
+        require_write(self, 'factory.invalidate')
+        with self._lock:
+            require_write(self, 'factory.invalidate')
             if identifier is None:
                 self._cache.clear()
             else:
@@ -133,6 +169,25 @@ class ProfileFactory:
         # Health has explicit persistence callbacks; callers own reset policy.
 
     def pool(self, profiles):
+        require_read(self, 'factory.pool')
+        pool = self._assemble_pool(profiles, self.build)
+        require_read(self, 'factory.pool')
+        return pool
+
+    def prepare_pool(self, profiles):
+        """Construct an unpublished pool with ordinary pool validation/ranking.
+
+        Even a later member failure leaves every cache entry untouched. Earlier
+        constructions may have allocated caller-owned transport resources; no
+        close/revocation contract is invented here. The existing health registry
+        is shared by identity and is not reset or updated during construction.
+        """
+        require_read(self, 'factory.prepare_pool')
+        pool = self._assemble_pool(profiles, self.prepare)
+        require_read(self, 'factory.prepare_pool')
+        return pool
+
+    def _assemble_pool(self, profiles, build):
         profiles = deepcopy(list(profiles))
         if any(not isinstance(p, LLMProfile) or p.id <= 0 for p in profiles):
             raise ProfileInvalid('pool requires persisted profiles')
@@ -140,7 +195,7 @@ class ProfileFactory:
             raise ProfileInvalid('duplicate or ambiguous pool profiles')
         eligible = [p for p in profiles if p.is_default or not p.pool_exclude]
         eligible.sort(key=lambda p: (not p.is_default, -p.priority, p.id))
-        members = [Member(p.id, p.name, self.build(p), p.model, p.format,
+        members = [Member(p.id, p.name, build(p), p.model, p.format,
                           p.priority, p.is_default, RANK_ACTIVE if p.is_default else p.priority,
                           max(32, min(1000, p.context_window_k or 200)) * 1000) for p in eligible]
         return Pool(members, self.health) if members else None
@@ -181,8 +236,16 @@ class ProfileCoordinator:
     def snapshot(self):
         return self.runtime()[1]
 
+    def _require_unbound(self):
+        # This legacy preflight/publication protocol cannot participate in an
+        # enrolled domain, even when its caller holds a writer capability.
+        if is_bound(self._factory) or is_bound(getattr(self._store, 'executor', None)):
+            raise ConfigurationUnavailable('Legacy profile coordinator cannot use enrolled resources')
+
     def reload(self):
+        self._require_unbound()
         with self._lock:
+            self._require_unbound()
             self._pool, self._snapshot = None, public_snapshot()
             self._factory.invalidate()
             active = self._store.active()
@@ -198,6 +261,7 @@ class ProfileCoordinator:
             self._pool, self._snapshot = pool, public_snapshot(active)
 
     def _apply(self):
+        self._require_unbound()
         try:
             self.reload()
         except Exception:
@@ -206,7 +270,9 @@ class ProfileCoordinator:
             raise self._pending_error('profile persisted but runtime application is incomplete') from None
 
     def save(self, profile):
+        self._require_unbound()
         with self._lock:
+            self._require_unbound()
             candidate = deepcopy(profile)
             if candidate.id:
                 previous = self._store.get(candidate.id)
@@ -221,7 +287,9 @@ class ProfileCoordinator:
             return identifier
 
     def set_active(self, identifier):
+        self._require_unbound()
         with self._lock:
+            self._require_unbound()
             profile = self._store.get(identifier)
             if profile is None:
                 raise ProfileNotFound('profile not found')

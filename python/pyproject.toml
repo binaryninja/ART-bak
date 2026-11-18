@@ -20,3 +20,4 @@ include = ["artex*"]
 
 [tool.setuptools.package-data]
 "artex.db" = ["schema.sql", "timed_source_manifest.json"]
+"artex.traffic" = ["schema.sql"]

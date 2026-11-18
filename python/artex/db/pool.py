@@ -173,6 +173,36 @@ class ExecutorPool:
             del self._local.lease
             self._release(executor,lease.healthy)
 
+    @contextmanager
+    def committed_transaction(self):
+        """Pin one original PostgresExecutor through a fresh owned outer commit.
+
+        No existing thread lease or duck-typed fallback is accepted. Nested
+        ordinary savepoints use this same lease; caught operation failures also
+        refuse commit. Failed/uncertain leases are retired without retry.
+        Normal return is the original driver's acknowledgement, not task or
+        cross-process writer authority. Existing pool/driver wait limits apply.
+        """
+        from .postgres import PostgresExecutor, CommitBoundaryError
+        if getattr(self._local,'lease',None) is not None:
+            raise CommitBoundaryError('Committed transaction requires no existing pool transaction')
+        executor=self._acquire();lease=_Lease(executor);self._local.lease=lease
+        try:
+            try:
+                if type(executor) is not PostgresExecutor:
+                    raise PoolFactoryError('Committed transaction requires an original PostgresExecutor')
+                with executor.committed_transaction():
+                    yield self
+                    if not lease.healthy:
+                        failure=executor._committed['failure']
+                        if failure is not None:raise failure
+                        raise CommitBoundaryError('Pool transaction recorded a failed operation')
+            except BaseException:
+                lease.healthy=False;raise
+        finally:
+            del self._local.lease
+            self._release(executor,lease.healthy)
+
     def _operation(self,name,query):
         lease=getattr(self._local,'lease',None)
         if lease is not None:

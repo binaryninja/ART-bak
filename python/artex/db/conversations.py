@@ -7,6 +7,7 @@ runtime/side-question/finding-retest/transcript lifecycle, never FK-only success
 """
 from dataclasses import dataclass
 from .core import Query,int64
+from .configuration_ownership import require_write
 from .postgres import NoRowsError
 
 def _optional(executor,query):
@@ -135,7 +136,9 @@ WHERE id=$1 RETURNING '''+COLS,(id,'title' in data,title,pinned))))
     def update_profile(self,id,profile_id):
         identifier(id)
         if profile_id is not None:identifier(profile_id)
+        require_write(self.executor, 'conversations.update_profile')
         with self._transaction() as tx:
+            require_write(self.executor, 'conversations.update_profile')
             if _optional(tx,Query('SELECT id FROM conversations WHERE id=$1 FOR UPDATE',(id,))) is None:raise ConversationMissing()
             self._profile(tx,profile_id)
             tx.execute(Query('UPDATE conversations SET llm_profile_id=$2 WHERE id=$1',(id,profile_id)))

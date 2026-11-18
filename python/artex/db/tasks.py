@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 import json
 from .core import Executor, Query, int64
+from .configuration_ownership import require_write
 from .task_categories import CategoryInvalid, CategoryNotFound
 
 MIN_PLAN_HEARTBEAT_SECONDS = 600
@@ -155,7 +156,9 @@ class TaskStore:
         if int64(active_profile_id,'active profile ID')<0:raise TaskInvalid('Invalid active profile ID')
         active=(active_profile_id or ids[0]) if ids else None
         if ids and active not in ids:raise TaskInvalid('Active profile not in chain')
+        require_write(self.executor, 'task_profiles.replace_idle')
         with self.executor.transaction() as tx:
+            require_write(self.executor, 'task_profiles.replace_idle')
             rows=tx.fetch_all(Query("SELECT status,paused,queued,llm_chain_revision FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1) FOR UPDATE",(task_id,exploration_id)))
             if len(rows)!=1:raise TaskInvalid('Task unavailable')
             status,paused,queued,revision=rows[0]

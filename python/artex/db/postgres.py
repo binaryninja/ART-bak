@@ -24,6 +24,10 @@ class NoRowsError(LookupError):
     """fetch_one returned no row (distinct from database/transport failure)."""
 
 
+class CommitBoundaryError(RuntimeError):
+    """Owned outer commit refused or its completion could not be confirmed."""
+
+
 def _driver():
     try:
         import psycopg
@@ -56,6 +60,7 @@ class PostgresExecutor:
         self._lock = RLock()
         self._depth = 0
         self._closed = False
+        self._committed = None
 
     @classmethod
     def connect(cls, dsn: str, **options) -> PostgresExecutor:
@@ -90,12 +95,84 @@ class PostgresExecutor:
         """
         with self._lock:
             self._check_open()
+            if self._committed is not None:
+                with self._checked_transaction():
+                    yield self
+                return
             with self._connection.transaction():
                 self._depth += 1
                 try:
                     yield self
                 finally:
                     self._depth -= 1
+
+    @contextmanager
+    def _checked_transaction(self):
+        """Keep failures sticky only inside an opted-in outer boundary."""
+        state = self._committed
+        if state['failure'] is not None:
+            raise state['failure']
+        completed = False
+        try:
+            with self._connection.transaction():
+                self._depth += 1
+                try:
+                    try:
+                        yield self
+                        if state['failure'] is not None:
+                            raise state['failure']
+                        if (self._connection.closed or not self._connection.autocommit or
+                                self._connection.info.transaction_status != 2):
+                            raise CommitBoundaryError('Transaction body did not leave an active transaction')
+                        completed = True
+                    except BaseException as error:
+                        if state['failure'] is None:
+                            state['failure'] = error
+                        raise
+                finally:
+                    self._depth -= 1
+        except BaseException as error:
+            # An exposed driver exit error takes precedence over the body error
+            # it interrupted: do not lose commit/rollback uncertainty if caught.
+            state['failure'] = error
+            raise
+        # A driver can suppress Rollback (or an injected body error). It must
+        # never turn the opted-in boundary into a successful mutation result.
+        if not completed or state['failure'] is not None:
+            if state['failure'] is not None:
+                raise state['failure']
+            raise CommitBoundaryError('Driver suppressed an incomplete transaction')
+
+    @contextmanager
+    def committed_transaction(self):
+        """Own a fresh outer commit; normal return acknowledges driver completion.
+
+        Caller-owned/nested/ambient transactions are refused before yielding.
+        Successful ordinary savepoints are allowed inside; any nested failure is
+        sticky, even when caught or driver-suppressed, and aborts before the outer
+        commit. Ordinary transaction() outside this boundary remains unchanged.
+
+        This trusts the exclusively used driver's default transaction contract;
+        it is not a durable receipt, task authority, or all-writer barrier.
+        Exposed driver errors propagate unchanged and may represent uncertain
+        commit/rollback. There is no retry. Lock/driver waits retain the caller's
+        existing timeout configuration; this does not add bounded cancellation.
+        """
+        with self._lock:
+            self._check_open()
+            if (self._committed is not None or self._depth or
+                    self._connection.info.transaction_status != 0 or
+                    not self._connection.autocommit):
+                raise CommitBoundaryError('Committed transaction requires an idle autocommit connection and no existing transaction')
+            self._committed = {'failure': None}
+            try:
+                with self._checked_transaction():
+                    yield self
+                if (self._connection.closed or not self._connection.autocommit or
+                        self._connection.info.transaction_status != 0):
+                    raise CommitBoundaryError('Driver did not settle the committed transaction')
+            finally:
+                self._committed = None
 
     @contextmanager
     def archive_snapshot_transaction(self):

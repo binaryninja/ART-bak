@@ -3,7 +3,12 @@
 Source server/task_llm.go: goals/planner/worker/mainagent binding, then explicit
 active task chain, then global stored profile. Exhausted chains never fall back.
 Provisional selection uses explicitly authorized create options without inventing
-IDs. Selection validates configuration but never constructs transports. Environment
+IDs. Public selection validates configuration without constructing transports.
+For enrolled factories only, persisted execution binding constructs from a fresh
+selection inside the original configuration guard; provider requests begin after
+that guard exits. Every persisted selection on an enrolled factory requires the
+explicit factory.build read right in an already-admitted matching owner scope,
+including public model selection. Task/execution authorization remains separate. Environment
 configuration, quota failover, cache reload and cross-process ownership are absent.
 
 A host-local random HMAC key keeps private configuration out of Model identities;
@@ -22,6 +27,7 @@ from ..db.tasks import TaskStore,TaskCreateOptions
 from ..db.agents import AgentStore
 from ..db.profiles import ProfileStore,ProfileInvalid
 from ..db.core import Query,int64
+from ..db.configuration_ownership import is_bound,bound_owner,assert_bound,require_read
 from ..providers.factory import ProfileFactory
 from ..sidequestion import Model
 from .chat import ChatBinding
@@ -89,51 +95,77 @@ class TaskProviderResolver:
         if any(type(i) is not int or not 0<i<=2**63-1 for i in ids) or len(set(ids))!=len(ids):
             raise TaskProviderUnavailable('Invalid task profile chain')
         return ids
-    def _selection(self,snapshot,role):
+    def _selection(self,snapshot,role,*,build_for=None):
         if role not in _ROLES:raise ValueError('Unsupported task role')
         snapshot=self._snapshot(snapshot);pins=self._pins();selected=None
+        if build_for is not None and (not isinstance(build_for,Model) or snapshot.get('provisional') is True):
+            raise ValueError('Expected model and persisted task selection required')
+        construction_complete=False;construction_error=None;provider=None
+        construction_owner=None
+        owned_selection=(snapshot.get('provisional') is not True and is_bound(self._resources[3]))
+        if owned_selection or build_for is not None:
+            self._resources_check(pins)
+            construction_owner=bound_owner(self._resources[3])
+            assert_bound(self._resources[4],construction_owner)
         with self._resources[5](deepcopy(snapshot)):
-            self._grant(pins[1],snapshot,pins,role)
-            if snapshot.get('provisional') is True:
-                chain=self._ids(snapshot['options'].get('llm_profile_ids',[]));active=chain[0] if chain else None
-            else:
-                task=self.tasks.get(snapshot['task_id']);self._check(snapshot,pins)
-                if task is None or task.exploration_id!=snapshot['exploration_id']:
-                    raise TaskProviderUnavailable('Persisted task identity unavailable')
-                chain=self._ids(task.llm_profile_ids);active=task.active_llm_profile_id
-            agent=self.agents.get(role);self._check(snapshot,pins)
-            if agent is None or not agent.enabled or agent.key!=role:
-                raise TaskProviderUnavailable('Enabled persisted task role required')
-            def profile(identifier):
-                if type(identifier) is not int or identifier<=0:raise TaskProviderUnavailable('Invalid profile identity')
-                self._grant(pins[2],snapshot,pins,role,identifier)
-                p=self.profiles.get(identifier);self._check(snapshot,pins)
-                self._grant(pins[2],snapshot,pins,role,identifier)
-                if p is None:return None
-                try:self.factory.validate(p)
-                except ProfileInvalid:return None
-                self._check(snapshot,pins)
-                return p
-            if agent.llm_profile_id is not None:selected=profile(agent.llm_profile_id)
-            if selected is None and chain:
-                if active is None or active not in chain:raise TaskProviderUnavailable('Task profile chain exhausted or invalid')
-                selected=profile(active)
-                if selected is None:raise TaskProviderUnavailable('Task profile unavailable')
-            if selected is None and self.allow_global:
-                rows=self._resources[4].fetch_all(Query('SELECT id FROM llm_profiles WHERE is_default LIMIT 2',()))
-                self._check(snapshot,pins)
-                if len(rows)>1:raise TaskProviderUnavailable('Ambiguous active profile')
-                if rows:selected=profile(rows[0][0])
-            if selected is None:raise TaskProviderUnavailable('No authorized stored provider; environment fallback unsupported')
-            # Full private profile and role configuration are hashed, never returned.
-            identity={'profile':asdict(selected),'agent':asdict(agent),'chain':chain,'active':active,'role':role}
-            digest=hmac.new(self._salt,json.dumps(identity,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode(),hashlib.sha256).hexdigest()
-            model=Model(profile_id=selected.id,name=selected.name,format=selected.format,model=selected.model,
-                identity=digest,streaming=selected.streaming,window_tokens=max(32,min(1000,selected.context_window_k or 200))*1000)
-            self._grant(pins[1],snapshot,pins,role)
-            self._grant(pins[2],snapshot,pins,role,selected.id)
+            try:
+                if owned_selection or build_for is not None:
+                    self._resources_check(pins)
+                    assert_bound(self._resources[3],construction_owner)
+                    assert_bound(self._resources[4],construction_owner)
+                    require_read(self._resources[3],'factory.build')
+                self._grant(pins[1],snapshot,pins,role)
+                if snapshot.get('provisional') is True:
+                    chain=self._ids(snapshot['options'].get('llm_profile_ids',[]));active=chain[0] if chain else None
+                else:
+                    task=self.tasks.get(snapshot['task_id']);self._check(snapshot,pins)
+                    if task is None or task.exploration_id!=snapshot['exploration_id']:
+                        raise TaskProviderUnavailable('Persisted task identity unavailable')
+                    chain=self._ids(task.llm_profile_ids);active=task.active_llm_profile_id
+                agent=self.agents.get(role);self._check(snapshot,pins)
+                if agent is None or not agent.enabled or agent.key!=role:
+                    raise TaskProviderUnavailable('Enabled persisted task role required')
+                def profile(identifier):
+                    if type(identifier) is not int or identifier<=0:raise TaskProviderUnavailable('Invalid profile identity')
+                    self._grant(pins[2],snapshot,pins,role,identifier)
+                    p=self.profiles.get(identifier);self._check(snapshot,pins)
+                    self._grant(pins[2],snapshot,pins,role,identifier)
+                    if p is None:return None
+                    try:self.factory.validate(p)
+                    except ProfileInvalid:return None
+                    self._check(snapshot,pins)
+                    return p
+                if agent.llm_profile_id is not None:selected=profile(agent.llm_profile_id)
+                if selected is None and chain:
+                    if active is None or active not in chain:raise TaskProviderUnavailable('Task profile chain exhausted or invalid')
+                    selected=profile(active)
+                    if selected is None:raise TaskProviderUnavailable('Task profile unavailable')
+                if selected is None and self.allow_global:
+                    rows=self._resources[4].fetch_all(Query('SELECT id FROM llm_profiles WHERE is_default LIMIT 2',()))
+                    self._check(snapshot,pins)
+                    if len(rows)>1:raise TaskProviderUnavailable('Ambiguous active profile')
+                    if rows:selected=profile(rows[0][0])
+                if selected is None:raise TaskProviderUnavailable('No authorized stored provider; environment fallback unsupported')
+                # Full private profile and role configuration are hashed, never returned.
+                identity={'profile':asdict(selected),'agent':asdict(agent),'chain':chain,'active':active,'role':role}
+                digest=hmac.new(self._salt,json.dumps(identity,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode(),hashlib.sha256).hexdigest()
+                model=Model(profile_id=selected.id,name=selected.name,format=selected.format,model=selected.model,
+                    identity=digest,streaming=selected.streaming,window_tokens=max(32,min(1000,selected.context_window_k or 200))*1000)
+                if build_for is not None:
+                    if model!=build_for:raise TaskProviderUnavailable('Task role provider changed')
+                    provider=self.factory.build(selected)
+                self._grant(pins[1],snapshot,pins,role)
+                self._grant(pins[2],snapshot,pins,role,selected.id)
+                construction_complete=True
+            except BaseException as exc:
+                construction_error=exc
+                raise
+        if owned_selection or build_for is not None:
+            if construction_error is not None:raise construction_error
+            if not construction_complete:raise TaskProviderUnavailable('Provider construction guard suppressed work')
         self._grant(pins[1],snapshot,pins,role)
         self._grant(pins[2],snapshot,pins,role,selected.id)
+        if build_for is not None:return model,deepcopy(selected),provider
         return model,deepcopy(selected)
     def select(self,task_snapshot,role):
         model,_=self._selection(task_snapshot,role)
@@ -177,14 +209,29 @@ class _BoundProvider:
             self.fixed()
             if context is not None:context.check()
         return profile
+    def _provider(self,context):
+        if not is_bound(self.owner.factory):
+            profile=self.check(context)
+            return self.owner.factory.build(profile)
+        # Refuse mismatched enrollment before check() can read stored profiles.
+        self.fixed()
+        construction_owner=bound_owner(self.owner._resources[3])
+        assert_bound(self.owner._resources[4],construction_owner)
+        self.check(context)
+        # Enrolled factories require selection and construction inside the
+        # original configuration guard. Execution/task grants remain separate.
+        _,_,provider=self.owner._selection(
+            {'task_id':self.identity[0],'exploration_id':self.identity[1]},
+            self.role,build_for=self.model)
+        return provider
     def complete(self,context,request):
-        profile=self.check(context);provider=self.owner.factory.build(profile)
+        provider=self._provider(context)
         self.check(context)
         result=provider.complete(context,request)
         self.check(context)
         return result
     def stream(self,context,request):
-        profile=self.check(context);provider=self.owner.factory.build(profile)
+        provider=self._provider(context)
         self.check(context);iterator=iter(provider.stream(context,request))
         try:
             while True:

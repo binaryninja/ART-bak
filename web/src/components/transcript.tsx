@@ -638,21 +638,44 @@ function UserRow({ step, intent, getDetail }: { step: Activity; intent?: boolean
 // from the detail and shown inline.
 function AnswerBlock({ step, getDetail }: { step: Activity; getDetail: (seq: number) => Promise<string> }) {
   const [ref, inView] = useInView();
-  const [full, setFull] = React.useState<string | null>(null);
+  // The fetcher carries the task/conversation scope even when sequence IDs match.
+  const identity = React.useMemo(() => ({ seq: step.seq, getDetail, summary: step.summary }), [step.seq, getDetail, step.summary]);
+  const currentIdentity = React.useRef(identity);
+  currentIdentity.current = identity;
+  const mounted = React.useRef(false);
+  const owner = React.useRef<object | null>(null);
+  const [read, setRead] = React.useState<{
+    identity: typeof identity;
+    status: "loading" | "ready" | "error";
+    text: string;
+  } | null>(null);
+  const currentRead = read?.identity === identity ? read : null;
+  const load = React.useCallback(() => {
+    if (!mounted.current || currentIdentity.current !== identity || owner.current) return;
+    const request = {};
+    owner.current = request;
+    setRead({ identity, status: "loading", text: "" });
+    const owns = () => mounted.current && currentIdentity.current === identity && owner.current === request;
+    void (async () => {
+      try {
+        const text = await identity.getDetail(identity.seq);
+        if (owns()) setRead({ identity, status: "ready", text });
+      } catch {
+        if (owns()) setRead({ identity, status: "error", text: "" });
+      } finally {
+        if (owner.current === request) owner.current = null;
+      }
+    })();
+  }, [identity]);
   React.useEffect(() => {
-    if (!inView) return; // fetch the full answer only when it nears view
-    let live = true;
-    getDetail(step.seq)
-      .then((d) => {
-        if (live) setFull(d || step.summary);
-      })
-      .catch(() => {
-        if (live) setFull(step.summary);
-      });
+    mounted.current = true;
+    if (inView) load();
     return () => {
-      live = false;
+      mounted.current = false;
+      owner.current = null;
     };
-  }, [inView, step.seq, getDetail, step.summary]);
+  }, [inView, load]);
+  const full = currentRead?.status === "ready" ? currentRead.text : step.summary;
   return (
     <div ref={ref} className="mb-2 mt-1 flex min-w-0 flex-col gap-1">
       <div
@@ -662,11 +685,18 @@ function AnswerBlock({ step, getDetail }: { step: Activity; getDetail: (seq: num
         }
       >
         {step.is_error ? (
-          <span className="whitespace-pre-wrap">{full ?? step.summary}</span>
+          <span className="whitespace-pre-wrap">{full}</span>
         ) : (
-          <Markdown text={full ?? step.summary} />
+          <Markdown text={full} />
         )}
       </div>
+      {currentRead?.status !== "ready" && (
+        <div role={currentRead?.status === "error" ? "alert" : "status"} className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{currentRead?.status === "error" ? "Full answer unavailable. This summary may be incomplete." : "Full answer not loaded. This summary may be incomplete."}</span>
+          {currentRead?.status === "error" && <Button size="sm" variant="outline" onClick={load}>Retry full answer</Button>}
+          {currentRead?.status === "loading" && <span>Loading full answer…</span>}
+        </div>
+      )}
       <ActivityTime ts={step.ts} />
     </div>
   );
