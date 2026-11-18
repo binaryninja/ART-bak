@@ -117,7 +117,8 @@ class ServiceNowInventory:
             value = value.replace(secret, '[redacted]')
         return value
 
-    def read_registered(self,context,path):
+    def read_registered(self,context,path,*,max_body_bytes=65536):
+        if type(max_body_bytes) is not int or not 1<=max_body_bytes<=MAX_PAGE_BYTES:raise ValueError('Invalid registered response bound')
         if urlsplit(path).path not in self._extra_read_paths:raise PermissionError('Unregistered authenticated HTTP path')
         with self._lock:
             context.check()
@@ -130,7 +131,7 @@ class ServiceNowInventory:
                 if not self._session.login(context):return json.dumps({'status':0,'error':'session_authentication_unavailable'})
                 response=self._request(context,'GET',path,headers,session=True)
             body=response['body']
-            return self.redact(json.dumps({'status':response['status'],'body_sha256':response['body_sha256'],'body':body[:65536].decode('utf-8','replace'),'truncated':len(body)>65536,'authentication_method':'session' if self._basic_denied else 'basic'}))
+            return self.redact(json.dumps({'status':response['status'],'body_sha256':response['body_sha256'],'body':body[:max_body_bytes].decode('utf-8','replace'),'truncated':len(body)>max_body_bytes,'authentication_method':'session' if self._basic_denied else 'basic'}))
 
     def path(self, resource, offset=0, limit=None):
         if resource in PAGES:

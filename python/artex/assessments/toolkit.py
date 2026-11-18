@@ -39,6 +39,13 @@ def bind(runtime,scope,record,check,guard):
             elif name=='read_assessment_evidence':
                 if args['operation'] not in DEFINITIONS[record['definition']].operations:raise ValueError('Unregistered check')
                 result=deepcopy(observations.get(args['operation'],{'error':'not_collected'}))
+                if args['operation']=='public_rest_source':
+                    result.pop('plan_signature',None);result.pop('cases',None)
+                    contracts=result.pop('all_operation_contracts',[])
+                    result['all_contract_count']=len(contracts)
+                    start=args.get('script_offset',0);end=start+args.get('script_limit',8192)
+                    for helper in result.get('helpers',{}).values():
+                        source=helper.pop('script','');helper.update(script=source[start:end],script_offset=start,next_script_offset=end if end<len(source) else None)
                 if len(result.get('pages',[]))>2:
                     pages=result['pages'];result.update(stored_page_count=len(pages),pages_sha256=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest(),pages=[pages[0],pages[-1]],page_sample=True)
                 if 'records' in result:
@@ -49,6 +56,9 @@ def bind(runtime,scope,record,check,guard):
                         result['stored_request_count']=len(result['requests'])
                         result['requests']=[{k:v for k,v in request.items() if k!='body_sample'} for request in result['requests'] if request.get('operation_id') in selected]
                     for row in result['records']:
+                        if 'source' in row:
+                            source=row['source'];start=args.get('script_offset',0);end=start+args.get('script_limit',8192)
+                            row.update(source=source[start:end],script_offset=start,next_script_offset=end if end<len(source) else None)
                         if 'operation_script' in row:
                             source=row['operation_script'];start=args.get('script_offset',0);end=start+args.get('script_limit',8192)
                             row.update(operation_script=source[start:end],script_offset=start,next_script_offset=min(end,len(source)) if end<len(source) else None)

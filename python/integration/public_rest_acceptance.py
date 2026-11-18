@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Independently verify an already completed public REST assessment generation."""
-import argparse,hashlib,json,os,urllib.request
+import argparse,hashlib,hmac,json,os,urllib.request
+from urllib.parse import urlsplit
+from collections import Counter
 from pathlib import Path
 import psycopg
 from artex.assessments.definitions import PUBLIC_REST
-from artex.assessments.public_rest import REVIEWED
+from artex.assessments.public_rest import REVIEWED,concrete_path,response_outcome
 from artex.server.auth import sign_jwt
 from artex.transcripts import TranscriptStore,messages
 
@@ -27,13 +29,42 @@ def main():
         require(len(result['selected_ids'])==min(10,result['record_count']),'Selection coverage mismatch')
         operations={r['sys_id']:r for r in result['records']}
         require(set(result['selected_ids'])=={r['operation_id'] for r in result['requests']},'Selected operation lacks evidence')
+        plan=observations['public_rest_source']
+        key=hmac.new(bytes.fromhex(os.environ['ARTEX_SIGNING_KEY_HEX']),b'assessment-source-plan-v1',hashlib.sha256).digest()
+        signature=hmac.new(key,json.dumps({k:v for k,v in plan.items() if k!='plan_signature'},sort_keys=True,separators=(',',':')).encode(),hashlib.sha256).hexdigest()
+        require(plan['assessment_id']==identifier and plan['origin']==origin and hmac.compare_digest(plan['plan_signature'],signature),'Source plan signature mismatch')
+        require(result['source_plan_signature']==signature,'Probe/source plan mismatch')
+        planned={r['operation_id']:r for r in plan['records']}
+        cases={c['case_id']:(r,c) for r in plan['records'] for c in r['cases']}
+        require(set(planned)==set(result['selected_ids']),'Source selection mismatch')
+        require(plan['cases']==[c for r in plan['records'] for c in r['cases']],'Compiled case index mismatch')
+        for row,case in cases.values():
+            require(hashlib.sha256(row['source'].encode()).hexdigest()==case['source_sha256']==row['source_sha256'],'Handler source hash mismatch')
+            require(any(p['route']==row['route'] and p['method']==case['method'] and p['source_sha256']==case['source_sha256'] and p.get('helper_pins',{})==case['helper_pins'] for p in REVIEWED),'Case lacks reviewed source')
+            evidence=case['source_evidence'];offset=row['source'].find(evidence['expression'])
+            require(offset>=0 and row['source'].count('\n',0,offset)+1==evidence['line'],'Case source location mismatch')
+            for name,digest in case['helper_pins'].items():
+                helper=plan['helpers'][name]
+                require(hashlib.sha256(helper['script'].encode()).hexdigest()==helper['source_sha256']==digest,'Helper source hash mismatch')
+            require(all(name in plan['fixtures'] for name in case['fixture_refs']),'Fixture provenance missing')
+        executed=set();skipped={s['case_id'] for s in result.get('skipped',[])}
         for request in result['requests']:
-            require(request['operation_id'] in operations and request['authentication'] in ('none','guest_session'),'Request attribution mismatch')
+            require(request['operation_id'] in operations and request['authentication'] in ('none','guest_session','assessment_session'),'Request attribution mismatch')
             require('authorization' not in [n.lower() for n in request['request_header_names']],'Unexpected endpoint credential')
             require(len(request['body_sha256'])==64,'Response hash missing')
-            if request['method']!='OPTIONS':
-                operation=operations[request['operation_id']]
-                require(any(p['route']==operation['operation_uri'] and p['method']==request['method'] and p['source_sha256']==request['source_sha256'] and p['body']==request['body'] for p in REVIEWED),'Handler probe lacks reviewed source')
+            operation=operations[request['operation_id']]
+            if request['method']=='OPTIONS':
+                require(request['case_id']==request['operation_id']+':metadata' and request['authentication']!='assessment_session' and request['body'] is None,'Invalid metadata-only request')
+                continue
+            require(request['case_id'] in cases,'Unknown compiled case')
+            row,case=cases[request['case_id']];executed.add(request['case_id'])
+            require(row['operation_id']==request['operation_id'] and case['method']==request['method'] and case['body']==request['body'] and case['source_sha256']==request['source_sha256'],'Request differs from compiled case')
+            routes=(operation.get('default_operation_uri') or operation['operation_uri'],operation['operation_uri'])
+            require(request['path'] in {concrete_path(route,'unused',case['path_params'],case['query']) for route in routes},'Request path/query differs from compiled case')
+            if request['authentication']=='assessment_session':
+                require(case['allow_control'] and request['path']==concrete_path(routes[0],'unused',case['path_params'],case['query']),'Unapproved authenticated control')
+            require(request['outcome']==response_outcome(case,request['status'],request['body_sample']),'Observed result classification mismatch')
+        require(set(cases)<=executed|skipped,'Compiled case was neither executed nor explicitly skipped')
         calls=fresh.execute('SELECT tool,status,run_id FROM artex_tool_calls WHERE task_id=%s',(args.task_id,)).fetchall()
         require(calls and all(state=='completed' and run==generation for _,state,run in calls),'Tool lifecycle incomplete')
         require({'run_assessment','finish_assessment'}<={name for name,_,_ in calls},'Assessment tools missing')
@@ -65,7 +96,7 @@ def main():
     settlement=runtime['settlement']
     require(not settlement['busy'] and not any(settlement.get(k,0) for k in ('running','pending','deadline_owners','deadline_pending','continuation_owners','manager_only')),'Runtime has pending work')
     require(not any(detail['retained']),'Task generation still retained')
-    receipt=dict(task_id=args.task_id,generation_id=generation,assessment_id=identifier,origin=origin,revision=report['revision'],source_sha256=report['source_sha256'],models=sorted({model for _,_,model in providers}),completed_at=completed.isoformat(),operations=result['record_count'],selected=len(result['selected_ids']),requests=len(result['requests']),tool_calls=len(calls),settlement=settlement,verified=True,**conversation_evidence)
+    receipt=dict(task_id=args.task_id,generation_id=generation,assessment_id=identifier,origin=origin,revision=report['revision'],source_sha256=report['source_sha256'],models=sorted({model for _,_,model in providers}),completed_at=completed.isoformat(),operations=result['record_count'],selected=len(result['selected_ids']),requests=len(result['requests']),source_cases=len(cases),outcomes=dict(Counter(r['outcome'] for r in result['requests'])),source_plan_signature=signature,tool_calls=len(calls),settlement=settlement,verified=True,**conversation_evidence)
     args.receipt.write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))
 
 if __name__=='__main__':main()

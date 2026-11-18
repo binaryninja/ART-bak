@@ -23,6 +23,7 @@ SERVICENOW_CHECKS=tuple(Check(key,_REQUIRES.get(key,'public' if key in PAGES els
 CHECKS={check.key:check for check in SERVICENOW_CHECKS}
 CHECKS.update({key:Check(key,requires,description) for key,requires,description in (
     ('public_rest_authorization','administrator','Collect REST ACLs, roles and API access policies'),
+    ('public_rest_source','administrator','Derive input contracts and read-only test cases from handler and helper source'),
     ('public_rest_probes','public','Classify every public operation and execute reviewed anonymous probes'))})
 
 def check_allowed(check,observed,has_credentials):
@@ -57,8 +58,8 @@ class Definition:
 
 SERVICENOW=Definition('servicenow.inventory',3,'ServiceNow read-only assessment',ALL_RESOURCES,
     ('unauthenticated','authenticated_unknown','low_privilege','elevated','administrator'))
-PUBLIC_REST=Definition('servicenow.public_rest',1,'ServiceNow public REST assessment',
-    ('current_user','roles','api_definitions','api_resources','api_versions','api_scripts','acl_definitions','acl_roles','public_rest_authorization','public_rest_probes'),SERVICENOW.access_levels)
+PUBLIC_REST=Definition('servicenow.public_rest',2,'ServiceNow public REST assessment',
+    ('current_user','roles','api_definitions','api_resources','api_versions','api_scripts','acl_definitions','acl_roles','public_rest_authorization','public_rest_source','public_rest_probes'),SERVICENOW.access_levels)
 DEFINITIONS={d.key:d for d in (SERVICENOW,PUBLIC_REST)}
 
 
