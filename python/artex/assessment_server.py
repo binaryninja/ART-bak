@@ -51,7 +51,7 @@ def reconcile_before_inventory(pool,task_ids):
     """Explicit recovery under the launcher's exclusive database owner lock."""
     for task_id in task_ids:
         with pool.transaction() as tx:
-            row=tx.fetch_one(Query("SELECT a.id,t.exploration_id,t.status FROM artex_assessments a JOIN tasks t ON t.id=a.task_id WHERE t.id=$1 AND a.version=1 FOR UPDATE OF a,t",(task_id,)))
+            row=tx.fetch_one(Query("SELECT a.id,t.exploration_id,t.status FROM artex_assessments a JOIN tasks t ON t.id=a.task_id WHERE t.id=$1 AND a.version IN (1,2) FOR UPDATE OF a,t",(task_id,)))
             if row is None or row[2]!='running':raise RuntimeError('Recovery task is not an abandoned assessment')
             identifier,exploration_id,_=row
             if tx.fetch_all(Query('SELECT 1 FROM artex_assessment_observations WHERE assessment_id=$1 LIMIT 1',(identifier,))):raise RuntimeError('Inventory effects require separate reconciliation')

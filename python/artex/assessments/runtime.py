@@ -101,7 +101,7 @@ class AssessmentRuntime:
             authorize=self.authorize,asset_authorize=lambda scope,ids,summary=None:Grant(not ids,not ids,not ids),
             validate_input=lambda scope,goal,description:self.current(scope.task_id,scope.exploration_id,'assessments-v1'),
             graph_catalog=graph,domain_tools=domain,provider_decorator=self.record_provider,
-            limits=Limits(max_turns=16,max_tokens=96000,max_seconds=600,max_tool_calls=40,max_tool_output_bytes=65536,max_request_bytes=524288),
+            limits=Limits(max_turns=8,max_tokens=96000,max_seconds=600,max_tool_calls=40,max_tool_output_bytes=65536,max_request_bytes=524288),
             activity_authorize=lambda proposal:Grant(True,True,True))
         from ..db.asset_store import AssetStore
         from ..db.findings import FindingStore
