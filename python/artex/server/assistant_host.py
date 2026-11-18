@@ -122,7 +122,17 @@ class AssistantHost:
                 return json.dumps(dict(task_id=result['task_id'],assessment_id=result['id'],state=result['state'],url='/function/tasks/detail?id='+str(result['task_id'])))
             raise PermissionError('Unregistered tool')
         tools=tuple(Tool(row.key,row.description,row.schema,lambda c,a,n=row.key:invoke(n,c,a),lambda a,n=row.key:type(a)is dict and set(SCHEMAS[n]['required'])<=set(a)<=set(SCHEMAS[n]['properties'])) for row in rows)
-        return ChatResources(self.transcript,model,binding,gate,self.transcript.finalized_result,tools=tools,system=self.render(prompt,{}),limits=Limits(max_turns=agent.max_turns or 8,max_seconds=agent.run_seconds or 600,max_tokens=64000))
+        def prepare_message(message):
+            from ..assessments.discovery import discover,DiscoveryDispatcher
+            live();candidates=discover(message)
+            if any(item['password'] for item in candidates):
+                if 'submit_assessment' not in names:raise PermissionError('Agent cannot admit credentials')
+                receipts=DiscoveryDispatcher(self.runtime).ingest(message,'Agent conversation '+str(conversation.id))
+                for item in candidates:
+                    if item['password']:message=message.replace(item['password'],'[credential stored privately]')
+                message+='\nAdmitted inventory: '+json.dumps(receipts)
+            live();return self.runtime.redact(message)
+        return ChatResources(self.transcript,model,binding,gate,self.transcript.finalized_result,tools=tools,system=self.render(prompt,{}),limits=Limits(max_turns=agent.max_turns or 8,max_seconds=agent.run_seconds or 600,max_tokens=64000),prepare_message=prepare_message)
     def register(self,router):
         self.catalog.register(router);self.service.register(router)
         router.add('GET','/api/skills',lambda request,params:json_response(200,{'skills':self.skill_catalog()}))

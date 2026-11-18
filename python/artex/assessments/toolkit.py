@@ -44,12 +44,21 @@ def bind(runtime,scope,record,check,guard):
                 if 'records' in result:
                     offset=args.get('offset',0);limit=args.get('limit',10);rows=result['records']
                     result.update(records=rows[offset:offset+limit],stored_record_count=len(rows),offset=offset)
+                    if 'requests' in result:
+                        selected={row.get('sys_id') for row in result['records']}
+                        result['stored_request_count']=len(result['requests'])
+                        result['requests']=[{k:v for k,v in request.items() if k!='body_sample'} for request in result['requests'] if request.get('operation_id') in selected]
                     for row in result['records']:
                         if 'operation_script' in row:
                             source=row['operation_script'];start=args.get('script_offset',0);end=start+args.get('script_limit',8192)
                             row.update(operation_script=source[start:end],script_offset=start,next_script_offset=min(end,len(source)) if end<len(source) else None)
                     while result['records'] and len(json.dumps(result).encode())>60000:result['records'].pop()
                     result['next_offset']=offset+len(result['records']) if offset+len(result['records'])<len(rows) else None
+                for nested in ('rest_acls','roles','access_policies'):
+                    child=result.get(nested)
+                    if isinstance(child,dict) and isinstance(child.get('records'),list):
+                        rows=child['records'];offset=args.get('offset',0);end=offset+args.get('limit',10)
+                        child.update(records=rows[offset:end],stored_record_count=len(rows),next_offset=end if end<len(rows) else None)
             elif name=='report_finding':
                 selected=sorted(set(args['operations']))
                 if any(k not in observations or observations[k].get('status')!=200 for k in selected):raise ValueError('Successful persisted evidence required')

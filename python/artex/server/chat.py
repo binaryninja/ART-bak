@@ -41,6 +41,7 @@ class ChatResources:
     limits: Limits=Limits()
     clock: object=field(default=None,repr=False)
     compaction: ChatCompaction|None=None
+    prepare_message: object=field(default=None,repr=False)
 
 
 def _object(pairs):
@@ -163,6 +164,10 @@ class ChatService:
                 return error_response(503,'Attachments require an explicit preparation adapter')
             message=data.get('message')
             if not isinstance(message,str) or not message.strip() or '\x00' in message:raise ValueError()
+            if resources.prepare_message is not None:
+                if not callable(resources.prepare_message):raise ChatUnavailable()
+                admission();message=resources.prepare_message(message);admission()
+                if not isinstance(message,str) or not message.strip() or '\x00' in message:raise ValueError()
             if '@[' in message:return error_response(503,'Mentions require an explicit preparation adapter')
             client=request.header('Idempotency-Key') or uuid.uuid4().hex
             if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',client):

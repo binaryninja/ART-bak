@@ -64,6 +64,12 @@ class Queue:
             finally:self.jobs.pop(id)
 
 class ChatHTTPTests(unittest.TestCase):
+    def test_host_message_preparation_precedes_durable_user_activity(self):
+        self.resources=replace(self.resources,prepare_message=lambda text:text.replace('private-secret','[credential stored privately]'))
+        self.assertEqual(self.router.dispatch(self.request({'message':'password: private-secret'})).status,202)
+        self.assertEqual(self.activities.rows[0].detail,'password: [credential stored privately]')
+        self.queue.drain()
+        self.assertNotIn('private-secret',str(self.tx.history))
     def setUp(self):
         self.store=Conversations();self.tx=Transcript();self.provider=Provider([text('answer')])
         self.activities=Activities();self.queue=Queue()

@@ -97,14 +97,14 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/conversations/delete/batch` | `server/server.go:826` | Optional registration; adapters required: `python/artex/server/conversations.py:63` |
 | DELETE | `/api/conversations/{id}` | `server/server.go:829` | Optional registration; adapters required: `python/artex/server/conversations.py:63` |
 | PATCH | `/api/conversations/{id}` | `server/server.go:827` | Optional registration; adapters required: `python/artex/server/conversations.py:63` |
-| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Optional registration; adapters required: `python/artex/server/chat.py:92` |
-| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Optional registration; adapters required: `python/artex/server/chat.py:90` |
-| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Optional registration; adapters required: `python/artex/server/chat.py:93` |
+| GET | `/api/conversations/{id}/messages` | `server/server.go:830` | Optional registration; adapters required: `python/artex/server/chat.py:93` |
+| POST | `/api/conversations/{id}/messages` | `server/server.go:831` | Optional registration; adapters required: `python/artex/server/chat.py:91` |
+| GET | `/api/conversations/{id}/messages/{seq}` | `server/server.go:833` | Optional registration; adapters required: `python/artex/server/chat.py:94` |
 | PATCH | `/api/conversations/{id}/profile` | `server/server.go:828` | Optional registration; adapters required: `python/artex/server/conversations.py:63` |
 | DELETE | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | GET | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
 | POST | `/api/conversations/{id}/side-questions` | `server/side_questions.go:276` | Optional registration; adapters required: `python/artex/server/sidequestions.py:59` |
-| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:91` |
+| POST | `/api/conversations/{id}/stop` | `server/server.go:832` | Optional registration; adapters required: `python/artex/server/chat.py:92` |
 | GET | `/api/exploration/activity` | `server/server.go:773` | Optional registration; adapters required: `python/artex/server/task_activity.py:26` (audited alternatives: `python/artex/server/task_activity.py:26`, `python/artex/server/task_runtime_read_router.py:62`) |
 | GET | `/api/exploration/activity/history` | `server/server.go:774` | Optional registration; adapters required: `python/artex/server/task_activity.py:27` (audited alternatives: `python/artex/server/task_activity.py:27`, `python/artex/server/task_runtime_read_router.py:62`) |
 | GET | `/api/exploration/activity/stream` | `server/server.go:777` | Optional registration; adapters required: `python/artex/server/task_activity.py:28` (audited alternatives: `python/artex/server/task_activity.py:28`, `python/artex/server/task_runtime_read_router.py:62`) |
@@ -195,7 +195,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 | POST | `/api/settings/web-search/test` | `server/server.go:812` | Not registered |
 | POST | `/api/side-questions/{requestID}/cancel` | `server/side_questions.go:285` | Optional registration; adapters required: `python/artex/server/sidequestions.py:61` |
 | GET | `/api/side-questions/{requestID}/events` | `server/side_questions.go:284` | Optional registration; adapters required: `python/artex/server/sidequestions.py:60` |
-| GET | `/api/skills` | `server/server.go:878` | Optional registration; adapters required: `python/artex/server/assistant_host.py:128` |
+| GET | `/api/skills` | `server/server.go:878` | Optional registration; adapters required: `python/artex/server/assistant_host.py:138` |
 | POST | `/api/skills` | `server/server.go:879` | Optional registration; adapters required: `python/artex/server/skill_create.py:342` |
 | GET | `/api/skills/missing` | `server/server.go:882` | Optional registration; adapters required: `python/artex/server/missing_skill_setup.py:71` |
 | POST | `/api/skills/upload` | `server/server.go:880` | Optional registration; adapters required: `python/artex/server/skill_archive_import.py:320` |
@@ -345,7 +345,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `GET /api/assets/counts` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `POST /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `DELETE /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
-- `GET /api/skills` at `python/artex/server/assistant_host.py:128` (AssistantHost.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/skills` at `python/artex/server/assistant_host.py:138` (AssistantHost.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/audit` at `python/artex/server/audit.py:41` (AuditService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/health` at `python/artex/server/auth.py:105` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/auth/status` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -353,10 +353,10 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/auth/login` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/auth/change-password` at `python/artex/server/auth.py:107` (AuthService.router): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/chat/mentions` at `python/artex/server/catalog_read_setup.py:73` (_CatalogApplication.__call__): Explicit typed read bundle; original JWT application, original issued disclosure receipt and independent source/global grants; fixed report scope where applicable; no default activation.
-- `POST /api/conversations/{id}/messages` at `python/artex/server/chat.py:90` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `POST /api/conversations/{id}/stop` at `python/artex/server/chat.py:91` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations/{id}/messages` at `python/artex/server/chat.py:92` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
-- `GET /api/conversations/{id}/messages/{seq}` at `python/artex/server/chat.py:93` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/messages` at `python/artex/server/chat.py:91` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `POST /api/conversations/{id}/stop` at `python/artex/server/chat.py:92` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages` at `python/artex/server/chat.py:93` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/conversations/{id}/messages/{seq}` at `python/artex/server/chat.py:94` (ChatService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/commands` at `python/artex/server/command_history.py:28` (CommandHistoryService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/commands/stats` at `python/artex/server/command_history.py:29` (CommandHistoryService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/companies` at `python/artex/server/companies.py:86` (CompanyService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.

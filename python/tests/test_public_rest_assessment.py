@@ -8,6 +8,15 @@ class Context:
     def remaining_seconds(self):return 30
 
 class PublicRestTests(unittest.TestCase):
+    def test_model_summary_retains_operation_index_without_response_bodies(self):
+        from artex.assessments.runtime import model_observations
+        rows=[dict(sys_id=str(i),name='operation',operation_uri='/api/x/'+str(i),attack_surface=['record access']) for i in range(31)]
+        evidence={'public_rest_probes':{'resource':'public_rest_probes','records':rows,'requests':[{'operation_id':'0','status':200,'body_sample':'s'*60000}]},'public_rest_authorization':{'rest_acls':{'records':[{'script':'x'*2000} for _ in range(100)]}}}
+        summary=model_observations(evidence)
+        self.assertEqual(len(summary['public_rest_probes']['operation_index']),31)
+        self.assertNotIn('body_sample',summary['public_rest_probes']['requests'][0])
+        self.assertLess(len(json.dumps(summary)),45000)
+        self.assertEqual(len(evidence['public_rest_authorization']['rest_acls']['records']),100)
     def setup_case(self,changed=False):
         source='return readOnlyResult();';digest=hashlib.sha256(source.encode()).hexdigest()
         row=dict(sys_id='a'*32,name='Read record',active='true',requires_authentication='false',http_method='POST',operation_uri='/api/x/v1/items/{sys_id}',default_operation_uri='/api/x/items/{sys_id}',operation_script=source,stored_script_sha256=digest)

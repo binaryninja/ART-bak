@@ -64,6 +64,12 @@ def model_observations(observations):
     for value in result.values():
         for request in value.get('requests',[]):
             request.pop('body_sample',None)
+        for nested in ('rest_acls','roles','access_policies'):
+            child=value.get(nested)
+            if isinstance(child,dict) and isinstance(child.get('records'),list):
+                child['stored_record_count']=len(child['records']);child['records']=child['records'][:3];child['record_sample']=True
+        if value.get('resource')=='public_rest_probes':
+            value['operation_index']=[{k:row.get(k) for k in ('sys_id','name','http_method','operation_uri','attack_surface','source_sha256')} for row in value.get('records',[])]
         if len(value.get('pages',[]))>2:
             pages=value['pages'];value['stored_page_count']=len(pages)
             value['pages_sha256']=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest()
