@@ -171,6 +171,8 @@ class Recorder:
         if tools:
             body['tools'] = [_get(tool, 'name', '') for tool in tools]
             body['tools_count'] = len(tools)
+        if _get(request, 'tool_choice') is not None:
+            body['tool_choice'] = _get(request, 'tool_choice')
         if _get(request, 'temperature') is not None:
             body['temperature'] = _get(request, 'temperature')
         if _get(request, 'stop'):

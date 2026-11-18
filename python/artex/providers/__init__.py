@@ -152,6 +152,9 @@ def serialize(config: Config, request, *, stream=False):
     if request.get('temperature') is not None:
         body['temperature'] = request['temperature']
     tools = [_mapping(t) for t in request.get('tools', [])]
+    tool_choice = request.get('tool_choice')
+    if tool_choice is not None and (tool_choice not in ('auto', 'required', 'none') or not tools):
+        raise ProtocolError('Tool choice requires registered tools and auto|required|none')
     if thinking:
         if thinking not in ('enabled', 'disabled'):
             raise ProtocolError("Unsupported thinking type")
@@ -185,6 +188,8 @@ def serialize(config: Config, request, *, stream=False):
         body['messages'] = out
         if tools:
             body['tools'] = [{'type': 'function', 'function': {'name': t['name'], 'description': t.get('description', ''), 'parameters': t.get('input_schema', {})}} for t in tools]
+            if tool_choice is not None:
+                body['tool_choice'] = tool_choice
         if request.get('max_tokens', 0):
             key = 'max_completion_tokens' if config.max_tokens_field == 'max_completion_tokens' else 'max_tokens'
             body[key] = request['max_tokens']
@@ -218,6 +223,8 @@ def serialize(config: Config, request, *, stream=False):
                     body['system'].append({'type': 'text', 'text': _join(system[boundary:])})
         if tools:
             body['tools'] = tools
+            if tool_choice is not None:
+                body['tool_choice'] = {'type': {'auto': 'auto', 'required': 'any', 'none': 'none'}[tool_choice]}
         if request.get('stop'):
             body['stop_sequences'] = request['stop']
         if config.reasoning_effort:

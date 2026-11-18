@@ -73,6 +73,31 @@ the separate `qa` extra. This runs authored tests only, not a database.
 
 ## Existing development launcher and remaining composition gap
 
+The separate `python -m artex.servicenow_recon` launcher now composes one
+authenticated, read-only campaign for `dev366312.service-now.com`. It requires
+the existing schema plus recording tables, an explicit stored provider profile,
+`ARTEX_PG_DSN`, `ARTEX_SIGNING_KEY_HEX`, a provider-key environment-variable name,
+a mode0600 instance-password file, and an existing mode0700 transcript directory.
+It exposes authenticated `GET /api/recon`, `POST /api/recon/campaigns` (body `{}`),
+and `GET /api/recon/campaigns/{id}`. The Python-preview frontend has a
+`/function/recon` page. Model tools can select only the code-owned inventory
+operations; the launcher does not register shell, graph-planning, or exploit tools.
+
+```sh
+PYTHONPATH=python python -m artex.servicenow_recon \
+  --profile-id 2 --api-key-env LITELLM_API_KEY --username admin \
+  --password-file /absolute/private/instance-password \
+  --transcript-root /absolute/private/transcripts --port 8787
+```
+
+The process owns a database advisory lock, starts one bounded worker at a time,
+records normalized provider exchanges and inventory evidence, and explicitly
+settles/drains its original task generations. It never resumes tasks on startup.
+`--reconcile-preamble-task ID` is a narrow manual recovery operation after the
+former owner exits: it requires a persisted incomplete report, zero target-tool
+observations, and exactly one successful text-only provider response before
+marking that abandoned task failed. It does not rerun the task.
+
 `python -m artex --check-config` validates explicit `ARTEX_PG_DSN` and
 `ARTEX_SIGNING_KEY_HEX` inputs without opening a database or listener.
 `python -m artex --serve --port 8787` is an existing dev-only, single-threaded

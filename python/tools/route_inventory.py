@@ -185,6 +185,8 @@ def bind_target(target: ast.AST, value, environment: dict):
 # These source/owner pairs describe opt-in compositions, not auth factories.
 # They annotate declarations found below; this table never creates routes.
 PYTHON_OPTIONAL_OWNERS = {
+    ('python/artex/server/servicenow_recon.py', 'ReconRuntime.application'):
+        'Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation',
     ('python/artex/server/archive_catalog.py', 'build_archive_catalog_application'):
         'Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation',
     ('python/artex/server/missing_skill_setup.py', '_MissingSkillApplication.__call__'):

@@ -24,10 +24,10 @@ use a different placeholder spelling for an existing Go URL shape.
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **208**.
-- python route declarations: **237**.
+- python offline contract routes: **211**.
+- python route declarations: **240**.
 - python alternative route groups: **22**.
-- python optional service routes: **203**.
+- python optional service routes: **206**.
 - matched offline contract routes: **206**.
 - go routes without python registration: **55**.
 
@@ -440,6 +440,9 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `POST /api/llm` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/test` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/llm/models` at `python/artex/server/profiles.py:126` (ProfileService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
+- `GET /api/recon` at `python/artex/server/servicenow_recon.py:331` (ReconRuntime.application): Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation.
+- `POST /api/recon/campaigns` at `python/artex/server/servicenow_recon.py:332` (ReconRuntime.application): Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation.
+- `GET /api/recon/campaigns/{id}` at `python/artex/server/servicenow_recon.py:333` (ReconRuntime.application): Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation.
 - `GET /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `POST /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `DELETE /api/conversations/{id}/side-questions` at `python/artex/server/sidequestions.py:59` (SideQuestionHTTPService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
@@ -557,4 +560,7 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 ## Python-only registrations
 
 - `POST /api/llm/profiles/reconcile`
+- `GET /api/recon`
+- `POST /api/recon/campaigns`
+- `GET /api/recon/campaigns/{id}`
 - `GET /api/intercept/task/{id}`

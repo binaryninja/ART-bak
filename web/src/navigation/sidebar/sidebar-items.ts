@@ -69,6 +69,9 @@ export const sidebarItems: NavGroup[] = [
       { id: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { id: "chat", title: "Chat", url: "/chat", icon: MessageSquare },
       { id: "tasks", title: "Tasks", url: "/function/tasks", icon: Target },
+      ...(process.env.NEXT_PUBLIC_ARTEX_BACKEND_PROFILE === "python"
+        ? [{ id: "recon", title: "ServiceNow recon", url: "/function/recon", icon: Network }]
+        : []),
       { id: "findings", title: "Findings", url: "/function/findings", icon: Bug },
       { id: "traffic", title: "Traffic", url: "/function/traffic", icon: Activity },
       { id: "commands", title: "Tool execution", url: "/function/commands", icon: Terminal },

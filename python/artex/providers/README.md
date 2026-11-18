@@ -38,6 +38,8 @@ placeholder credentials, not live provider validation.
 - OpenAI-compatible Chat Completions and Anthropic Messages serialization,
   tools, textual tool results, thinking/signature preservation, stop sequences,
   temperature, output-limit field choice and Anthropic static-prefix caching.
+- Explicit `tool_choice=auto|required|none` for registered tools, translated to
+  each provider format and retained in normalized request recording.
 - OpenAI reasoning aliases, refusal text and an explicit normalized `refusal`
   stop reason (also preserved on the completion message). Refusal takes priority
   over contradictory tool-call finish reasons; it is never retried to avoid it.

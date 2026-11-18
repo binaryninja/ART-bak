@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 208,
-    "python_route_declarations": 237,
+    "python_offline_contract_routes": 211,
+    "python_route_declarations": 240,
     "python_alternative_route_groups": 22,
-    "python_optional_service_routes": 203,
+    "python_optional_service_routes": 206,
     "matched_offline_contract_routes": 206,
     "go_routes_without_python_registration": 55
   },
@@ -71,6 +71,7 @@
     "python/artex/server/runtime_session.py": "19f65db0c7d1b49c65bcbc6cd8db810fcee8c8c647c104f30fcf595cbfa0ed24",
     "python/artex/server/runtime_setup.py": "1d5fa75d551af92acdb933b33ebe99773f2a873b987db889056ae030a5771783",
     "python/artex/server/runtime_signals.py": "5acf0ac91498cad6606cc2344fbe5452f224ce0bf5297b3a9ebba82ec3d8078a",
+    "python/artex/server/servicenow_recon.py": "c18b2446b2d46bd4833d243d1ef7b2317111ce2acf64c0b3a3623678e1e5abe5",
     "python/artex/server/sidequestions.py": "29ce6975dee1354b5ae589c216cf5a25a8dfa62149ba7100b495c0741e426110",
     "python/artex/server/skill_archive_import.py": "1d68809539f2708cbeae7bba05975bd6306c37a8f3b6ad8c8a8865198cb74cdc",
     "python/artex/server/skill_catalog_read.py": "2d1359b03db8a94ee8301e7629f811cc553b072399cd98641f7414bb6eb8549f",
@@ -12055,6 +12056,84 @@
     },
     {
       "method": "GET",
+      "path": "/api/recon",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 331,
+      "function": "ReconRuntime.application",
+      "handler": "info",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/recon",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 331,
+          "function": "ReconRuntime.application",
+          "handler": "info",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/recon/campaigns",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 332,
+      "function": "ReconRuntime.application",
+      "handler": "create",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/recon/campaigns",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 332,
+          "function": "ReconRuntime.application",
+          "handler": "create",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/recon/campaigns/{id}",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 333,
+      "function": "ReconRuntime.application",
+      "handler": "detail",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/recon/campaigns/{id}",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 333,
+          "function": "ReconRuntime.application",
+          "handler": "detail",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/conversations/{id}/side-questions",
       "source": "python/artex/server/sidequestions.py",
       "line": 59,
@@ -16059,6 +16138,42 @@
     },
     {
       "method": "GET",
+      "path": "/api/recon",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 331,
+      "function": "ReconRuntime.application",
+      "handler": "info",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/recon/campaigns",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 332,
+      "function": "ReconRuntime.application",
+      "handler": "create",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/recon/campaigns/{id}",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 333,
+      "function": "ReconRuntime.application",
+      "handler": "detail",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/conversations/{id}/side-questions",
       "source": "python/artex/server/sidequestions.py",
       "line": 59,
@@ -17497,6 +17612,84 @@
           "public": false,
           "registration_mode": "optional explicit service registration",
           "dependencies": "Injected auth store, password codec, signing key; deployer-supplied transport/listener",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/recon",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 331,
+      "function": "ReconRuntime.application",
+      "handler": "info",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/recon",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 331,
+          "function": "ReconRuntime.application",
+          "handler": "info",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/recon/campaigns",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 332,
+      "function": "ReconRuntime.application",
+      "handler": "create",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/recon/campaigns",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 332,
+          "function": "ReconRuntime.application",
+          "handler": "create",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/recon/campaigns/{id}",
+      "source": "python/artex/server/servicenow_recon.py",
+      "line": 333,
+      "function": "ReconRuntime.application",
+      "handler": "detail",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/recon/campaigns/{id}",
+          "source": "python/artex/server/servicenow_recon.py",
+          "line": 333,
+          "function": "ReconRuntime.application",
+          "handler": "detail",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit single-instance read-only recon runtime, stored provider selection, private target credential, shared task host and original JWT application; fixed named HTTP inventory tools and durable report; no arbitrary targets, tool registration or default activation",
           "status": "optional offline contract; injected repository/live manager required"
         }
       ]
