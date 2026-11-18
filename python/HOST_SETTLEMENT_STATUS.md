@@ -3,8 +3,9 @@
 `artex.agent.host.AgentHost.poll()` now retains a thread-owned settlement slot
 across the entire synchronous settlement pass. It releases the host condition
 lock before invoking runner settlement, inventory, handle waits or owner inventory.
-The slot remains occupied even when the manager has already recorded completion
-and the runner has removed its last handle but a callback has not yet returned.
+The manager keeps a terminal write fenced through the settlement and inventory
+callbacks. It retires the run after the runner returns its receipt and the host
+confirms the handle has left inventory.
 It is cleared and waiting threads are notified in `finally`, including when a
 callback raises a `BaseException`.
 
@@ -21,6 +22,10 @@ callback raises a `BaseException`.
 - Existing receipt validation, exact manager/runner identity checks and retained
   deadline ownership checks remain in force. A callback exception does not turn
   an unresolved handle into a successful settlement.
+
+A cancelled handle can leave the runner while the manager still retains an
+uncertain run. Each poll includes those runs in `pending` and exposes their
+count as `manager_only`. A positive count blocks clean drain and host closure.
 
 ## Limits
 

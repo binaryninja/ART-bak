@@ -58,6 +58,7 @@ class PollResult:
     deadline_owners: int = 0
     deadline_pending: int = 0
     continuation_owners: int = 0
+    manager_only: int = 0  # Subset of pending with no runner handle to check.
 
     @property
     def all_settled(self):
@@ -395,19 +396,27 @@ class AgentHost:
             self._settling = True
             self._settlement_thread = get_ident()
         try:
-            settled = self.runner.settle_completed(self.manager.complete)
-            self._identity()
-            if not isinstance(settled, (list, tuple)) or len(settled)>100000 or any(not isinstance(item,str) or not item or len(item)>1024 for item in settled) or len(set(settled))!=len(settled):
-                raise RuntimeUnavailable('Invalid runner settlement receipts')
-            settled = tuple(settled)
-            handles = self._handles()
-            running = sum(not self._wait(handle,0) for handle in handles)
-            owners=self._deadline_inventory()
-            continuations=self.manager.suspension_owners()
-            self._identity()
-            if type(continuations) is not tuple or len(continuations)>100000 or any(type(v) is not tuple or len(v)!=2 or type(v[0]) is not str or not v[0].isascii() or not v[0].isdecimal() or v[1] not in ('reserving','pausing','paused','resuming','installed','quarantined') for v in continuations):raise RuntimeUnavailable('Invalid continuation inventory')
-            result = PollResult(False, settled, running, len(handles) - running,
-                                len(owners),sum(o.state != 'suspended' for o in owners),len(continuations))
+            with self._original_manager.settlement_pass() as finish:
+                settled = self.runner.settle_completed(self.manager.complete)
+                self._identity()
+                if not isinstance(settled, (list, tuple)) or len(settled)>100000 or any(not isinstance(item,str) or not item or len(item)>1024 for item in settled) or len(set(settled))!=len(settled):
+                    raise RuntimeUnavailable('Invalid runner settlement receipts')
+                settled = tuple(settled)
+                handles = self._handles()
+                running = sum(not self._wait(handle,0) for handle in handles)
+                owners=self._deadline_inventory()
+                continuations=self.manager.suspension_owners()
+                self._identity()
+                if type(continuations) is not tuple or len(continuations)>100000 or any(type(v) is not tuple or len(v)!=2 or type(v[0]) is not str or not v[0].isascii() or not v[0].isdecimal() or v[1] not in ('reserving','pausing','paused','resuming','installed','quarantined') for v in continuations):raise RuntimeUnavailable('Invalid continuation inventory')
+                # Cancelled handles can leave the runner before manager persistence
+                # is resolved. Count each such generation once on every poll.
+                handle_ids = {id(handle) for handle in handles}
+                retained = finish(settled, handle_ids)
+            manager_only = sum(handle_id not in handle_ids for handle_id in retained.values())
+            settled = tuple(key for key in settled if key not in retained)
+            result = PollResult(False, settled, running, len(handles) - running + manager_only,
+                                len(owners),sum(o.state != 'suspended' for o in owners),len(continuations),
+                                manager_only=manager_only)
             with self._condition:
                 if self._effect_serial == serial:self._poll_proof = (result, serial)
             return result
@@ -448,7 +457,8 @@ class AgentHost:
                     state = self.poll()
                     return DrainResult(False, state)
             state = self.poll()
-            result = DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0 and state.continuation_owners == 0, state)
+            result = DrainResult(not state.busy and state.running == 0 and state.deadline_pending == 0
+                                 and state.continuation_owners == 0 and state.manager_only == 0, state)
             with self._condition:
                 proof = self._poll_proof
                 if (result.all_settled and proof is not None and proof[0] is state

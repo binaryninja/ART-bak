@@ -10,11 +10,22 @@ import test_hosted_setup as hosted_fixtures
 from artex.db.tasks import TaskStore
 
 class SharedDB(hosted_fixtures.DB):
+    def fetch_all(self, q):
+        if q.sql.startswith('SELECT id, status, paused, queued, queued_at, queue_mode, completed_at,'):
+            self.calls.append(q)
+            return [tuple(self.row[i] for i in (0, 7, 8, 9, 10, 11, 17, 21, 22)) + (None, None)]
+        return super().fetch_all(q)
+
     def fetch_one(self,q):
         return fixtures.DB.fetch_one(self,q)
     def execute(self,q):
         if q.sql.startswith("UPDATE tasks SET status=$1, completed_at"):
-            self.calls.append(q);row=list(self.row);row[7]=q.params[0];self.row=tuple(row);return 1
+            self.calls.append(q)
+            row = list(self.row)
+            row[7] = q.params[0]
+            row[17] = manager_fixtures.NOW
+            self.row = tuple(row)
+            return 1
         return fixtures.DB.execute(self,q)
 
 class EngineRunnerReview(unittest.TestCase):

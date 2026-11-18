@@ -1,5 +1,6 @@
 """Real manager/host + goals journal + engine composition with inert adapters."""
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
@@ -132,6 +133,82 @@ class BootstrapHandleTests(unittest.TestCase):
             except BootstrapConflict:seen.append(True)
         self.provider.hook=reenter
         self.advance(h);self.assertTrue(seen);self.assertEqual(len(self.child_calls),1)
+
+    def test_original_generation_retained_through_outer_guard_exit(self):
+        at_exit, release = Event(), Event()
+        depth = 0
+        @contextmanager
+        def guard(*ids):
+            nonlocal depth
+            depth += 1
+            try:
+                yield
+            finally:
+                depth -= 1
+                if depth == 0:
+                    at_exit.set()
+                    self.assertTrue(release.wait(3))
+        self.coordinator.guard = guard
+        handle = self.start()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for expected in ('bootstrap_prepared', 'idle'):
+                if expected == 'idle':
+                    self.f.met()
+                at_exit.clear()
+                release.clear()
+                step = pool.submit(self.advance, handle)
+                try:
+                    self.assertTrue(at_exit.wait(2))
+                    self.assertEqual(handle.phase, 'engine')
+                    self.assertFalse(self.manager.complete('5', handle.token))
+                    self.assertTrue(self.manager.owns_generation('5', handle.token, handle))
+                    self.assertFalse(handle.wait(0))
+                    self.assertFalse(self.host.drain(0).all_settled)
+                finally:
+                    release.set()
+                self.assertEqual(step.result(2).action, expected)
+            at_exit.clear()
+            release.clear()
+            poll = pool.submit(self.host.poll)
+            try:
+                self.assertTrue(at_exit.wait(2))
+                status, _, retained, _ = self.manager.retirement_snapshot('5')
+                self.assertEqual(status, 'done')
+                self.assertTrue(retained)
+                self.assertFalse(self.host.drain(0).all_settled)
+            finally:
+                release.set()
+            self.assertTrue(poll.result(2).all_settled)
+        self.assertFalse(self.manager.retirement_snapshot('5')[2])
+
+    def test_replaced_owner_guard_refused_before_work(self):
+        handle = self.start()
+        self.coordinator.guard = lambda *ids: self.fail('replacement guard entered')
+        with self.assertRaisesRegex(BootstrapConflict, 'lifecycle guard changed'):
+            self.advance(handle)
+        self.assertIsNone(self.db.receipt)
+        self.assertEqual(self.provider.calls, [])
+
+    def test_owner_guard_exit_failure_fences_original_generation(self):
+        depth = 0
+        @contextmanager
+        def guard(*ids):
+            nonlocal depth
+            depth += 1
+            try:
+                yield
+            finally:
+                depth -= 1
+                if depth == 0:
+                    raise OSError('owner release uncertain')
+        self.coordinator.guard = guard
+        handle = self.start()
+        with self.assertRaises(BootstrapUnresolved):
+            self.advance(handle)
+        self.assertFalse(self.manager.owns_generation('5', handle.token, handle, allow_cancelled=True))
+        self.assertFalse(self.manager.complete('5', handle.token))
+        self.assertTrue(self.manager.retirement_snapshot('5')[2])
+        self.assertFalse(self.host.drain(0).all_settled)
     def test_foreign_engine_scope_retained_unresolved(self):
         factory=self.child_factory
         def changed(*a):

@@ -80,17 +80,33 @@ binding tests establish neither a positive installed-generation lifetime nor
 exclusion across processes. Task startup, durable leases and live-provider
 execution remain outside their evidence.
 
-## Uncertain terminal persistence
+## Ownership during a hosted step
 
-For an installed task, if the guarded terminal write raises, or its read-back
-or local state update raises after acknowledgment, `TaskManager.complete`
-retains the exact run, marks it uncertain and propagates the error. The manager
-then refuses fresh generation ownership in both cancellation modes. Another
-completion attempt returns false before persistence. This failure path does not cancel the token.
-Absent separate cancellation, the generic runner retains its handle as pending.
-A successful completion still retires the run; a definite false result from
-the guarded write still returns false without setting uncertainty. That result
-can leave local state stale if another writer changed the durable row.
-Retention cannot establish whether an unacknowledged write committed, stop
-work already in flight, or exclude other writers. The shared lifecycle barrier
-remains unverified.
+An installed bootstrap handle enters the manager's generation guard and the
+original coordinator's lifecycle guard around each `advance`. The guards span
+bootstrap, child construction, and child advancement, including the original
+lifecycle guard's exit callback. Pause can signal cancellation immediately.
+The manager retains the original token and handle while guarded work unwinds.
+An exception that escapes the generation guard leaves the run uncertain.
+The registry mutex is released before invoking the lifecycle guard or work.
+
+Only writers that use the supplied lifecycle guard share its exclusion. The
+manager guard covers process-local retirement. Neither guard establishes a
+database lease against an independent writer.
+
+## Terminal persistence and shutdown
+
+Completion fences the generation before the first database call. The terminal
+update requires a running, unpaused, unqueued task with no archive or deletion
+timestamp. The subsequent lifecycle read includes both timestamps. A competing
+update refreshes the local snapshot and leaves the run fenced for reconciliation.
+A missing row or read error also leaves the run fenced. A lost acknowledgement
+can leave the persisted outcome unknown. Repeated completion calls on the
+fenced run return false before touching the store.
+
+During host polling, an acknowledged terminal write leaves the original run
+registered until the runner returns its receipt and the host checks that the
+handle has left inventory. An interrupted callback keeps the run registered.
+A run retained only by the manager counts as pending and blocks clean drain
+and lifetime closure. Later independent database changes can supersede the
+last observed lifecycle snapshot.

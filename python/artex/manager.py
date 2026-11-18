@@ -17,6 +17,7 @@ creation. The manager serializes one-process mutations; database conditional upd
 necessary for cross-process races. Use one shared manager per repository/runtime.
 """
 from __future__ import annotations
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
@@ -195,6 +196,7 @@ class _Run:
     handle: RunHandle | None = None
     started: bool = False
     uncertain: bool = False
+    guarded_work: int = 0
 
 
 _TERMINAL = {'done', 'failed', 'timeout'}
@@ -204,7 +206,8 @@ _PUBLIC = {'id','exploration_id','name','category_id','category_name','pinned','
            'paused','queued','llm_profile_id','llm_profile_ids','active_llm_profile_id',
            'llm_failover_state','llm_failover_reason','source_task_ids','company_ids',
            'coverage_enabled','archive_blocked_by_task_id'} | _METRICS
-_LIFECYCLE = {'status','paused','queued','queued_at','queue_mode','completed_at','first_run_at','deadline_at'}
+_LIFECYCLE = {'status','paused','queued','queued_at','queue_mode','completed_at','first_run_at','deadline_at',
+              'archived_at','deleted_at'}
 
 
 def _id(value):
@@ -249,6 +252,8 @@ class TaskManager:
         self._lock = RLock()
         self._tasks: dict[str, dict] = {}
         self._runs: dict[str, _Run] = {}
+        self._settlement_thread = None
+        self._written_runs: dict[str, _Run] | None = None
         self._active = ''
         self._deadline_slots: dict[str, _DeadlineSlot] = {}
         self._unstamped_slots: dict[str, _UnstampedSlot] = {}
@@ -280,9 +285,9 @@ class TaskManager:
         if row.get('queued'):
             return 'queued'
         run = self._runs.get(key)
-        if row.get('paused') or (run is not None and run.token.cancelled):
+        if row.get('status') == 'paused' or row.get('paused') or (run is not None and run.token.cancelled):
             return 'paused'
-        return 'running' if run and run.started else 'created'
+        return 'running' if run and run.started and row.get('status') == 'running' else 'created'
 
     def status(self, task_id):
         with self._lock:
@@ -326,6 +331,28 @@ class TaskManager:
             return (run.started is True and row['status']=='running'
                     and row['paused'] is False and row['queued'] is False
                     and not token._event.is_set())
+
+    @contextmanager
+    def guard_generation(self, task_id, token, handle):
+        """Keep this installed generation registered until guarded callbacks unwind.
+
+        Cancellation can still revoke permission to do more work. The registry
+        mutex is released before any caller code runs.
+        """
+        with self._lock:
+            if self._settlement_thread is not None or not TaskManager.owns_generation(self, task_id, token, handle):
+                raise TaskConflict('Original running generation required')
+            run = self._runs[_id(task_id)]
+            run.guarded_work += 1
+        try:
+            yield
+        except BaseException:
+            with self._lock:
+                run.uncertain = True
+            raise
+        finally:
+            with self._lock:
+                run.guarded_work -= 1
 
     def deadline_owners(self):
         """Bounded process-local ownership inventory, not execution permission."""
@@ -501,7 +528,8 @@ class TaskManager:
                 if slot.state not in ('freezing','drained'):raise TaskConflict('Freeze state changed')
                 if unresolved:
                     slot.state='quarantined';raise TaskConflict('Frozen work requires reconciliation')
-                if not drained or self._has_cleanup(freeze.task_id):return False
+                run = self._runs.get(freeze.task_id)
+                if not drained or self._has_cleanup(freeze.task_id) or (run and run.guarded_work):return False
                 slot.state='drained';return True
         except BaseException:
             with self._lock:
@@ -641,7 +669,7 @@ class TaskManager:
             if slot is None or slot.store is not d or slot.lease is not store.lease or slot.state!='attached' or slot.settlement is not None or self._has_cleanup(key):
                 raise TaskConflict('Attached clean original owner required')
             self._deadline_binding(slot)
-            if not self.owns_generation(key,slot.token,slot.handle):raise TaskConflict('Execution owner unavailable')
+            if not self.owns_generation(key,slot.token,slot.handle) or self._runs[key].guarded_work:raise TaskConflict('Execution owner unavailable')
             cap=EarlyCompletion(key);slot.settlement=cap;slot.settlement_store=store;slot.state='early_settling'
         # Never wait or invoke handle methods under the registry lock. Reservation
         # already fences new execution; in-flight work is not silently cancelled.
@@ -702,7 +730,7 @@ class TaskManager:
         d=store.deadline;key=str(d.receipt.task_id)
         with self._lock:
             if key in self._deadline_slots or key in self._unstamped_slots or self._has_cleanup(key):raise TaskConflict('Original unstamped owner unavailable')
-            if not self.owns_generation(key,d._token,d.handle):raise TaskConflict('Installed execution owner required')
+            if not self.owns_generation(key,d._token,d.handle) or self._runs[key].guarded_work:raise TaskConflict('Installed execution owner required')
             if len(self._unstamped_slots)>=10000:raise TaskConflict('Completion inventory full')
             cap=UnstampedCompletion(key)
             slot=_UnstampedSlot(cap,store,d._token,d.handle,self.repository,self.repository.executor)
@@ -824,6 +852,35 @@ class TaskManager:
             return (row.get('status'),row.get('completed_at'),
                     key in self._runs,
                     key in self._deadline_slots or key in self._unstamped_slots or key in self._suspensions or self._has_cleanup(key))
+
+    @contextmanager
+    def settlement_pass(self):
+        """Defer retirement until this poll has checked receipts and remaining handles."""
+        written = {}
+        with self._lock:
+            if self._settlement_thread is not None:
+                raise TaskConflict('Manager settlement already in progress')
+            self._settlement_thread = get_ident()
+            self._written_runs = written
+
+        def finish(receipts, handle_ids):
+            with self._lock:
+                if self._settlement_thread != get_ident() or self._written_runs is not written:
+                    raise TaskConflict('Original settlement pass required')
+                for key in receipts:
+                    run = written.get(key)
+                    if (run is not None and self._runs.get(key) is run
+                            and id(run.handle) not in handle_ids and not run.token.cancelled):
+                        del self._runs[key]
+                return {key: id(run.handle) if run.handle is not None else None
+                        for key, run in self._runs.items()}
+        try:
+            yield finish
+        finally:
+            with self._lock:
+                # On an interrupted pass the records remain fenced in _runs.
+                self._written_runs = None
+                self._settlement_thread = None
 
     def lifecycle_snapshot(self, task_id):
         with self._lock:
@@ -1014,6 +1071,7 @@ class TaskManager:
         for name in _LIFECYCLE:
             if name in updated:
                 self._tasks[key][name] = deepcopy(updated[name])
+        return updated
 
     def pause(self, task_id, *, timeout=5.0):
         if timeout < 0:
@@ -1062,6 +1120,8 @@ class TaskManager:
                 raise
         with self._lock:
             if self._runs.get(key) is not run:raise TaskConflict('Pause generation changed')
+            if run.uncertain:
+                raise RuntimeUnavailable('Runner state is unknown; manual reconciliation required')
             run.token.cancel('paused_by_user')
         deadline = monotonic() + timeout
         if run:
@@ -1076,6 +1136,10 @@ class TaskManager:
         # reader may hold that row and need the registry lock to revalidate.
         with self._lock:
             if self._has_cleanup(key):raise TaskConflict('Cleanup not confirmed; paused ownership retained')
+            if run.guarded_work:
+                raise TaskConflict('Guarded work has not stopped; paused ownership retained')
+            if run.uncertain:
+                raise RuntimeUnavailable('Runner state is unknown; manual reconciliation required')
             if self._runs.get(key) is not run:
                 raise TaskConflict('Paused generation changed before persistence')
             if deadline_slot is not None:
@@ -1293,27 +1357,38 @@ class TaskManager:
         if status not in _TERMINAL:
             raise ValueError('Completion status must be done, failed or timeout')
         with self._lock:
-            key, row = self._require(task_id)
+            key, _ = self._require(task_id)
+            if self._settlement_thread is not None and self._settlement_thread != get_ident():
+                return False
             if key in self._suspensions:return False
             run = self._runs.get(key)
             if self._has_cleanup(key):return False
             if key in self._deadline_slots or key in self._unstamped_slots:
                 return False  # No deadline terminal-CAS authority is implemented yet.
-            if run is None or run.token is not token or token.cancelled or run.uncertain:
+            if (run is None or run.token is not token or token.cancelled or run.uncertain
+                    or not run.started or run.handle is None or run.guarded_work):
                 return False
-            try:
-                if not self.repository.set_terminal_status_guarded(int(key), status):
-                    return False
-                updated = self.repository.get(int(key))
-                if updated is None:
-                    raise TaskConflict('Completed task disappeared')
-                self._merge_lifecycle(key, updated)
-            except BaseException:
-                # The terminal write may have committed. Keep this generation
-                # for reconciliation; cancellation would let runners retire it.
-                run.uncertain = True
-                raise
-            self._runs.pop(key, None)
+            # Fence execution, pause and write replay before calling the store.
+            # Leave the exact run fenced on exceptions or conflicting evidence.
+            run.uncertain = True
+        accepted = self.repository.set_terminal_status_guarded(int(key), status)
+        read_lifecycle = getattr(self.repository, 'completion_lifecycle', self.repository.get)
+        updated = read_lifecycle(int(key))
+        if updated is None:
+            raise TaskConflict('Completed task disappeared')
+        with self._lock:
+            if self._runs.get(key) is not run:
+                raise TaskConflict('Completion generation changed')
+            row = self._merge_lifecycle(key, updated)
+            if (accepted is not True or row.get('status') != status or row.get('completed_at') is None
+                    or row.get('paused') is not False or row.get('queued') is not False
+                    or row.get('archived_at') is not None or row.get('deleted_at') is not None
+                    or token.cancelled):
+                return False
+            if self._settlement_thread == get_ident():
+                self._written_runs[key] = run
+            else:
+                del self._runs[key]
             return True
 
     def update_metadata(self, task_id, **patch):

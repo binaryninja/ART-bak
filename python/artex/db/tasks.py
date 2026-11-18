@@ -381,7 +381,20 @@ WHERE id=$2""", (status, int64(task_id, 'task id'))))
         if not is_terminal(status):
             raise TaskInvalid('expected terminal task status')
         return self.executor.execute(Query("""UPDATE tasks SET status=$1, completed_at=COALESCE(completed_at, now())
-WHERE id=$2 AND status NOT IN ('done','failed','timeout')""", (status, int64(task_id, 'task id')))) > 0
+WHERE id=$2 AND status='running' AND NOT paused AND NOT queued
+AND deleted_at IS NULL AND archived_at IS NULL""", (status, int64(task_id, 'task id')))) == 1
+
+    def completion_lifecycle(self, task_id):
+        """Read the lifecycle written by any contender, including archive and soft delete."""
+        fields = ('id', 'status', 'paused', 'queued', 'queued_at', 'queue_mode', 'completed_at',
+                  'first_run_at', 'deadline_at', 'archived_at', 'deleted_at')
+        rows = self.executor.fetch_all(Query(
+            f"SELECT {', '.join(fields)} FROM tasks WHERE id=$1", (int64(task_id, 'task id'),)))
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise RuntimeError('Expected one completion lifecycle row')
+        return dict(zip(fields, rows[0], strict=True))
 
     def stamp_first_run(self, task_id, timeout_seconds):
         timeout_seconds = int64(timeout_seconds, 'timeout seconds')

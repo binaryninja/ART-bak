@@ -1,5 +1,33 @@
 # Optional local PostgreSQL acceptance
 
+The separate `provider_fixture_acceptance.py` launcher runs one real provider
+conversation with only `read_acceptance_fixture`. It requires the same empty,
+disposable local database and explicit identity checks described below. Supply
+an HTTPS provider base URL, model identifier, and the **name** of an environment
+variable containing its API key. The stored profile contains no credential.
+
+```sh
+PYTHONPATH=python python python/integration/provider_fixture_acceptance.py \
+  --host 127.0.0.1 --port 55439 --user artexqa \
+  --database artex_test_provider_run \
+  --confirm-disposable artex_test_provider_run \
+  --base-url https://api.openai.com/v1 --model YOUR_MODEL \
+  --api-key-env OPENAI_API_KEY
+```
+
+This launcher submits exactly one task through `AgentHost`/`AgentRunner`. An
+admission barrier prevents provider work until the manager has installed the
+original handle and token. The original `TaskManager.guard_generation` covers
+the bounded conversation and synchronous result sink. PostgreSQL `llm_records`
+holds the two normalized exchanges; a fresh connection verifies the linked
+tool call, random result, final answer, and completed task row. The launcher
+then verifies retirement, runner removal, zero pending work, drain, host closure,
+and pool closure. Its private, newly created output directory contains the file
+transcript and `evidence.json`, including revision/source hashes and generation
+identity. A failed run retains its database and directory; never replay an
+uncertain task. Repeating acceptance requires another empty database. No
+autonomous graph, planner, worker, shell, or pentesting tools are installed.
+
 This opt-in script is **outside unit-test discovery**. It creates schema and synthetic fixtures in an already-created, empty, dedicated disposable database. Never point it at real or shared data. It does not create/drop a database, launch a server, install dependencies, execute commands recorded in history, or contact a model/provider/target.
 
 ## Prerequisites

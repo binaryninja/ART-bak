@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from unittest.mock import patch
 import unittest
-from artex.manager import TaskManager,CancellationToken
+from artex.manager import TaskConflict, TaskManager,CancellationToken
 from artex.agent.host import AgentHost
 from test_manager import Repository,Runner,Handle,record
 class Lifecycle(Runner):
@@ -41,6 +41,25 @@ class Tests(unittest.TestCase):
         self.assertFalse(self.manager.owns_generation('1',old_token,old_handle,allow_cancelled=True))
         token,handle=self.started()
         self.assertTrue(self.manager.owns_generation('1',token,handle));self.assertFalse(self.manager.owns_generation('1',old_token,old_handle,allow_cancelled=True))
+
+    def test_nested_guard_refuses_completion_and_pause_retirement(self):
+        token, handle = self.started()
+        with self.manager.guard_generation('1', token, handle):
+            with self.manager.guard_generation(1, token, handle):
+                self.assertFalse(self.manager.complete('1', token))
+            self.assertFalse(self.manager.complete('1', token))
+            # This fixture handle reports drained immediately. The manager
+            # still has to account for users inside its original guard.
+            with self.assertRaisesRegex(TaskConflict, 'Guarded work'):
+                self.manager.pause('1', timeout=0)
+            self.assertTrue(token.cancelled)
+            self.assertTrue(self.manager.owns_generation('1', token, handle, allow_cancelled=True))
+            with self.assertRaises(TaskConflict), self.manager.guard_generation('1', token, handle):
+                self.fail('cancelled generation accepted new work')
+        self.manager.pause('1', timeout=0)
+        self.started()
+        with self.assertRaises(TaskConflict), self.manager.guard_generation('1', token, handle):
+            self.fail('retired generation accepted new work')
     def test_uncertain_deleted_archived_invalid_row_rejected_both_modes(self):
         token,handle=self.started()
         for patch_values in ({'deleted_at':'now'},{'archived_at':'now'},{'id':'2'},{'status':'unknown'},{'paused':None},{'queued':1}):

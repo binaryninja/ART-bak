@@ -5,7 +5,7 @@ import unittest
 from artex.agent.host import AgentHost
 from artex.manager import CancellationToken, TaskConflict, TaskManager
 from test_agent_runner import make_runner
-from test_manager import Repository, Runner
+from test_manager import NOW, Repository, Runner
 
 
 class ManagerCompletionUncertaintyTests(unittest.TestCase):
@@ -68,19 +68,105 @@ class ManagerCompletionUncertaintyTests(unittest.TestCase):
                 self.manager.complete('1', self.token)
         self.retained()
 
-    def test_definite_negative_and_foreign_token_keep_original_contract(self):
+    def test_negative_write_cannot_authorize_a_second_attempt(self):
         with patch.object(self.repository, 'set_terminal_status_guarded', return_value=False) as write:
             self.assertFalse(self.manager.complete('1', CancellationToken()))
             write.assert_not_called()
             self.assertFalse(self.manager.complete('1', self.token))
+            self.retained()
+            self.assertFalse(self.manager.complete('1', self.token))
             write.assert_called_once_with(1, 'done')
-        self.assertTrue(self.manager.owns_generation('1', self.token, self.handle))
-        self.assertTrue(self.manager.complete('1', self.token))
-        self.assertFalse(self.manager.retirement_snapshot('1')[2])
+
+    def test_competing_terminal_writer_supplies_visible_status(self):
+        self.repository.rows[1].update(status='timeout', completed_at=NOW)
         self.assertFalse(self.manager.complete('1', self.token))
+        self.assertEqual(self.manager.retirement_snapshot('1')[:3], ('timeout', NOW, True))
+        self.assertFalse(self.manager.owns_generation('1', self.token, self.handle))
+
+    def test_competing_lifecycle_status_is_visible_even_with_retained_handle(self):
+        for status in ('created', 'paused'):
+            with self.subTest(status=status):
+                repo, runner = Repository(), Runner()
+                manager = TaskManager(repo, runner=runner)
+                manager.load_existing()
+                self.assertTrue(manager.start('1'))
+                repo.rows[1]['status'] = status
+                with patch.object(repo, 'set_terminal_status_guarded', return_value=False):
+                    self.assertFalse(manager.complete('1', runner.tokens[0]))
+                self.assertEqual(manager.status('1'), status)
+                self.assertTrue(manager.retirement_snapshot('1')[2])
+
+    def test_changed_row_after_ack_is_not_a_completion_receipt(self):
+        original_write = self.repository.set_terminal_status_guarded
+        def replace_status(key, status):
+            self.assertTrue(original_write(key, status))
+            self.repository.rows[key]['status'] = 'failed'
+            return True
+        with patch.object(self.repository, 'set_terminal_status_guarded', side_effect=replace_status):
+            self.assertFalse(self.manager.complete('1', self.token))
+        self.assertEqual(self.manager.retirement_snapshot('1')[:3], ('failed', NOW, True))
+        self.assertFalse(self.manager.complete('1', self.token))
+
+    def test_archive_after_ack_refreshes_local_row_and_blocks_retirement(self):
+        original_write = self.repository.set_terminal_status_guarded
+        def archive(key, status):
+            self.assertTrue(original_write(key, status))
+            self.repository.rows[key]['archived_at'] = NOW
+            return True
+        with patch.object(self.repository, 'set_terminal_status_guarded', side_effect=archive):
+            self.assertFalse(self.manager.complete('1', self.token))
+        self.assertEqual(self.manager.lifecycle_snapshot('1')['archived_at'], NOW)
+        self.assertTrue(self.manager.retirement_snapshot('1')[2])
 
 
 class RunnerCompletionUncertaintyTests(unittest.TestCase):
+    def test_write_acknowledged_but_settlement_callback_raises(self):
+        repo, runner = Repository(), make_runner()
+        manager = TaskManager(repo, runner=runner)
+        manager.load_existing()
+        host = AgentHost(manager, runner)
+        self.assertTrue(host.start('1'))
+        handle, = runner.handles()
+        self.assertTrue(handle.wait(2))
+        settle = runner.settle_completed
+        def fail_after_removing_handle(complete):
+            self.assertEqual(settle(complete), ['1'])
+            self.assertEqual(runner.handles(), ())
+            self.assertEqual(manager.retirement_snapshot('1')[:3], ('done', NOW, True))
+            raise OSError('runner acknowledgement lost')
+        with patch.object(runner, 'settle_completed', side_effect=fail_after_removing_handle):
+            with self.assertRaisesRegex(OSError, 'runner acknowledgement lost'):
+                host.poll()
+        self.assertEqual(repo.get(1)['status'], 'done')
+        self.assertFalse(manager.owns_generation('1', handle.token, handle, allow_cancelled=True))
+        self.assertFalse(manager.complete('1', handle.token))
+        self.assertEqual(host.poll().pending, 1)
+        self.assertFalse(host.drain(0).all_settled)
+
+    def test_cancel_after_uncertain_write_blocks_poll_drain_and_close(self):
+        repo, runner = Repository(), make_runner()
+        manager = TaskManager(repo, runner=runner)
+        manager.load_existing()
+        host = AgentHost(manager, runner)
+        self.assertTrue(host.start('1'))
+        handle, = runner.handles()
+        self.assertTrue(handle.wait(2))
+        with patch.object(repo, 'set_terminal_status_guarded', side_effect=OSError) as write:
+            with self.assertRaises(OSError):
+                host.poll()
+            handle.token.cancel()
+            self.assertTrue(host.stop_admissions())
+            state = host.poll()
+            self.assertEqual(runner.handles(), ())
+            self.assertTrue(manager.retirement_snapshot('1')[2])
+            self.assertFalse(state.all_settled)
+            self.assertEqual((state.settled, state.running, state.pending), ((), 0, 1))
+            drain = host.drain(0)
+            self.assertFalse(drain.workers_drained)
+            self.assertFalse(drain.all_settled)
+            self.assertFalse(host.close_lifetime(drain))
+            write.assert_called_once_with(1, 'done')
+
     def test_second_host_poll_retains_finished_runner_without_replaying_sql(self):
         repo, runner = Repository(), make_runner()
         manager = TaskManager(repo, runner=runner)

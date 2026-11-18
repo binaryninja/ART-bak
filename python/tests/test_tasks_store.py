@@ -168,7 +168,8 @@ class TasksStoreTests(unittest.TestCase):
         self.assertIn('ELSE NULL END', db.calls[-1][1].sql)
         self.assertFalse(store.set_terminal_status_guarded(10, 'done'))
         self.assertTrue(store.set_terminal_status_guarded(10, 'timeout'))
-        self.assertIn("status NOT IN ('done','failed','timeout')", db.calls[-1][1].sql)
+        self.assertIn("status='running' AND NOT paused AND NOT queued", db.calls[-1][1].sql)
+        self.assertIn("deleted_at IS NULL AND archived_at IS NULL", db.calls[-1][1].sql)
         store.enqueue(10, 'bootstrap')
         self.assertIn('WHEN queued THEN COALESCE(queued_at, now())', db.calls[-1][1].sql)
         store.dequeue(10, False)
@@ -178,6 +179,15 @@ class TasksStoreTests(unittest.TestCase):
         for action in (lambda: store.set_status(10,'invalid'), lambda: store.set_terminal_status_guarded(10,'running'), lambda: store.enqueue(10,'bad')):
             with self.assertRaises(TaskInvalid):
                 action()
+
+    def test_completion_reads_lifecycle_of_inactive_rows(self):
+        row = (10, 'running', False, False, None, '', None, NOW, None, NOW, NOW)
+        db = Fake([[row], []])
+        store = TaskStore(db)
+        observed = store.completion_lifecycle(10)
+        self.assertEqual((observed['id'], observed['archived_at'], observed['deleted_at']), (10, NOW, NOW))
+        self.assertTrue(db.calls[-1][1].sql.endswith('FROM tasks WHERE id=$1'))
+        self.assertIsNone(store.completion_lifecycle(12))
 
     def test_atomic_pause_and_admission_compare(self):
         db = Fake([[ROW], [ROW], []])

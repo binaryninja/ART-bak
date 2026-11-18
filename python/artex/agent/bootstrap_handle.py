@@ -61,6 +61,7 @@ class BootstrapHandle:
         self.manager,self.coordinator=manager,coordinator
         self._task=deepcopy(task);self._factory=engine_factory
         self._manager,self._coordinator,self._token=manager,coordinator,token
+        self._owner_guard = coordinator.guard
         self._repository=manager.repository;self._executor=manager.repository.executor
         self._configuration=(model,system,policy_revision,request_id,str(raw),exp,task.get('timeout_seconds',0))
         self._condition=Condition(RLock());self._active=False;self._thread=None
@@ -100,6 +101,8 @@ class BootstrapHandle:
             self._admission_check()
         if self.manager is not self._manager or self.coordinator is not self._coordinator or self.token is not self._token or self.manager.repository is not self._repository or self._repository.executor is not self._executor or self.coordinator.journal.executor is not self._executor:
             raise BootstrapConflict('Bootstrap owning resource changed')
+        if self._coordinator.guard is not self._owner_guard:
+            raise BootstrapConflict('Bootstrap lifecycle guard changed')
         if not _original_generation_predicate(self._manager):
             raise BootstrapConflict('Manager generation predicate changed')
         if (self.model,self.system,self.policy_revision,self.request_id,self.task_id,self.exploration_id,self._task.get('timeout_seconds',0))!=self._configuration:raise BootstrapConflict('Bootstrap configuration changed')
@@ -160,57 +163,25 @@ class BootstrapHandle:
             self._owned()
             self._active=True;self._thread=get_ident()
             initial=self._phase=='installed'
-            if initial:self._phase='initializing'
         try:
-            if initial:
-                if self._continuation is None:
-                    receipt=self.coordinator.run_admitted(self)
-                else:
-                    from .task_continuation import TaskContinuationOwner
-                    owner,cap,expected=self._continuation
-                    receipt=TaskContinuationOwner.activate(owner,cap,self)
-                    if receipt is not expected:raise BootstrapConflict('Original continuation receipt changed')
-                with self._condition:self._receipt=receipt;self._phase='prepared'
+            with TaskManager.guard_generation(self._manager, self.task_id, self._token, self):
+                return self._advance_guarded(now, initial)
+        finally:
+            with self._condition:self._active=False;self._thread=None;self._condition.notify_all()
+
+    def _advance_guarded(self, now, initial):
+        progress = None
+        try:
+            with self._owner_guard(int(self.task_id), self.exploration_id):
                 self._owned()
-                scope=self.scope
-                def current(candidate,token):
-                    if candidate!=scope or token is not self._token:return False
+                if initial:
                     with self._condition:
-                        if self._phase!='engine' or self._unresolved or self._completed or not self._active or self._thread!=get_ident():return False
-                    self._owned()
-                    # Configuration authority remains live after initialization,
-                    # including graph-only completion without a provider call.
-                    # No registry lock is held across this host callback.
-                    self.coordinator._check(int(self.task_id),self.exploration_id,self.policy_revision)
-                    self._owned()
-                    return True
-                def guard(candidate):
-                    if candidate!=scope:raise BootstrapConflict('Foreign engine scope')
-                    return self.coordinator.guard(int(self.task_id),self.exploration_id)
-                child=self._factory(deepcopy(self._task),self.token,scope,current,guard)
-                # Retain any actual child even when validation/cancel fails.
-                if isinstance(child,TaskEngineHandle):
-                    with self._condition:self._child=child
-                if not isinstance(child,TaskEngineHandle) or child.scope!=scope or child.token is not self._token or child.store.executor is not self._executor or child.current is not current or child.guard is not guard or child.unresolved or child.wait(0) is not True:raise BootstrapUnresolved('Exact inert engine child required')
-                if self._continuation is not None:
-                    owner,cap,expected=self._continuation
-                    TaskContinuationOwner._transfer_notifications(owner,cap,self,child)
-                child.bind_cleanup(self.manager,self)
-                child.bind_timing(self.manager,self)
-                child.bind_process(self.manager,self)
-                if self._continuation is not None:
-                    # Prepare the return value before the callback-free final
-                    # acknowledgement. Until then both generations are retained.
-                    result=EngineProgress('bootstrap_prepared',cancelled=False)
-                    TaskContinuationOwner._finish_activation(owner,cap,self,child)
-                    return result
-                with self._condition:self._phase='engine'
-                if self.token.cancelled:child.cancel(self.token.reason)
-                else:self._owned()
-                return EngineProgress('bootstrap_prepared',cancelled=self.token.cancelled)
-            with self._condition:child=self._child
-            if child is None:raise BootstrapUnresolved('Engine child missing')
-            return child.advance(now)
+                        self._phase = 'initializing'
+                progress = self._advance_owned(now, initial)
+            if progress is None or self.unresolved:
+                raise BootstrapUnresolved('Guarded work did not settle')
+            self._owned(allow_cancelled=True)
+            return progress
         except BaseException:
             if initial and self._continuation_pin is not None:
                 # Factory/validation/binding failures can happen before the
@@ -223,8 +194,58 @@ class BootstrapHandle:
                 try:child.cancel('bootstrap_unresolved')
                 except BaseException:pass
             raise BootstrapUnresolved('Bootstrap or engine effects require reconciliation') from None
-        finally:
-            with self._condition:self._active=False;self._thread=None;self._condition.notify_all()
+
+    def _advance_owned(self, now, initial):
+        if initial:
+            if self._continuation is None:
+                receipt=self.coordinator.run_admitted(self)
+            else:
+                from .task_continuation import TaskContinuationOwner
+                owner,cap,expected=self._continuation
+                receipt=TaskContinuationOwner.activate(owner,cap,self)
+                if receipt is not expected:raise BootstrapConflict('Original continuation receipt changed')
+            with self._condition:self._receipt=receipt;self._phase='prepared'
+            self._owned()
+            scope=self.scope
+            def current(candidate,token):
+                if candidate!=scope or token is not self._token:return False
+                with self._condition:
+                    if self._phase!='engine' or self._unresolved or self._completed or not self._active or self._thread!=get_ident():return False
+                self._owned()
+                # Configuration authority remains live after initialization,
+                # including graph-only completion without a provider call.
+                # No registry lock is held across this host callback.
+                self.coordinator._check(int(self.task_id),self.exploration_id,self.policy_revision)
+                self._owned()
+                return True
+            def guard(candidate):
+                if candidate!=scope:raise BootstrapConflict('Foreign engine scope')
+                return self._owner_guard(int(self.task_id),self.exploration_id)
+            child=self._factory(deepcopy(self._task),self.token,scope,current,guard)
+            # Retain any actual child even when validation/cancel fails.
+            if isinstance(child,TaskEngineHandle):
+                with self._condition:self._child=child
+            if not isinstance(child,TaskEngineHandle) or child.scope!=scope or child.token is not self._token or child.store.executor is not self._executor or child.current is not current or child.guard is not guard or child.unresolved or child.wait(0) is not True:raise BootstrapUnresolved('Exact inert engine child required')
+            if self._continuation is not None:
+                owner,cap,expected=self._continuation
+                TaskContinuationOwner._transfer_notifications(owner,cap,self,child)
+            child.bind_cleanup(self.manager,self)
+            child.bind_timing(self.manager,self)
+            child.bind_process(self.manager,self)
+            if self._continuation is not None:
+                # Prepare the return value before the callback-free final
+                # acknowledgement. Until then both generations are retained.
+                result=EngineProgress('bootstrap_prepared',cancelled=False)
+                TaskContinuationOwner._finish_activation(owner,cap,self,child)
+                return result
+            with self._condition:self._phase='engine'
+            if self.token.cancelled:child.cancel(self.token.reason)
+            else:self._owned()
+            return EngineProgress('bootstrap_prepared',cancelled=self.token.cancelled)
+        with self._condition:child=self._child
+        if child is None:raise BootstrapUnresolved('Engine child missing')
+        return child.advance(now)
+
     def settle_completed(self,complete):
         if not callable(complete):raise ValueError('Completion callback required')
         with self._condition:
