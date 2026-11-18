@@ -33,12 +33,18 @@ def executable(path):
     if not p.is_absolute() or p.resolve()!=p or not p.is_file():raise ValueError('Canonical executable or script required')
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
+def file_identity(path):
+    p=Path(path)
+    if p.resolve()!=p or not p.is_file():raise ValueError('Canonical pinned file required')
+    s=p.stat()
+    return (s.st_dev,s.st_ino,s.st_mode,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+
 class ExtensionHost:
     def __init__(self,root,allowed_origins,manifest=None):
         self.root=Path(root);self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         if not self.root.is_absolute() or self.root.resolve()!=self.root:raise ValueError('Canonical artifact root required')
         self.allowed=frozenset(instance_origin(x) for x in allowed_origins)
-        self.specs={};self.hashes={};self.secrets=[];self._headers={}
+        self.specs={};self.hashes={};self.identities={};self.secrets=[];self._headers={}
         if manifest is not None:
             p=Path(manifest)
             if not p.is_absolute() or p.resolve()!=p or p.stat().st_size>1048576:raise ValueError('Canonical bounded extension manifest required')
@@ -67,10 +73,10 @@ class ExtensionHost:
         if kind in ('command','script'):
             argv=spec.get('argv')
             if not isinstance(argv,list) or not 1<=len(argv)<=64 or any(not isinstance(x,str) or '\0' in x or len(x)>4096 for x in argv):raise ValueError('Explicit bounded argv required')
-            self.hashes[argv[0]]=executable(argv[0])
+            self._pin(argv[0])
             if kind=='script':
                 if len(argv)<2:raise ValueError('Explicit interpreter and script required')
-                self.hashes[argv[1]]=executable(argv[1])
+                self._pin(argv[1])
             for arg in argv:
                 if set(re.findall(r'\{([A-Za-z_][A-Za-z0-9_]*)\}',arg))-set(schema.get('properties',{}))-{'origin','host'}:raise ValueError('Unknown argument placeholder')
             env=spec.get('environment',{})
@@ -92,8 +98,14 @@ class ExtensionHost:
             self._headers[name]={header:os.environ[envname] for header,envname in spec.get('headers_env',{}).items()}
         self.specs[name]=spec
 
+    def _pin(self,path):
+        before=file_identity(path);digest=executable(path)
+        if file_identity(path)!=before:raise ValueError('Executable changed during admission')
+        self.hashes[path]=digest;self.identities[path]=before
+
     def current(self):
-        return all(executable(path)==digest for path,digest in self.hashes.items())
+        try:return all(file_identity(path)==identity for path,identity in self.identities.items())
+        except (OSError,ValueError):return False
 
     def required(self,definition,origin,enabled):
         required={name:deepcopy(spec.get('arguments',{})) for name,spec in self.specs.items() if definition in spec.get('run_for',[]) and origin in spec['allowed_origins']}

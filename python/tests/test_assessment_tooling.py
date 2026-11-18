@@ -76,6 +76,8 @@ class Tests(unittest.TestCase):
             schema={'type':'object','properties':{},'additionalProperties':False}
             manifest=root/'extensions.json';manifest.write_text(json.dumps({'version':1,'tools':[{'kind':'script','name':'digest_evidence','description':'Hash local evidence','schema':schema,'read_only':True,'allowed_origins':[ORIGIN],'argv':[str(Path(sys.executable).resolve()),str(script),'{origin}']}]}))
             host=ExtensionHost(artifacts,[ORIGIN],manifest)
+            with patch('artex.assessments.extensions.executable',side_effect=AssertionError('Repeated content hashing')):
+                self.assertTrue(host.current())
             runtime=SimpleNamespace(catalog=host.catalog,authorize=lambda *_:Grant(True,True,True),redact=lambda x:x)
             events=[];scope=SimpleNamespace(task_id=1,exploration_id=2,run_id=3,revision='r',session_id='session')
             tools={t.name:t for t in host.bind(runtime,scope,{'origin':ORIGIN},lambda c:c.check(),nullcontext,lambda c,a,state,out,error:events.append((a.name,state)))}
