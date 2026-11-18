@@ -15,6 +15,7 @@ from datetime import datetime
 import json
 from .core import Executor, Query, int64
 from .configuration_ownership import require_write
+from .transaction_coordination import TransactionCoordinationBinding, coordinated_transaction
 from .task_categories import CategoryInvalid, CategoryNotFound
 
 MIN_PLAN_HEARTBEAT_SECONDS = 600
@@ -139,7 +140,8 @@ class TaskStore:
     def __init__(self, executor: Executor):
         self.executor = executor
 
-    def replace_llm_profiles_idle(self, task_id, exploration_id, expected_revision, profile_ids, active_profile_id=0):
+    def replace_llm_profiles_idle(self, task_id, exploration_id, expected_revision, profile_ids,
+                                  active_profile_id=0, *, transaction_coordination=None):
         """Reset an explicit chain only behind a host idle/config fence.
 
         Narrow source ReplaceTaskLLMProfiles port: ordered reset, first-ID default,
@@ -156,9 +158,21 @@ class TaskStore:
         if int64(active_profile_id,'active profile ID')<0:raise TaskInvalid('Invalid active profile ID')
         active=(active_profile_id or ids[0]) if ids else None
         if ids and active not in ids:raise TaskInvalid('Active profile not in chain')
-        require_write(self.executor, 'task_profiles.replace_idle')
-        with self.executor.transaction() as tx:
-            require_write(self.executor, 'task_profiles.replace_idle')
+        operation = 'task_profiles.replace_idle'
+        executor = self.executor
+        require_write(executor, operation)
+        if transaction_coordination is None:
+            transaction = self.executor.transaction()
+        else:
+            if type(transaction_coordination) is not TransactionCoordinationBinding:
+                raise TypeError('Exact transaction coordination binding required')
+            if transaction_coordination.executor is not executor:
+                raise ValueError('Coordination binding must match the task store executor')
+            transaction = coordinated_transaction(transaction_coordination, operation=operation, mode='write')
+        with transaction as tx:
+            if transaction_coordination is not None and self.executor is not executor:
+                raise ValueError('Task store executor changed during coordination')
+            require_write(self.executor if transaction_coordination is None else executor, operation)
             rows=tx.fetch_all(Query("SELECT status,paused,queued,llm_chain_revision FROM tasks WHERE id=$1 AND exploration_id=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT EXISTS (SELECT 1 FROM task_archives WHERE task_id=$1) FOR UPDATE",(task_id,exploration_id)))
             if len(rows)!=1:raise TaskInvalid('Task unavailable')
             status,paused,queued,revision=rows[0]

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from .core import Query,int64
 from .configuration_ownership import require_write
 from .postgres import NoRowsError
+from .transaction_coordination import TransactionCoordinationBinding, coordinated_transaction
 
 def _optional(executor,query):
     try:return executor.fetch_one(query)
@@ -133,12 +134,23 @@ class ConversationStore:
  pinned_at = CASE WHEN $4::boolean IS NULL THEN pinned_at
  WHEN $4::boolean THEN COALESCE(pinned_at, now()) ELSE NULL END
 WHERE id=$1 RETURNING '''+COLS,(id,'title' in data,title,pinned))))
-    def update_profile(self,id,profile_id):
+    def update_profile(self, id, profile_id, *, transaction_coordination=None):
         identifier(id)
         if profile_id is not None:identifier(profile_id)
-        require_write(self.executor, 'conversations.update_profile')
-        with self._transaction() as tx:
-            require_write(self.executor, 'conversations.update_profile')
+        operation = 'conversations.update_profile'
+        executor = self.executor
+        require_write(executor, operation)
+        if transaction_coordination is None:
+            transaction = self._transaction()
+        else:
+            if (type(transaction_coordination) is not TransactionCoordinationBinding
+                    or transaction_coordination.executor is not executor):
+                raise ConversationInvalid('Coordination binding must match the conversation executor')
+            transaction = coordinated_transaction(transaction_coordination, operation=operation, mode='write')
+        with transaction as tx:
+            if transaction_coordination is not None and self.executor is not executor:
+                raise ConversationInvalid('Conversation executor changed during coordination')
+            require_write(self.executor, operation)
             if _optional(tx,Query('SELECT id FROM conversations WHERE id=$1 FOR UPDATE',(id,))) is None:raise ConversationMissing()
             self._profile(tx,profile_id)
             tx.execute(Query('UPDATE conversations SET llm_profile_id=$2 WHERE id=$1',(id,profile_id)))

@@ -6,9 +6,10 @@ can therefore see a committed profile while the host still reports incomplete
 publication. Release of a transaction lock establishes no ordering between that
 publication and another process's next commit.
 
-The baseline for this assessment is `ffe629d49dee11baf123ea3eb804d6ac8d69813c`,
-tree `9627a97ce8ad26835f3864a5dd9febeb65ef6442`. It has five transaction sites
-in the committed coordinator and uses its original executor at each site.
+The committed coordinator has five transaction sites. The two store options
+described below extend the configuration coordination available at baseline
+`fc1e7727778c56aac19f56e42c45d2b7d411031d`, tree
+`52d8d8214c155fe90a1d89b2f5364013080756b8`.
 
 ## Opt-in configuration and lock order
 
@@ -61,6 +62,23 @@ Inside each opted-in transaction, the order is as follows.
    database transaction around ProfileHost would violate the coordinator's
    fresh-transaction requirement.
 
+## Existing store writers
+
+`TaskStore.replace_llm_profiles_idle` and `ConversationStore.update_profile`
+each accept the keyword-only argument `transaction_coordination=None`. The
+choice applies to one call. Omitting it or passing `None` preserves the
+original store transaction and its existing local enrollment checks.
+
+To participate, the caller must already hold the matching write operation on
+the enrolled owner. The supplied binding must be an exact
+`TransactionCoordinationBinding` on the store's original executor. Both
+methods validate their input, use the helper's fresh committed transaction
+and exclusive advisory lock on opt-in, and check write access again before
+business SQL. The existing row checks then run on the yielded transaction.
+These methods issue no permission and do not enroll other callers. A failure
+during commit can leave the result uncertain. Neither method retries the
+mutation or records a coordinator publication status.
+
 ## Participants and remaining writers
 
 | Path | Exclusion boundary | What can still race |
@@ -68,7 +86,8 @@ Inside each opted-in transaction, the order is as follows.
 | Committed coordinator, profile save and default switch | Each operation owns two separate transactions. The coordinator releases preflight before factory preparation, then checks the selected record again in the mutation transaction. | Another process may write between transactions or after mutation commit. Read-back covers the selected persisted state at that point. |
 | Committed coordinator, explicit reload | One transaction captures active and pooled profiles. Publication follows transaction exit. | A later durable change may precede the local swap. Reload reflects the captured records. |
 | Direct `ProfileStore.save` and `set_active` on an enrolled executor | The matching process-local owner operation is checked at entry and inside the store transaction. | Invoking the store directly does not enter a coordinator transaction. |
-| `TaskStore.replace_llm_profiles_idle` and `ConversationStore.update_profile` | Matching local owner operation on the exact enrolled executor. The methods retain their original record checks. | Neither method enrolls its transaction in cross-process coordination. |
+| `TaskStore.replace_llm_profiles_idle` | Opted-in calls require `task_profiles.replace_idle` write admission. The existing task is locked first and checked for identity, eligibility and expected chain revision. Selected profiles are locked in ID order before replacement. The final update checks and increments the expected revision. | Calls that omit the binding can skip the advisory lock. The host still owns idle-state coordination, cache synchronization and audit after commit. |
+| `ConversationStore.update_profile` | Opted-in calls require `conversations.update_profile` write admission. The existing conversation row is locked first. A non-null profile is checked under a key-share lock before updating the conversation. | A call clearing the binding to a profile still locks the conversation row. Calls that omit transaction coordination can skip the advisory lock. |
 | Factory reads, preparation, cache invalidation and existing consumers | The enrolled factory checks local configuration access. The coordinator's publication lock protects a process-local swap. | A consumer can retain an earlier provider or snapshot. A database lock cannot revoke it. |
 | Go writers, raw SQL, admin clients, migrations, provisioning, other executors and processes | Database privileges and the individual writer's own controls. | A writer with SQL privileges can omit an advisory lock, even on an otherwise enrolled connection. Task and conversation initialization, agent bindings, quota and retry-policy writers are outside the four named store hooks. |
 
