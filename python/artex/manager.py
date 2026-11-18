@@ -1299,14 +1299,20 @@ class TaskManager:
             if self._has_cleanup(key):return False
             if key in self._deadline_slots or key in self._unstamped_slots:
                 return False  # No deadline terminal-CAS authority is implemented yet.
-            if run is None or run.token is not token or token.cancelled:
+            if run is None or run.token is not token or token.cancelled or run.uncertain:
                 return False
-            if not self.repository.set_terminal_status_guarded(int(key), status):
-                return False
-            updated = self.repository.get(int(key))
-            if updated is None:
-                raise TaskConflict('Completed task disappeared')
-            self._merge_lifecycle(key, updated)
+            try:
+                if not self.repository.set_terminal_status_guarded(int(key), status):
+                    return False
+                updated = self.repository.get(int(key))
+                if updated is None:
+                    raise TaskConflict('Completed task disappeared')
+                self._merge_lifecycle(key, updated)
+            except BaseException:
+                # The terminal write may have committed. Keep this generation
+                # for reconciliation; cancellation would let runners retire it.
+                run.uncertain = True
+                raise
             self._runs.pop(key, None)
             return True
 

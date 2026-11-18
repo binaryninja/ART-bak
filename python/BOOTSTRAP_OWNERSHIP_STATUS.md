@@ -79,3 +79,18 @@ Stage 49 results above describe earlier, separately scoped acceptance. These
 binding tests establish neither a positive installed-generation lifetime nor
 exclusion across processes. Task startup, durable leases and live-provider
 execution remain outside their evidence.
+
+## Uncertain terminal persistence
+
+For an installed task, if the guarded terminal write raises, or its read-back
+or local state update raises after acknowledgment, `TaskManager.complete`
+retains the exact run, marks it uncertain and propagates the error. The manager
+then refuses fresh generation ownership in both cancellation modes. Another
+completion attempt returns false before persistence. This failure path does not cancel the token.
+Absent separate cancellation, the generic runner retains its handle as pending.
+A successful completion still retires the run; a definite false result from
+the guarded write still returns false without setting uncertainty. That result
+can leave local state stale if another writer changed the durable row.
+Retention cannot establish whether an unacknowledged write committed, stop
+work already in flight, or exclude other writers. The shared lifecycle barrier
+remains unverified.
