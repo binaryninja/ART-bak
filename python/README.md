@@ -73,30 +73,50 @@ the separate `qa` extra. This runs authored tests only, not a database.
 
 ## Existing development launcher and remaining composition gap
 
-The separate `python -m artex.servicenow_recon` launcher now composes one
-authenticated, read-only campaign for `dev366312.service-now.com`. It requires
-the existing schema plus recording tables, an explicit stored provider profile,
-`ARTEX_PG_DSN`, `ARTEX_SIGNING_KEY_HEX`, a provider-key environment-variable name,
-a mode0600 instance-password file, and an existing mode0700 transcript directory.
-It exposes authenticated `GET /api/recon`, `POST /api/recon/campaigns` (body `{}`),
-and `GET /api/recon/campaigns/{id}`. The Python-preview frontend has a
-`/function/recon` page. Model tools can select only the code-owned inventory
-operations; the launcher does not register shell, graph-planning, or exploit tools.
+The assessment launcher uses the shared `TaskRuntimeAssembly`, bootstrap journal,
+`EngineRunner`, planner/worker tool registry, and `AgentHost`. The first registered
+definition is `servicenow.inventory` v1. It accepts an approved HTTPS instance URL
+and optional host-private credential reference. Its named GET operations discover
+identity, roles, public pages, build metadata, applications, tables, and scripted
+REST API metadata. Reports distinguish completed inventory from authenticated
+access and record denied or truncated reads.
 
 ```sh
-PYTHONPATH=python python -m artex.servicenow_recon \
-  --profile-id 2 --api-key-env LITELLM_API_KEY --username admin \
-  --password-file /absolute/private/instance-password \
-  --transcript-root /absolute/private/transcripts --port 8787
+PYTHONPATH=python python -m artex.assessment_server \
+  --profile-id 2 --api-key-env LITELLM_API_KEY \
+  --allow-origin https://dev366312.service-now.com \
+  --state-root /absolute/private/assessment-state \
+  --install-schema --migrate-legacy --port 8787
 ```
 
-The process owns a database advisory lock, starts one bounded worker at a time,
-records normalized provider exchanges and inventory evidence, and explicitly
-settles/drains its original task generations. It never resumes tasks on startup.
-`--reconcile-preamble-task ID` is a narrow manual recovery operation after the
-former owner exits: it requires a persisted incomplete report, zero target-tool
-observations, and exactly one successful text-only provider response before
-marking that abandoned task failed. It does not rerun the task.
+The launcher requires `ARTEX_PG_DSN`, `ARTEX_SIGNING_KEY_HEX`, an existing compatible
+PostgreSQL schema, and a real stored provider profile. `--install-schema` explicitly
+installs the assessment tables, transactional asset-discovery outbox, bootstrap
+journal, and missing registered tool/role metadata. Existing catalog choices are
+preserved. Subsequent starts omit that flag. The database advisory lock excludes
+the legacy launcher. Interrupted admitted generations are never replayed.
+
+Use `/function/assessments` in the Python preview, or authenticated
+`GET /api/assessment-definitions`, `POST /api/assessments`, and
+`GET /api/tasks/{id}/assessment`. Creation accepts `definition`, `url`, optional
+`username`/`password` or `credential_ref`, and an optional idempotent `request_id`
+for an explicit new run. Passwords are placed in private, origin-bound mode0600
+files; only references enter assessment records. Rejected credentials remain
+suppressed across runs and restarts.
+
+`POST /api/assessments/discover` accepts bounded `text` and an optional `label`.
+A discovered URL and unambiguously associated credentials use the same admission
+path. Committed ServiceNow assets in the existing asset inventory trigger that
+path automatically through the durable outbox. Duplicate discoveries attach
+provenance to the existing assessment. A discovered URL never expands the
+host's `--allow-origin` scope. `DiscoveryDispatcher.read_observer()` can also be
+bound to an existing `ScopedFilesystem` Read tool: it admits discoveries and
+redacts extracted passwords before returning file text to the model.
+
+The old `artex.servicenow_recon` launcher is retained for inspecting/reconciling
+its existing runs. `--migrate-legacy` copies terminal reports into assessment
+records without rerunning them. The ordinary task-detail URL now displays the
+assessment report, evidence, discovery provenance, and recorded execution sessions.
 
 `python -m artex --check-config` validates explicit `ARTEX_PG_DSN` and
 `ARTEX_SIGNING_KEY_HEX` inputs without opening a database or listener.

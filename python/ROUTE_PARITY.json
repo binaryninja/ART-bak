@@ -5,10 +5,10 @@
     "go_registration_call_sites": 255,
     "go_method_path_routes": 261,
     "go_mount_handlers": 2,
-    "python_offline_contract_routes": 211,
-    "python_route_declarations": 240,
+    "python_offline_contract_routes": 217,
+    "python_route_declarations": 246,
     "python_alternative_route_groups": 22,
-    "python_optional_service_routes": 206,
+    "python_optional_service_routes": 212,
     "matched_offline_contract_routes": 206,
     "go_routes_without_python_registration": 55
   },
@@ -21,6 +21,7 @@
     "python/artex/server/application.py": "cd6adfeea8c0bcb1a047f39dacf6f17d158ee83f9460f901e4d7565c2798e9f5",
     "python/artex/server/archive_catalog.py": "8cc73d3a76186aaa51c43bd5f502fd3bb732c527218a115d5eac72d72d97ae75",
     "python/artex/server/archive_runtime_view.py": "346069c1daf67f7819657ffc96bdbf5f3e63a087aa01ee73dd9279e5b7e376a7",
+    "python/artex/server/assessments.py": "d1b900ddee521b724aa857e0f1bf75799c9046925924d384aef39797a6fc8698",
     "python/artex/server/assets.py": "c44af11a6345c3e0ef94ec1481814fee696ec2bfff9db7e3bc5b880cf25336ae",
     "python/artex/server/audit.py": "93f5402b00ec4952336c75d77bebff2d711ecb098093c238269c5c7e8bdb732f",
     "python/artex/server/auth.py": "311fb4dace8b8c5763af708cb6a308ca96b2a85cedca44b72971f2cc56dc3ac8",
@@ -9376,6 +9377,162 @@
     },
     {
       "method": "GET",
+      "path": "/api/assessments/runtime",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessments/runtime",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment-definitions",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessment-definitions",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessments",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/assessments",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments/discover",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/assessments/discover",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/assessment",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/tasks/{id}/assessment",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/assets",
       "source": "python/artex/server/assets.py",
       "line": 211,
@@ -14962,6 +15119,78 @@
     },
     {
       "method": "GET",
+      "path": "/api/assessments/runtime",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment-definitions",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments/discover",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/assessment",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required"
+    },
+    {
+      "method": "GET",
       "path": "/api/assets",
       "source": "python/artex/server/assets.py",
       "line": 211,
@@ -17590,6 +17819,162 @@
     }
   ],
   "python_only": [
+    {
+      "method": "GET",
+      "path": "/api/assessments/runtime",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessments/runtime",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment-definitions",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessment-definitions",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/assessments",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/assessments",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessments/discover",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "POST",
+          "path": "/api/assessments/discover",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks/{id}/assessment",
+      "source": "python/artex/server/assessments.py",
+      "line": 58,
+      "function": "register",
+      "handler": "lambda request, params, action=action: handle(action, request, params)",
+      "public": false,
+      "registration_mode": "optional explicit service registration",
+      "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+      "status": "optional offline contract; injected repository/live manager required",
+      "declarations": [
+        {
+          "method": "GET",
+          "path": "/api/tasks/{id}/assessment",
+          "source": "python/artex/server/assessments.py",
+          "line": 58,
+          "function": "register",
+          "handler": "lambda request, params, action=action: handle(action, request, params)",
+          "public": false,
+          "registration_mode": "optional explicit service registration",
+          "dependencies": "Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools",
+          "status": "optional offline contract; injected repository/live manager required"
+        }
+      ]
+    },
     {
       "method": "POST",
       "path": "/api/llm/profiles/reconcile",

@@ -47,10 +47,13 @@ class EnginePump:
             _claims[host]=ref(self)
         self.interval,self.max_per_tick,self.clock=interval,max_per_tick,clock
         self._condition=Condition(RLock());self._tick_lock=Lock();self._stop=Event()
-        self._thread=None;self._active=0;self._failure='';self._cursor=0;self._stoppers=0
+        self._thread=None;self._active=0;self._failure='';self._failure_detail=None;self._cursor=0;self._stoppers=0
     @property
     def failure(self):
         with self._condition:return self._failure
+    @property
+    def failure_detail(self):
+        with self._condition:return self._failure_detail
     def _identity(self):
         if self.host.runner is not self.runner or self.host.manager is not self.manager or self.manager.runner is not self.runner:raise RuntimeUnavailable('Pump lifecycle identity changed')
         self.runner.claim_host(self.host)
@@ -85,8 +88,13 @@ class EnginePump:
                 settlement=None if self._stop.is_set() else self.host.poll()
                 self._identity()
                 return TickResult(advanced=result.value,settlement=settlement)
-            except BaseException:
-                with self._condition:self._failure='engine_pump_unresolved';self._stop.set()
+            except BaseException as exc:
+                import traceback
+                chain=[];cause=exc
+                while cause is not None and len(chain)<8:
+                    chain.append({'type':type(cause).__name__,'frames':[(frame.name,frame.lineno) for frame in traceback.extract_tb(cause.__traceback__)]});cause=cause.__cause__ or cause.__context__
+                detail={'chain':chain}
+                with self._condition:self._failure='engine_pump_unresolved';self._failure_detail=detail;self._stop.set()
                 raise
             finally:
                 with self._condition:self._active-=1;self._condition.notify_all()

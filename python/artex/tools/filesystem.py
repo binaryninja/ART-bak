@@ -43,7 +43,7 @@ class FilesystemConflict(FilesystemError):
 
 class ScopedFilesystem:
     def __init__(self, root, *, max_bytes=1024 * 1024, max_entries=2000,
-                 max_output_bytes=65536):
+                 max_output_bytes=65536, read_observer=None):
         if os.name != 'posix' or not hasattr(os, 'O_NOFOLLOW'):
             raise FilesystemError('POSIX no-follow filesystem support required')
         if not isinstance(root, str) or not root.startswith('/'):
@@ -52,6 +52,8 @@ class ScopedFilesystem:
             if type(n) is not int or n <= 0:
                 raise FilesystemError('Limits must be positive integers')
         self.max_bytes, self.max_entries, self.max_output_bytes = max_bytes, max_entries, max_output_bytes
+        if read_observer is not None and not callable(read_observer):raise FilesystemError('Explicit read observer required')
+        self._read_observer=read_observer
         self._lock = threading.RLock()
         # Walk the configured root as well: symlink ancestors are not allowed.
         fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
@@ -238,7 +240,12 @@ class ScopedFilesystem:
                                    for non_dir, n, size in sorted(entries)) or '(empty directory)'
                 elif name == 'Read':
                     data, _ = self._read(fd, parts[-1])
-                    lines = self._text(data).split('\n')
+                    content = self._text(data)
+                    if self._read_observer is not None:
+                        content=self._read_observer(ctx,path,content)
+                        ctx.check()
+                        if not isinstance(content,str) or len(content.encode())>self.max_bytes:raise FilesystemError('Invalid observed read content')
+                    lines = content.split('\n')
                     start = max(0, args.get('offset', 0) - 1)
                     limit = args.get('limit', 0) or 2000
                     text = ''.join('%6d\t%s\n' % (i + 1, line[:2000] + ('… [line truncated]' if len(line) > 2000 else ''))

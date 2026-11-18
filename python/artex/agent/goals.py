@@ -49,7 +49,8 @@ class GoalScope:
     @property
     def session_id(self):return f'exp{self.exploration_id}-goals'
 
-_SCHEMA={'type':'object','properties':{'goals':{'type':'array','items':{'type':'object'}},'text':{'type':'string'},'vulnclass':{'type':'string'}},'additionalProperties':False}
+_GOAL_ITEM={'type':'object','properties':{'text':{'type':'string'},'vulnclass':{'type':'string'}},'required':['text'],'additionalProperties':False}
+_SCHEMA={'type':'object','properties':{'goals':{'type':'array','items':_GOAL_ITEM},'text':{'type':'string'},'vulnclass':{'type':'string'}},'additionalProperties':False}
 
 def parse_goals(args):
     if not isinstance(args,dict) or set(args)-set(_SCHEMA['properties']):raise ValueError('Invalid goal fields')

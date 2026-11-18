@@ -246,9 +246,11 @@ def _date(value):
 
 class TaskManager:
     def __init__(self, repository, categories=None, runner: Runner | None = None,
-                 *, dto_enricher=None, profile_available=None):
+                 *, dto_enricher=None, profile_available=None, runtime_metadata=None):
         self.repository, self.categories, self.runner = repository, categories, runner
         self.dto_enricher, self.profile_available = dto_enricher, profile_available
+        if runtime_metadata is not None and not callable(runtime_metadata):raise ValueError("Explicit runtime metadata adapter required")
+        self.runtime_metadata=runtime_metadata
         self._lock = RLock()
         self._tasks: dict[str, dict] = {}
         self._runs: dict[str, _Run] = {}
@@ -921,6 +923,10 @@ class TaskManager:
         for field in _METRICS | {'archive_blocked_by_task_id'}:
             if field in enriched:
                 dto[field] = deepcopy(enriched[field])
+        if self.runtime_metadata is not None:
+            metadata=self.runtime_metadata(deepcopy(dto))
+            if not isinstance(metadata,Mapping) or set(metadata)-{'runtime_kind','assessment_type','assessment_version','runtime_capabilities'}:raise RuntimeUnavailable("Invalid runtime metadata")
+            dto.update(deepcopy(metadata))
         return dto
 
     def task(self, task_id):

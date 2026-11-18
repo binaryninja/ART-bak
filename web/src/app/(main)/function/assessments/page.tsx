@@ -1,0 +1,25 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { http } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+
+type Definition = { key: string; version: number; name: string; operations: string[]; access_levels: string[] };
+type Item = { id: string; origin: string; task: { id: string; status: string }; report?: { capabilities?: { access_level?: string } } };
+export default function AssessmentsPage() {
+  const router = useRouter();
+  const requestID = useRef("");
+  const [definitions, setDefinitions] = useState<Definition[]>([]), [items, setItems] = useState<Item[]>([]);
+  const [definition, setDefinition] = useState(""), [url, setUrl] = useState(""), [username, setUsername] = useState(""), [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [discovery, setDiscovery] = useState<unknown>(null);
+  useEffect(() => { let active = true; void http<{ definitions: Definition[]; authorized_origins: string[] }>("/assessment-definitions").then(v => { if (active) { setDefinitions(v.definitions); setDefinition(v.definitions[0]?.key ?? ""); setUrl(v.authorized_origins[0] ?? ""); } }).catch(e => { if (active) setError(e.message); }); const refresh = () => http<{ assessments: Item[] }>("/assessments").then(v => { if (active) setItems(v.assessments); }).catch(e => { if (active) setError(e.message); }); void refresh(); const timer = setInterval(refresh, 3000); return () => { active = false; clearInterval(timer); }; }, []);
+  async function start() { setBusy(true); setError(""); try { const result = await http<{ task_id: string }>("/assessments", { method: "POST", body: JSON.stringify({ definition, url, username, password, request_id: requestID.current || (requestID.current = crypto.randomUUID()) }) }, 201); setPassword(""); requestID.current = ""; router.push(`/function/tasks/detail?id=${encodeURIComponent(result.task_id)}`); } catch (e) { setError(e instanceof Error ? e.message : "Assessment admission failed"); } finally { setBusy(false); } }
+  async function upload(file?: File) { if (!file) return; setBusy(true); setError(""); try { if (file.size > 262144) throw new Error("Choose a text file smaller than 256 KiB"); const text = await file.text(); setDiscovery(await http("/assessments/discover", { method: "POST", body: JSON.stringify({ text, label: file.name }) })); } catch (e) { setError(e instanceof Error ? e.message : "Discovery failed"); } finally { setBusy(false); } }
+  const selected = definitions.find(d => d.key === definition);
+  return <main className="flex-1 space-y-5 p-6"><h1 className="text-xl font-semibold">Assessments</h1><p className="text-sm text-muted-foreground">Run a registered assessment against an instance already in scope. Available checks adapt to observed access.</p>{error && <p role="alert" className="text-destructive">{error}</p>}
+    <section className="grid max-w-2xl gap-3 rounded-lg border p-5"><label className="grid gap-1 text-sm">Assessment<select className="rounded border bg-background p-2" value={definition} onChange={e => setDefinition(e.target.value)}>{definitions.map(d => <option key={d.key} value={d.key}>{d.name}</option>)}</select></label><label className="grid gap-1 text-sm">Instance URL<input className="rounded border bg-background p-2" value={url} onChange={e => setUrl(e.target.value)} /></label><label className="grid gap-1 text-sm">Username (optional)<input autoComplete="off" className="rounded border bg-background p-2" value={username} onChange={e => setUsername(e.target.value)} /></label><label className="grid gap-1 text-sm">Password (optional)<input type="password" autoComplete="new-password" className="rounded border bg-background p-2" value={password} onChange={e => setPassword(e.target.value)} /></label>{selected && <p className="text-sm text-muted-foreground">Checks: {selected.operations.join(", ")}.</p>}<Button disabled={busy || !definition || !url} onClick={start}>Start assessment</Button></section>
+    <section className="max-w-2xl space-y-3 rounded-lg border p-5"><h2 className="font-semibold">Discover from a text file</h2><p className="text-sm text-muted-foreground">Accepts instance URLs and clearly associated username/password fields. Existing assessments are deduplicated.</p><input type="file" accept=".txt,.md,.json,text/plain,application/json" disabled={busy} onChange={e => { void upload(e.target.files?.[0]); e.target.value=""; }} />{discovery != null && <pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(discovery,null,2)}</pre>}</section>
+    <section className="space-y-2"><h2 className="font-semibold">Recent assessments</h2>{items.map(item => <div key={item.id} className="flex flex-wrap justify-between gap-2 rounded border p-3"><Link className="underline" href={`/function/tasks/detail?id=${encodeURIComponent(item.task.id)}`}>Task {item.task.id} · {item.origin}</Link><span>{item.task.status}{item.report?.capabilities?.access_level ? ` · ${item.report.capabilities.access_level}` : ""}</span></div>)}</section>
+  </main>;
+}

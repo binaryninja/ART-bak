@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { ApiError, mutationMustWait } from "@/lib/mutation-contract.mjs";
+import { AssessmentDetail } from "@/components/assessment-detail";
 import { taskDetailHref } from "@/lib/task-detail-route.mjs";
 import type { LLMProfile, Task } from "@/lib/types";
 
@@ -400,6 +401,8 @@ function TaskDetailInner() {
       </div>
     );
   }
+
+  if (task.runtime_kind === "assessment") return <AssessmentDetail key={task.id} task={task} lineage={<GraphTab taskId={id} />} />;
 
   if (task.runtime_kind === "servicenow-recon") {
     return <div className="flex flex-1 flex-col items-center justify-center gap-3 p-10">

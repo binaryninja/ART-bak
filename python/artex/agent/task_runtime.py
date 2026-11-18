@@ -34,7 +34,7 @@ from ..transcripts import TranscriptStore
 class TaskRuntimeAssembly:
     def __init__(self,executor,*,providers,transcript,prompts,policy_revision,
                  current,lifecycle_guard,authorize,asset_authorize,validate_input,
-                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None,timing_policy=None,worker_process_policy=None):
+                 graph_catalog,limits=Limits(),activity_authorize=None,cleanup_authorize=None,timing_policy=None,worker_process_policy=None,domain_tools=None,provider_decorator=None):
         if type(providers) is not TaskProviderResolver or providers.tasks.executor is not executor:
             raise ValueError('Exact persisted provider resolver/executor required')
         if any(not callable(x) for x in (current,lifecycle_guard,authorize,asset_authorize,validate_input)):
@@ -46,6 +46,11 @@ class TaskRuntimeAssembly:
         if set(graph_catalog)!= {'planner','worker'}:raise ValueError('Explicit graph catalog per execution role required')
         if type(transcript) is not ChatTranscriptAdapter or type(transcript.store) is not TranscriptStore:
             raise ValueError('Durable scoped transcript adapter required')
+        from .domain_tools import DomainTools
+        if domain_tools is not None and type(domain_tools) is not DomainTools:raise ValueError("Exact domain tool bundle required")
+        if provider_decorator is not None and not callable(provider_decorator):raise ValueError("Explicit provider decorator required")
+        self._domain=self._domain_pin=domain_tools
+        self._decorate=self._decorate_pin=provider_decorator
         self.executor=executor;self.providers=providers;self.transcript=transcript
         self._prompts=deepcopy(prompts);self._catalog=deepcopy(graph_catalog)
         self._revision=policy_revision;self._current=current;self._guard=lifecycle_guard
@@ -82,6 +87,8 @@ class TaskRuntimeAssembly:
         self._coordinator_pins=(self.coordinator.journal,self.coordinator.factory,self.coordinator.current)
     def _configuration_identity(self):
         payload={'prompts':self._prompts,'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()}}
+        if self._domain is not None:payload['domain_tools']={'revision':self._domain.revision,'catalog':[asdict(r) for r in self._domain.catalog]}
+        if self._decorate is not None:payload['provider_decorator']=True
         if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
         if self._timed_admission is not None:payload['timed_admission']=self._admission_digest
@@ -99,6 +106,7 @@ class TaskRuntimeAssembly:
         self.validate_bindings();return True
     def validate_bindings(self):
         e,p,t,tasks,agents,profiles,factory=self._pins
+        if self._domain is not self._domain_pin or self._decorate is not self._decorate_pin:raise RuntimeUnavailable("Domain bindings changed")
         if self._timed_admission is not self._admission_pin:raise RuntimeUnavailable('Timed admission binding changed')
         if self._timed_admission is not None:
             from .timed_admission import validate_issued_admission
@@ -179,6 +187,8 @@ class TaskRuntimeAssembly:
                  'catalog':{k:[asdict(r) for r in v] for k,v in self._catalog.items()},
                  'limits':asdict(self._limits),'policy':self._revision,'activity_projection':self._activity_authorize is not None}
         if self._cleanup_authorize is not None:payload['inflight_cleanup']=True
+        if self._domain is not None:payload['domain_tools']={'revision':self._domain.revision,'catalog':[asdict(r) for r in self._domain.catalog]}
+        if self._decorate is not None:payload['provider_decorator']=True
         if self._process_policy is not None:payload['worker_process']=self._process_policy.configuration()
         if self._timing_policy is not None:payload['task_timing']={'enabled':True,'revision':self._timing_policy.revision}
         if self._timed_admission is not None:payload['timed_admission']=self._admission_digest
@@ -207,8 +217,11 @@ class TaskRuntimeAssembly:
             projector=ActivityProjector(self.executor,scope,transcript=self.transcript,current=current,
                 lifecycle_guard=guard,authorize=self._activity_authorize)
         return GoalPlanner(store=ExplorationStore(self.executor,scope.exploration_id),transcript=self.transcript,
-            current=current,lifecycle_guard=guard,provider_resolver=lambda s,m:self.providers.bind(s,'goals',m,current=current,lifecycle_guard=guard),
+            current=current,lifecycle_guard=guard,provider_resolver=lambda s,m:self._binding(s,'goals',m,current,guard),
             authorize=self._authorize,validate_input=self._input,limits=self._limits,activity_projector=projector)
+    def _binding(self,scope,role,model,current,guard):
+        binding=self.providers.bind(scope,role,model,current=current,lifecycle_guard=guard)
+        return binding if self._decorate is None else self._decorate(scope,role,binding)
     def engine_factory(self,row,token,scope,current,guard):
         # Owner's engine authority is intentionally false until next explicit
         # tick. Configuration reads here are not model execution admission.
@@ -240,7 +253,9 @@ class TaskRuntimeAssembly:
             gs=GraphScope(s.task_id,s.exploration_id,s.run_id,s.revision,role,getattr(s,'intent_id',0))
             tools=GraphTools(graph,gs,current=lambda _:check(),lifecycle_guard=lambda _:guarded(s),authorize=self._authorize,asset_authorize=lambda scope,ids:self._assets(scope,ids,None)).tools()
             if role=='worker' and process is not None:tools=tools+process.tools(s)
+            if role=='worker' and self._domain is not None:tools=tools+self._domain.tools(s,check,lambda:guarded(s))
             names={r.key for r in self._catalog[role]}
+            if role=='worker' and self._domain is not None:names.update(r.key for r in self._domain.catalog)
             if not names.issubset({t.name for t in tools}):raise RuntimeUnavailable('Only explicit local graph tools supported')
             return tuple(t for t in tools if t.name in names)
         timing=None;clock_options={}
@@ -250,7 +265,7 @@ class TaskRuntimeAssembly:
             clock_options={'clock':self._timing_policy.clock}
         def bind_role(s,role,model):
             self.validate_bindings()
-            binding=self.providers.bind(s,role,model,current=exact,lifecycle_guard=guarded)
+            binding=self._binding(s,role,model,exact,guarded)
             self.validate_bindings()
             return timing.wrap(s,role,binding) if timing is not None else binding
         ps=PlannerScope(scope.task_id,scope.exploration_id,scope.run_id,scope.revision,models['planner'],self._prompts['planner'])
@@ -264,7 +279,7 @@ class TaskRuntimeAssembly:
                 worker.check(s,'tool',claimed=True);return True
             reg=ToolRegistry('worker',handlers=graph_tools('worker',s,owned),current=lambda revision:revision==scope.revision and exact(s),
                 lifecycle_guard=lambda _:guarded(s),authorize=self._authorize)
-            reg.reload(self._catalog['worker'],scope.revision);return reg
+            reg.reload(tuple(self._catalog['worker'])+(() if self._domain is None else self._domain.catalog),scope.revision);return reg
         worker=IntentWorker(store=WorkerStore(self.executor,scope.task_id,scope.exploration_id,
             lifetime_guard=lambda tid,eid,write:guard(scope)),transcript=self.transcript,
             current=lambda s,phase:exact(s),lifecycle_guard=guarded,

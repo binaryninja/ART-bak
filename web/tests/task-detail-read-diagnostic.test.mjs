@@ -290,6 +290,16 @@ test("a recon task redirects to its exact report without mounting interactive se
   assert.ok(h.nodes().some(node => node.type === "Link" && node.props.href === "/function/recon?id=4"));
 });
 
+test("a registered assessment stays on the common task route and mounts its supported view", async () => {
+  const h = harness("13");
+  h.reads[0].resolve(task("13", { runtime_kind: "assessment", status: "done" }));
+  h.stats[0].resolve(null);
+  await h.settle();
+  assert.deepEqual(h.navigations, []);
+  assert.ok(h.nodes().some(node => node.type === "AssessmentDetail" && node.props.task.id === "13"));
+  assert.equal(h.nodes().some(node => node.type === "SessionsTab" || node.type === "Tabs"), false);
+});
+
 test("poll failure retains the last confirmed current task and existing control display", async () => {
   const h = harness();
   h.reads[0].resolve(task());

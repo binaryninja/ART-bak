@@ -70,7 +70,7 @@ class PlannerResult:
     observed:bool=True
     cleanup:object=None
 
-_INTENT_SCHEMA={'type':'object','properties':{'summary':{'type':'string'},'priority':{'type':'integer'},'asset_ids':{'type':'array','items':{'type':'integer'}},'parent_ids':{'type':'array','items':{'type':'integer'}},'intents':{'type':'array','items':{'type':'object'}}},'additionalProperties':False}
+_INTENT_SCHEMA={'type':'object','properties':{'summary':{'type':'string'},'priority':{'type':'integer'},'asset_ids':{'type':'array','items':{'type':'integer'}},'parent_ids':{'type':'array','description':'Optional IDs of local fact or finding nodes only. Omit to use the task origin. Goal and intent IDs are invalid.','items':{'type':'integer'}},'intents':{'type':'array','items':{'type':'object','properties':{'summary':{'type':'string'},'priority':{'type':'integer'},'asset_ids':{'type':'array','items':{'type':'integer'}},'parent_ids':{'type':'array','description':'Optional IDs of local fact or finding nodes only. Omit to use the task origin. Goal and intent IDs are invalid.','items':{'type':'integer'}}},'required':['summary'],'additionalProperties':False}}},'additionalProperties':False}
 
 class _FreshTranscript:
     def __init__(self,owner,scope):self.owner,self.scope=owner,scope;self.original=None;self.executor=owner.store.executor;self.cleanup=owner.cleanup;self.cap=None

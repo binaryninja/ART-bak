@@ -68,12 +68,14 @@ class ConfiguredProvider:
 
 class ProfileFactory:
     def __init__(self, transport_factory, *, health=None, retry_max_attempts=64,
-                 retry_max_seconds=120, clock=time.monotonic, sleep=time.sleep):
+                 retry_max_seconds=120, clock=time.monotonic, sleep=time.sleep, credential_resolver=None):
         if not callable(transport_factory):
             raise ProfileInvalid('explicit transport factory required')
         Policy(max_attempts=retry_max_attempts, max_seconds=retry_max_seconds)
         if not callable(clock) or not callable(sleep):
             raise ProfileInvalid('explicit clock and sleep must be callable')
+        if credential_resolver is not None and not callable(credential_resolver):raise ProfileInvalid("Explicit credential resolver required")
+        self._credential_resolver=credential_resolver
         self._retry_max_attempts, self._retry_max_seconds = retry_max_attempts, retry_max_seconds
         self._clock, self._sleep = clock, sleep
         self._transport_factory = transport_factory
@@ -81,7 +83,14 @@ class ProfileFactory:
         self._cache = {}
         self._lock = RLock()
 
+    def _credentials(self, profile):
+        profile=deepcopy(profile)
+        if not profile.api_key and self._credential_resolver is not None:
+            profile.api_key=self._credential_resolver(profile.id)
+        return profile
+
     def validate(self, profile):
+        profile=self._credentials(profile)
         _validate(profile)
         if profile.format not in ('openai', 'anthropic'):
             raise ProfileInvalid('provider format not supported by this runtime')
@@ -113,7 +122,7 @@ class ProfileFactory:
 
     def build(self, profile):
         require_read(self, 'factory.build')
-        profile = deepcopy(profile)
+        profile = self._credentials(profile)
         config = self.validate(profile)
         # Private cache values include credentials, never exposed in repr/DTO.
         fingerprint = tuple(getattr(profile, f.name) for f in fields(profile))
@@ -137,7 +146,7 @@ class ProfileFactory:
         publication or revocation operation, and does not install the provider.
         """
         require_read(self, 'factory.prepare')
-        profile = deepcopy(profile)
+        profile = self._credentials(profile)
         config = self.validate(profile)
         with self._lock:
             require_read(self, 'factory.prepare')

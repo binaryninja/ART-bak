@@ -24,10 +24,10 @@ use a different placeholder spelling for an existing Go URL shape.
 - go registration call sites: **255**.
 - go method path routes: **261**.
 - go mount handlers: **2**.
-- python offline contract routes: **211**.
-- python route declarations: **240**.
+- python offline contract routes: **217**.
+- python route declarations: **246**.
 - python alternative route groups: **22**.
-- python optional service routes: **206**.
+- python optional service routes: **212**.
 - matched offline contract routes: **206**.
 - go routes without python registration: **55**.
 
@@ -332,6 +332,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 - `PUT /api/agents/{key}/visibility` at `python/artex/server/agents.py:48` (AgentService.register): Injected auth store, password codec, signing key; deployer-supplied transport/listener.
 - `GET /api/task-archives` at `python/artex/server/archive_catalog.py:90` (build_archive_catalog_application): Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation.
 - `GET /api/task-archives/{id}` at `python/artex/server/archive_catalog.py:91` (build_archive_catalog_application): Explicit archive metadata service and original JWT application; scoped executor and separate global/source disclosure grants; no archive creation, restore, deletion or default activation.
+- `GET /api/assessments/runtime` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
+- `GET /api/assessment-definitions` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
+- `GET /api/assessments` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
+- `POST /api/assessments` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
+- `POST /api/assessments/discover` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
+- `GET /api/tasks/{id}/assessment` at `python/artex/server/assessments.py:58` (register): Explicit versioned assessment definitions, exact origin scope, private credential references, durable discovery admission, shared task engine and original JWT application; read-only registered tools.
 - `GET /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `GET /api/assets/counts` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
 - `POST /api/assets` at `python/artex/server/assets.py:211` (AssetService.register): Explicit asset store configuration/global-read opt-in; supported upserts require transaction, company resolver, mutation guard and hostname public-suffix adapter; DELETE is unsupported 503.
@@ -559,6 +565,12 @@ recorded in `ROUTE_PARITY.json`; line references identify the inspected code.
 
 ## Python-only registrations
 
+- `GET /api/assessments/runtime`
+- `GET /api/assessment-definitions`
+- `GET /api/assessments`
+- `POST /api/assessments`
+- `POST /api/assessments/discover`
+- `GET /api/tasks/{id}/assessment`
 - `POST /api/llm/profiles/reconcile`
 - `GET /api/recon`
 - `POST /api/recon/campaigns`

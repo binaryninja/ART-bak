@@ -67,7 +67,13 @@ class CurrentCheckoutTests(unittest.TestCase):
 
     def test_placeholder_spelling_is_preserved_instead_of_inventing_an_alias(self):
         self.assertEqual([(r['method'], r['path']) for r in self.data['python_only']],
-                         [('POST', '/api/llm/profiles/reconcile'),
+                         [('GET', '/api/assessments/runtime'),
+                          ('GET', '/api/assessment-definitions'),
+                          ('GET', '/api/assessments'),
+                          ('POST', '/api/assessments'),
+                          ('POST', '/api/assessments/discover'),
+                          ('GET', '/api/tasks/{id}/assessment'),
+                          ('POST', '/api/llm/profiles/reconcile'),
                           ('GET', '/api/recon'),
                           ('POST', '/api/recon/campaigns'),
                           ('GET', '/api/recon/campaigns/{id}'),

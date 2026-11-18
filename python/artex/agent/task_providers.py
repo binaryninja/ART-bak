@@ -196,7 +196,7 @@ class _BoundProvider:
             raise TaskProviderUnavailable('Execution provider identity changed')
     def check(self,context=None):
         self.fixed()
-        if context is not None:context.check()
+        if context is not None:(context.get('runtime_context',context) if isinstance(context,Mapping) else context).check()
         with self.guard(self.scope):
             if (self.scope.task_id,self.scope.exploration_id,self.scope.run_id,self.scope.revision)!=self.identity or self.current(self.scope) is not True:
                 raise TaskProviderUnavailable('Installed task provider owner unavailable')
@@ -207,7 +207,7 @@ class _BoundProvider:
             self.fixed()
             if self.current(self.scope) is not True:raise TaskProviderUnavailable('Installed task provider owner changed')
             self.fixed()
-            if context is not None:context.check()
+            if context is not None:(context.get('runtime_context',context) if isinstance(context,Mapping) else context).check()
         return profile
     def _provider(self,context):
         if not is_bound(self.owner.factory):

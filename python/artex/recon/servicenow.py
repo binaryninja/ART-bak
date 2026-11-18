@@ -8,12 +8,13 @@ import re
 import ssl
 import threading
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 HOST = 'dev366312.service-now.com'
 ORIGIN = 'https://' + HOST
 TOOL_NAME = 'inspect_servicenow'
 TABLES = {
+    'roles': ('sys_user_has_role', 'role.name', 'user.user_name={username}'),
     'current_user': ('sys_user', 'sys_id,user_name,active', 'user_name={username}'),
     'api_definitions': ('sys_ws_definition', 'sys_id,name,namespace,service_id,active', ''),
     'api_resources': ('sys_ws_operation', 'name,http_method,relative_path,web_service_definition', ''),
@@ -22,24 +23,29 @@ TABLES = {
     'public_pages': ('sys_public', 'page,active', 'active=true'),
 }
 PAGES = {'home': '/', 'login': '/login.do', 'robots': '/robots.txt', 'stats': '/stats.do'}
-RESOURCES = tuple(PAGES) + tuple(TABLES)
-SCHEMA = {'type': 'object', 'properties': {'resource': {'type': 'string', 'enum': list(RESOURCES)}},
+RESOURCES = tuple(PAGES) + tuple(k for k in TABLES if k != 'roles')
+ALL_RESOURCES = tuple(PAGES) + ('current_user', 'roles') + tuple(k for k in TABLES if k not in ('current_user','roles'))
+SCHEMA = {'type': 'object', 'properties': {'resource': {'type': 'string', 'enum': list(ALL_RESOURCES)}},
           'required': ['resource'], 'additionalProperties': False}
 
 
 def valid_input(value):
-    return type(value) is dict and set(value) == {'resource'} and value['resource'] in RESOURCES
+    return type(value) is dict and set(value) == {'resource'} and value['resource'] in ALL_RESOURCES
 
 
 class ServiceNowInventory:
-    def __init__(self, username, password, *, interval=1.0, connection_factory=http.client.HTTPSConnection):
-        if not re.fullmatch(r'[A-Za-z0-9_.@-]{1,128}', username) or not password or any(ord(c) < 32 for c in password):
+    def __init__(self, username="", password="", *, origin=ORIGIN, authorized_origins=(ORIGIN,), interval=1.0, connection_factory=http.client.HTTPSConnection):
+        parsed=urlsplit(origin)
+        if origin not in authorized_origins or parsed.scheme!="https" or not parsed.hostname or parsed.netloc!=parsed.hostname or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("Explicit approved HTTPS instance origin required")
+        self.origin,self.host=origin,parsed.hostname
+        if not isinstance(username,str) or not isinstance(password,str) or len(password.encode())>4096 or bool(username)!=bool(password) or username and (not re.fullmatch(r'[A-Za-z0-9_.@-]{1,128}', username) or any(ord(c) < 32 for c in password)):
             raise ValueError('Explicit instance credential required')
         if interval < 1:
             raise ValueError('At most one target request per second')
         self.username = username
-        self._auth = 'Basic ' + base64.b64encode((username + ':' + password).encode()).decode()
-        self._secrets = (password, self._auth, self._auth[6:])
+        self._auth = ('Basic ' + base64.b64encode((username + ':' + password).encode()).decode()) if username else ''
+        self._secrets = tuple(x for x in (password, self._auth, self._auth[6:]) if x)
         self._interval, self._connection = interval, connection_factory
         self._lock, self._last = threading.Lock(), 0.0
         self._authentication_denied = False
@@ -69,10 +75,10 @@ class ServiceNowInventory:
         path = self.path(resource)
         with self._lock:
             context.check()
-            authenticated = resource in TABLES or resource == 'stats'
-            if authenticated and self._authentication_denied:
+            authenticated = resource in TABLES or resource == 'stats' and bool(self._auth)
+            if authenticated and (self._authentication_denied or not self._auth):
                 return json.dumps({'resource': resource, 'path': path, 'status': 0,
-                                   'requested': False, 'error': 'authentication_denied_before_request'})
+                                   'requested': False, 'error': 'authentication_denied_before_request' if self._authentication_denied else 'credentials_not_supplied'})
             remaining = self._last + self._interval - time.monotonic()
             while remaining > 0:
                 time.sleep(min(remaining, 0.05))
@@ -83,7 +89,7 @@ class ServiceNowInventory:
                        'Accept-Encoding': 'identity', 'User-Agent': 'ARTEX-scoped-recon/1.0'}
             if authenticated:
                 headers['Authorization'] = self._auth
-            conn = self._connection(HOST, 443, timeout=min(20, context.remaining_seconds()), context=self._tls)
+            conn = self._connection(self.host, 443, timeout=min(20, context.remaining_seconds()), context=self._tls)
             try:
                 context.check()
                 conn.request('GET', path, headers=headers)
@@ -109,6 +115,7 @@ class ServiceNowInventory:
                     fields = TABLES[resource][1].split(',')
                     result['records'] = [{k: str(row.get(k, ''))[:512] for k in fields} for row in rows if isinstance(row, dict)]
                     result['limit'] = 1 if resource == 'current_user' else 100
+                    result['more_records_possible'] = resource != 'current_user' and len(rows) == result['limit']
                 elif resource in PAGES and response.status == 200:
                     text = body.decode('utf-8', 'replace')
                     title = re.search(r'<title\b[^>]*>(.*?)</title>', text, re.I | re.S)
